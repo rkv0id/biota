@@ -68,20 +68,24 @@ ignore = [
     "E501",  # line length handled by formatter
 ]
 
+[tool.ruff.lint.per-file-ignores]
+"src/biota/sim/*.py" = ["N803", "N806"]
+"tests/sim/*.py" = ["N803", "N806"]
+
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
 
 [tool.pyright]
-include = ["src/biota", "tests"]
-exclude = ["**/__pycache__", "**/.venv"]
+include = ["src", "tests"]
+exclude = ["tests/sim/fixtures"]
 pythonVersion = "3.12"
-pythonPlatform = "All"
 typeCheckingMode = "strict"
 reportMissingTypeStubs = false
 reportUnknownMemberType = "warning"
-reportUnknownArgumentType = "warning"
 reportUnknownVariableType = "warning"
+reportUnknownArgumentType = "warning"
+reportConstantRedefinition = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
