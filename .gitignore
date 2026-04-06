@@ -16,6 +16,7 @@ wheels/
 # biota run output
 runs/
 exports/
+creature_render/
 
 # OS noise
 .DS_Store
