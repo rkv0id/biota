@@ -8,3 +8,14 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+
+# biota run output
+runs/
+exports/
+
+# OS noise
+.DS_Store
