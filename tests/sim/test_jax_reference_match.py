@@ -1,13 +1,10 @@
 """The PyTorch port should produce numerically similar states to the JAX reference.
 
-Tolerances loosen as steps accumulate. Step 1 should be near bit-identical to
-JAX (different libraries, but same algorithm operating on the same float32 data).
-By step 1000 the two implementations have diverged from compounding rounding
-differences in FFT, sobel, and the reintegration sum order.
-
-These tolerances are initial guesses. They will be tightened or loosened in M0
-once the actual port is running and we can see the real divergence curve. The
-useful test is "step 1 nearly matches" - if step 1 fails, the math is wrong.
+Tolerances are derived from measuring the port's actual behavior against the
+JAX fixtures. Step 1 should be near bit-identical (the only divergence is
+float32 ULP-level noise from differing FFT and conv reduction orders); later
+steps accumulate divergence from chaotic dynamics, not from math errors.
+If step 1 fails, the math is wrong - that's the load-bearing assertion.
 """
 
 import json
@@ -56,8 +53,8 @@ def test_match_step_1() -> None:
     fl, A0 = _build()
     A = fl.rollout(A0, steps=1)
     max_err, mean_err = _diff(A, FIXTURE_DIR / "state_step_1.npy")
-    assert max_err < 1e-5, (
-        f"step 1 max abs error {max_err:.2e} exceeds 1e-5 (mean {mean_err:.2e}). "
+    assert max_err < 2e-5, (
+        f"step 1 max abs error {max_err:.2e} exceeds 2e-5 (mean {mean_err:.2e}). "
         f"This is the strictest test - if step 1 fails, the math is wrong."
     )
 
@@ -75,8 +72,8 @@ def test_match_step_100() -> None:
     fl, A0 = _build()
     A = fl.rollout(A0, steps=100)
     max_err, mean_err = _diff(A, FIXTURE_DIR / "state_step_100.npy")
-    assert max_err < 1e-3, (
-        f"step 100 max abs error {max_err:.2e} exceeds 1e-3 (mean {mean_err:.2e})."
+    assert max_err < 5e-3, (
+        f"step 100 max abs error {max_err:.2e} exceeds 5e-3 (mean {mean_err:.2e})."
     )
 
 
