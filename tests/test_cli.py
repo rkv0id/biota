@@ -5,6 +5,7 @@ subprocesses. All tests use --no-ray and tiny configs to keep runtime
 low.
 """
 
+import re
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -15,6 +16,17 @@ from biota.cli import app
 from biota.ray_compat import shutdown
 
 runner = CliRunner()
+
+# Rich-rendered help output wraps each `--` prefix in its own ANSI color
+# sequence, splitting flag names like "--preset" into "-" + reset + "-preset"
+# at the byte level. CI runs in color mode (TTY detected), local runs
+# typically don't. Strip ANSI codes before substring assertions so the test
+# behaves the same in both environments.
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _strip_ansi(text: str) -> str:
+    return _ANSI_RE.sub("", text)
 
 
 @pytest.fixture(autouse=True)
@@ -56,7 +68,7 @@ def test_doctor_reports_torch_device_availability() -> None:
 def test_search_help_lists_all_flags() -> None:
     result = runner.invoke(app, ["search", "--help"])
     assert result.exit_code == 0
-    output = result.stdout
+    output = _strip_ansi(result.stdout)
     for flag in (
         "--preset",
         "--budget",
