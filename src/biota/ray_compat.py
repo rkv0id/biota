@@ -125,7 +125,7 @@ def submit_rollout(
         return RolloutHandle(_result=result, _ray_ref=None)
 
     # Ray mode
-    ref = _rollout_remote.remote(params, seed, config, device, parent_cell)
+    ref = _get_rollout_remote().remote(params, seed, config, device, parent_cell)
     return RolloutHandle(_result=None, _ray_ref=ref)
 
 
@@ -187,25 +187,20 @@ def _rollout_remote_impl(
     return rollout(params, seed, config, device=device, parent_cell=parent_cell)
 
 
-def _build_remote() -> Any:
-    """Lazy decoration: only import ray when actually building the remote.
+# Cached Ray remote wrapper. Built on first access via _get_rollout_remote()
+# so `import ray` is deferred until actually needed. In no_ray mode this
+# cache is never populated.
+_rollout_remote_cache: Any = None
 
-    This lets pytest collect this module without importing ray at all.
+
+def _get_rollout_remote() -> Any:
+    """Return the Ray-remote-decorated version of _rollout_remote_impl, building
+    it on first call. This is the only thing that triggers `import ray` in
+    normal use.
     """
-    import ray
+    global _rollout_remote_cache
+    if _rollout_remote_cache is None:
+        import ray
 
-    return ray.remote(_rollout_remote_impl)
-
-
-# Cached remote handle. Built on first access in submit_rollout via __getattr__
-# below; this avoids importing ray at module load time.
-_rollout_remote: Any = None
-
-
-def __getattr__(name: str) -> Any:
-    if name == "_rollout_remote":
-        global _rollout_remote
-        if _rollout_remote is None:
-            _rollout_remote = _build_remote()
-        return _rollout_remote
-    raise AttributeError(name)
+        _rollout_remote_cache = ray.remote(_rollout_remote_impl)
+    return _rollout_remote_cache
