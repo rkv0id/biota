@@ -1,0 +1,276 @@
+"""The rollout function: worker-side bridge between sim and search.
+
+Takes plain-Python ParamDict + seed + RolloutConfig, runs Flow-Lenia on the
+worker's device, captures the COM/bbox/thumbnail trace, evaluates the quality
+function, and returns a RolloutResult that's safe to pickle and ship back to
+the driver.
+
+This module is the only place biota.search talks to biota.sim. Step 7
+(ray_compat.py) wraps `rollout` in a Ray task; the --no-ray code path calls
+`rollout` directly. Tests use the direct path so Ray never starts.
+
+Per-step stats (COM and bbox-fraction) are computed on CPU after a small
+device->host transfer. The overhead is ~10% on CPU device and a similar order
+on MPS/CUDA - acceptable given how much simpler the code is than a fully
+on-device branch-free version. Thumbnails are batched as on-device tensors
+during the loop and quantized once at the end.
+"""
+
+import time
+from dataclasses import dataclass
+
+import numpy as np
+import torch
+import torch.nn.functional as F
+
+from biota.search.descriptors import RolloutTrace
+from biota.search.params import sample_random
+from biota.search.quality import RolloutEvaluation, evaluate
+from biota.search.result import CellCoord, ParamDict, RolloutResult
+from biota.sim.flowlenia import Config as SimConfig
+from biota.sim.flowlenia import FlowLenia, Params
+
+THUMBNAIL_FRAMES = 16
+THUMBNAIL_SIZE = 32
+TRACE_TAIL_STEPS = 100  # the persistent filter needs two 50-step windows
+
+
+@dataclass(frozen=True)
+class RolloutConfig:
+    """Worker-side rollout configuration: simulation plus capture parameters."""
+
+    sim: SimConfig
+    steps: int
+    patch_fraction: int = 3
+    """Initial patch is grid // patch_fraction on each side, centered."""
+
+    thumbnail_frames: int = THUMBNAIL_FRAMES
+    thumbnail_size: int = THUMBNAIL_SIZE
+
+
+def dev_preset() -> RolloutConfig:
+    """Small and fast: 96x96 grid, 200 steps. For iteration and smoke tests."""
+    return RolloutConfig(sim=SimConfig(grid=96), steps=200)
+
+
+def standard_preset() -> RolloutConfig:
+    """The v1 default: 192x192 grid, 300 steps. For real searches and benchmarks."""
+    return RolloutConfig(sim=SimConfig(grid=192), steps=300)
+
+
+def pretty_preset() -> RolloutConfig:
+    """The hero shot: 384x384 grid, 500 steps. For the M6 export bundle."""
+    return RolloutConfig(sim=SimConfig(grid=384), steps=500)
+
+
+def _params_dict_to_tensors(params: ParamDict, device: str) -> Params:
+    """Convert a pickle-safe ParamDict to a torch-tensor Params on the given device."""
+    return Params(
+        R=params["R"],
+        r=torch.tensor(params["r"], dtype=torch.float32, device=device),
+        m=torch.tensor(params["m"], dtype=torch.float32, device=device),
+        s=torch.tensor(params["s"], dtype=torch.float32, device=device),
+        h=torch.tensor(params["h"], dtype=torch.float32, device=device),
+        a=torch.tensor(params["a"], dtype=torch.float32, device=device),
+        b=torch.tensor(params["b"], dtype=torch.float32, device=device),
+        w=torch.tensor(params["w"], dtype=torch.float32, device=device),
+    )
+
+
+def _initial_state(grid: int, patch_fraction: int, seed: int, device: str) -> torch.Tensor:
+    """Centered random patch on a zero grid, deterministic for a given seed.
+
+    Matches the M0 fixture recipe: grid // patch_fraction square patch of
+    uniform [0, 1) values at the grid center.
+    """
+    patch = grid // patch_fraction
+    rng = np.random.default_rng(seed)
+    patch_data = rng.random((patch, patch, 1), dtype=np.float32)
+    state = torch.zeros((grid, grid, 1), dtype=torch.float32, device=device)
+    start = (grid - patch) // 2
+    end = start + patch
+    state[start:end, start:end, :] = torch.from_numpy(patch_data).to(device)
+    return state
+
+
+def _step_stats(state: torch.Tensor) -> tuple[float, float, float]:
+    """Compute COM_y, COM_x, and bbox-fraction for one state.
+
+    Transfers the state to CPU and uses numpy. The per-step transfer cost is
+    ~10% overhead on CPU device and similar order on MPS/CUDA. Worth it for
+    code clarity over a fully on-device version that would need branch-free
+    bbox computation.
+    """
+    arr = state[:, :, 0].detach().cpu().numpy()
+    total = float(arr.sum())
+    if total <= 0.0:
+        return 0.0, 0.0, 0.0
+    h, w = arr.shape
+
+    ys, xs = np.indices(arr.shape)
+    com_y = float((ys * arr).sum() / total)
+    com_x = float((xs * arr).sum() / total)
+
+    peak = float(arr.max())
+    if peak <= 0.0:
+        return com_y, com_x, 0.0
+    threshold = 0.1 * peak
+    mask = arr > threshold
+    if not mask.any():
+        return com_y, com_x, 0.0
+    rows = np.where(mask.any(axis=1))[0]
+    cols = np.where(mask.any(axis=0))[0]
+    bbox_area = (int(rows[-1]) - int(rows[0]) + 1) * (int(cols[-1]) - int(cols[0]) + 1)
+    return com_y, com_x, bbox_area / (h * w)
+
+
+def _downsample_frame(state: torch.Tensor, target: int) -> torch.Tensor:
+    """Average-pool a (H, W, 1) state to (target, target). Returns float32 on the same device."""
+    flat = state[:, :, 0].unsqueeze(0).unsqueeze(0)  # (1, 1, H, W)
+    pooled = F.adaptive_avg_pool2d(flat, output_size=(target, target))
+    return pooled[0, 0]
+
+
+def _empty_thumbnail(frames: int, size: int) -> np.ndarray:
+    return np.zeros((frames, size, size), dtype=np.uint8)
+
+
+def _quantize_thumbnail(frames: torch.Tensor) -> np.ndarray:
+    """Convert (N, S, S) float32 frames into (N, S, S) uint8 with global normalization."""
+    cpu = frames.detach().cpu().numpy().astype(np.float32)
+    peak = float(cpu.max()) if cpu.size > 0 else 0.0
+    if peak <= 0.0:
+        return np.zeros_like(cpu, dtype=np.uint8)
+    return np.clip(cpu / peak * 255.0, 0.0, 255.0).astype(np.uint8)
+
+
+def rollout(
+    params: ParamDict,
+    seed: int,
+    config: RolloutConfig,
+    device: str = "cpu",
+    parent_cell: CellCoord | None = None,
+) -> RolloutResult:
+    """Run one Flow-Lenia rollout end-to-end and return a RolloutResult.
+
+    Always returns a result. If the sim produces a non-finite state (which
+    should not happen with mass conservation but is checked defensively), or
+    the quality function rejects, the result has quality=None and a populated
+    rejection_reason.
+    """
+    started_at = time.perf_counter()
+    created_at = time.time()
+
+    # 1. Build sim from ParamDict
+    sim_params = _params_dict_to_tensors(params, device=device)
+    fl = FlowLenia(config.sim, sim_params, device=device)
+
+    # 2. Initial state, deterministic for the seed
+    state = _initial_state(
+        grid=config.sim.grid,
+        patch_fraction=config.patch_fraction,
+        seed=seed,
+        device=device,
+    )
+    initial_mass = float(state.sum().item())
+
+    # 3. Pick frame indices for the thumbnail (uniform across the full rollout)
+    if config.thumbnail_frames > 0:
+        indices = np.linspace(0, config.steps, config.thumbnail_frames)
+        frame_indices = set(indices.round().astype(int).tolist())
+    else:
+        frame_indices = set()
+
+    # 4. Per-step buffers (numpy on CPU since stats are scalars per step)
+    history_len = config.steps + 1
+    com_y_np = np.zeros(history_len, dtype=np.float32)
+    com_x_np = np.zeros(history_len, dtype=np.float32)
+    bbox_np = np.zeros(history_len, dtype=np.float32)
+    thumb_buf: list[torch.Tensor] = []
+
+    # 5. Run the loop, capturing stats and frames as we go
+    for step in range(history_len):
+        com_y, com_x, bbox = _step_stats(state)
+        com_y_np[step] = com_y
+        com_x_np[step] = com_x
+        bbox_np[step] = bbox
+        if step in frame_indices:
+            thumb_buf.append(_downsample_frame(state, config.thumbnail_size))
+        if step < config.steps:
+            state = fl.step(state)
+
+    final_mass = float(state.sum().item())
+
+    # 6. Final state to numpy for descriptor functions
+    final_state_np = state[:, :, 0].detach().cpu().numpy().astype(np.float32)
+
+    if not np.isfinite(final_mass) or not np.isfinite(com_y_np).all():
+        # Defensive: NaN/inf in the state means the sim went off the rails.
+        compute_seconds = time.perf_counter() - started_at
+        thumbnail = (
+            _quantize_thumbnail(torch.stack(thumb_buf, dim=0))
+            if thumb_buf
+            else _empty_thumbnail(config.thumbnail_frames, config.thumbnail_size)
+        )
+        return RolloutResult(
+            params=params,
+            seed=seed,
+            descriptors=None,
+            quality=None,
+            rejection_reason="nan_state",
+            thumbnail=thumbnail,
+            parent_cell=parent_cell,
+            created_at=created_at,
+            compute_seconds=compute_seconds,
+        )
+
+    com_history = np.stack([com_y_np, com_x_np], axis=1)  # (steps+1, 2)
+
+    # 7. Build the trace covering the last TRACE_TAIL_STEPS steps
+    tail = min(TRACE_TAIL_STEPS, history_len)
+    trace = RolloutTrace(
+        com_history=com_history[-tail:].astype(np.float32),
+        bbox_fraction_history=bbox_np[-tail:].astype(np.float32),
+        final_state=final_state_np,
+        grid_size=config.sim.grid,
+        total_steps=config.steps,
+    )
+
+    # 8. Evaluate quality
+    eval_result = evaluate(
+        RolloutEvaluation(
+            initial_mass=initial_mass,
+            final_mass=final_mass,
+            trace=trace,
+        )
+    )
+
+    # 9. Build the thumbnail (with fallback if frame capture missed)
+    if thumb_buf:
+        thumbnail = _quantize_thumbnail(torch.stack(thumb_buf, dim=0))
+    else:
+        thumbnail = _empty_thumbnail(config.thumbnail_frames, config.thumbnail_size)
+
+    compute_seconds = time.perf_counter() - started_at
+    return RolloutResult(
+        params=params,
+        seed=seed,
+        descriptors=eval_result.descriptors,
+        quality=eval_result.quality,
+        rejection_reason=eval_result.rejection_reason,
+        thumbnail=thumbnail,
+        parent_cell=parent_cell,
+        created_at=created_at,
+        compute_seconds=compute_seconds,
+    )
+
+
+# Re-export for convenience
+__all__ = [
+    "RolloutConfig",
+    "dev_preset",
+    "pretty_preset",
+    "rollout",
+    "sample_random",
+    "standard_preset",
+]
