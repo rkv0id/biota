@@ -1,0 +1,90 @@
+"""Rollout result: the contract between workers and the driver.
+
+A worker takes parameters, runs a Flow-Lenia rollout, computes descriptors,
+applies the quality function, and returns one of these. The result is
+checkpoint-safe: no torch tensors, no device-specific state, just plain Python
+floats, ints, lists, dicts, and a small numpy thumbnail.
+
+Filter rejections still produce a RolloutResult, with `quality=None` and
+`rejection_reason` set. This lets the driver count rejections, display them in
+metrics, and surface them in the dashboard without losing the parameters that
+were tried.
+"""
+
+from dataclasses import dataclass
+from typing import TypedDict
+
+import numpy as np
+
+# === type aliases ===
+
+
+class ParamDict(TypedDict):
+    """Parameters as plain Python primitives, suitable for pickling and JSON.
+
+    Mirrors the Params dataclass in biota.sim.flowlenia but without torch
+    tensors. Keys map directly to FlowLenia's parameter names. Field shapes
+    follow the JAX reference: scalar R, length-k vectors for r/m/s/h,
+    (k, 3)-shaped lists for a/b/w.
+    """
+
+    R: float
+    r: list[float]
+    m: list[float]
+    s: list[float]
+    h: list[float]
+    a: list[list[float]]
+    b: list[list[float]]
+    w: list[list[float]]
+
+
+Descriptors = tuple[float, float, float]
+"""Three normalized behavior descriptors: (speed, size, structure), each in [0, 1]."""
+
+CellCoord = tuple[int, int, int]
+"""Discrete archive cell coordinate: (speed_bin, size_bin, structure_bin)."""
+
+
+# === RolloutResult ===
+
+
+@dataclass(frozen=True)
+class RolloutResult:
+    """Outcome of one Flow-Lenia rollout.
+
+    Attributes:
+        params: The parameter dict that produced this rollout.
+        seed: The integer seed used for the initial state.
+        descriptors: The (speed, size, structure) tuple in [0, 1]^3, or None if
+            the rollout failed early enough that descriptors couldn't be
+            computed (e.g. mass collapsed to zero).
+        quality: The quality score in [0, 1], or None if the rollout was
+            rejected by a filter (or descriptors are None).
+        rejection_reason: Short human-readable reason if quality is None.
+            Examples: "dead", "exploded", "unstable", "no_descriptors". None if
+            the rollout passed all filters.
+        thumbnail: 16-frame 32x32 grayscale animation for the dashboard atlas.
+            Shape (16, 32, 32), dtype uint8. Captures the rollout's final
+            stretch (steps T-15..T downsampled).
+        parent_cell: The 3D archive coordinate this rollout was mutated from,
+            or None if it came from the initial random phase.
+        created_at: Unix timestamp (seconds since epoch) when the result was
+            constructed on the worker. Used for events log ordering.
+        compute_seconds: Wall-clock time the rollout took on the worker, from
+            params-in to result-out. Used for the metrics tab and benchmarks.
+    """
+
+    params: ParamDict
+    seed: int
+    descriptors: Descriptors | None
+    quality: float | None
+    rejection_reason: str | None
+    thumbnail: np.ndarray
+    parent_cell: CellCoord | None
+    created_at: float
+    compute_seconds: float
+
+    @property
+    def accepted(self) -> bool:
+        """True if this rollout passed all filters and has a quality score."""
+        return self.quality is not None
