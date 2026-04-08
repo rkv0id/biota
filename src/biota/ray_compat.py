@@ -174,7 +174,7 @@ def submit_rollout(
         return RolloutHandle(_result=result, _ray_ref=None)
 
     # Ray mode
-    ref = _get_rollout_remote().remote(params, seed, config, device, parent_cell)
+    ref = _get_rollout_remote(device).remote(params, seed, config, device, parent_cell)
     return RolloutHandle(_result=None, _ray_ref=ref)
 
 
@@ -236,20 +236,47 @@ def _rollout_remote_impl(
     return rollout(params, seed, config, device=device, parent_cell=parent_cell)
 
 
-# Cached Ray remote wrapper. Built on first access via _get_rollout_remote()
-# so `import ray` is deferred until actually needed. In no_ray mode this
-# cache is never populated.
-_rollout_remote_cache: Any = None
+def _num_gpus_for_device(device: str) -> int:
+    """Map a torch device string to the Ray num_gpus resource count.
 
-
-def _get_rollout_remote() -> Any:
-    """Return the Ray-remote-decorated version of _rollout_remote_impl, building
-    it on first call. This is the only thing that triggers `import ray` in
-    normal use.
+    CUDA devices need num_gpus=1 so Ray schedules the task onto a GPU-bearing
+    worker and sets CUDA_VISIBLE_DEVICES correctly. Everything else (cpu, mps)
+    uses num_gpus=0. Pure function for testability.
     """
-    global _rollout_remote_cache
-    if _rollout_remote_cache is None:
+    return 1 if device.startswith("cuda") else 0
+
+
+# Cached Ray remote wrappers, one per device class. Built lazily on first
+# access via _get_rollout_remote() so `import ray` is deferred until actually
+# needed. Keyed by a normalized device tag so CPU and CUDA rollouts get
+# different @ray.remote decorations (CUDA requires num_gpus=1 so Ray doesn't
+# hide the GPU from the worker via CUDA_VISIBLE_DEVICES=""). In no_ray mode
+# this cache is never populated.
+_rollout_remote_cache: dict[str, Any] = {}
+
+
+def _get_rollout_remote(device: str) -> Any:
+    """Return the Ray-remote-decorated version of _rollout_remote_impl for the
+    given device class, building it on first call. This is the only thing that
+    triggers `import ray` in normal use.
+
+    Device handling:
+
+    - "cpu" -> ray.remote(num_gpus=0)(impl). CPU-only task, Ray keeps
+      CUDA_VISIBLE_DEVICES clear.
+    - "cuda" or "cuda:N" -> ray.remote(num_gpus=1)(impl). Task requires one
+      GPU. Ray schedules onto a GPU-bearing worker and sets
+      CUDA_VISIBLE_DEVICES to the assigned GPU index so torch sees it.
+    - "mps" -> ray.remote(num_gpus=0)(impl). MPS is macOS-local; there's no
+      way to schedule MPS tasks through Ray's resource system. MPS + Ray is
+      effectively unsupported but we don't error out here; the rollout will
+      work if the Ray worker happens to be on the same machine as an MPS
+      device, which on macOS it always is.
+    """
+    key = "cuda" if device.startswith("cuda") else "cpu"
+    if key not in _rollout_remote_cache:
         import ray
 
-        _rollout_remote_cache = ray.remote(_rollout_remote_impl)
-    return _rollout_remote_cache
+        num_gpus = _num_gpus_for_device(device)
+        _rollout_remote_cache[key] = ray.remote(num_gpus=num_gpus)(_rollout_remote_impl)
+    return _rollout_remote_cache[key]

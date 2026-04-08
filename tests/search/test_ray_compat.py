@@ -14,6 +14,7 @@ import pytest
 from biota.ray_compat import (
     RolloutHandle,
     _build_ray_init_kwargs,  # pyright: ignore[reportPrivateUsage]
+    _num_gpus_for_device,  # pyright: ignore[reportPrivateUsage]
     init,
     is_ray_active,
     shutdown,
@@ -108,6 +109,30 @@ def test_build_kwargs_attach_with_ray_client_url() -> None:
         "address": "ray://head.example.com:10001",
         "ignore_reinit_error": False,
     }
+
+
+# === _num_gpus_for_device ===
+
+
+def test_num_gpus_for_cpu_is_zero() -> None:
+    assert _num_gpus_for_device("cpu") == 0
+
+
+def test_num_gpus_for_cuda_is_one() -> None:
+    """CUDA tasks need num_gpus=1 so Ray schedules onto a GPU worker and
+    doesn't hide the GPU via CUDA_VISIBLE_DEVICES=''."""
+    assert _num_gpus_for_device("cuda") == 1
+
+
+def test_num_gpus_for_cuda_indexed_is_one() -> None:
+    """Device strings like 'cuda:0' or 'cuda:1' should also map to 1 GPU."""
+    assert _num_gpus_for_device("cuda:0") == 1
+    assert _num_gpus_for_device("cuda:3") == 1
+
+
+def test_num_gpus_for_mps_is_zero() -> None:
+    """MPS is macOS-local, not schedulable via Ray's resource system."""
+    assert _num_gpus_for_device("mps") == 0
 
 
 # === submit/wait state checks ===
