@@ -1,12 +1,18 @@
 # biota
 
-Distributed quality-diversity search over Flow-Lenia, with a live dashboard.
+Distributed quality-diversity search over Flow-Lenia.
 
 ## What this is
 
-Biota runs MAP-Elites over Flow-Lenia parameter space on a Ray cluster (or your laptop) and produces an interactive atlas of artificial creatures organized by their behavior — how they move, how big they are, how internally structured they are. Both the search and the atlas viewer are in a single CLI tool with a vanilla-JS dashboard.
+Biota runs MAP-Elites over Flow-Lenia parameter space — locally, on a single GPU, or across a Ray cluster — and produces a 3D archive of artificial creatures organized by how they move, how big they are, and how structurally complex they are. The compute fabric is Ray. The artifact is the archive.
 
-The compute fabric is Ray. The artifact is the atlas.
+Flow-Lenia is a continuous cellular automaton where matter is conserved by construction. It produces life-like creatures across a much wider parameter range than vanilla Lenia because the mass-conservation invariant prevents the explode/collapse failure modes that dominate Lenia's parameter space. MAP-Elites fills a grid of behavior cells, keeping the best creature found so far in each cell, producing an atlas of qualitatively distinct solutions instead of a single winner.
+
+## Status
+
+**v0.2.0 (2026-04-08) — M1 complete.** Search loop works end to end in three modes: synchronous no-Ray, local Ray, and multi-node Ray cluster attach. Multi-node GPU Ray verified on a 3-node homelab cluster with RTX 5060 Ti GPUs. No dashboard yet (that's M2). Visual inspection of completed runs is via the `scripts/view_archive.py` HTML viewer.
+
+See `SPEC.md` for the full design, `SUMMARY.md` for current state, `DECISIONS.md` for the history of how we got here.
 
 ## Quickstart
 
@@ -14,51 +20,124 @@ The compute fabric is Ray. The artifact is the atlas.
 git clone https://github.com/rkv0id/biota
 cd biota
 uv sync
-uv run biota search --preset dev --budget 200
+uv run biota doctor                                    # verify install
+uv run biota search --preset dev --budget 50          # small local run, no Ray
 ```
 
-Open http://localhost:8000 in a browser. The dashboard fills in as creatures are discovered.
-
-To browse a previously-completed run as a static gallery:
+This runs a 50-rollout search synchronously on CPU, producing a populated archive in `runs/<run_id>/`. Once it finishes, view it:
 
 ```bash
-uv run biota view runs/<run_id>
+uv run python scripts/view_archive.py runs/<run_id>/archive.pkl
 ```
 
-To export a self-contained static bundle for hosting on GitHub Pages or similar:
+That generates a self-contained HTML file with every creature in the archive as an animated thumbnail and opens it in your browser.
+
+## Running on a GPU
 
 ```bash
-uv run biota export <run_id>
+uv run biota search --preset dev --budget 50 --device cuda
 ```
 
-To run on a homelab Ray cluster, SSH into the head node and run biota in tmux there. The dashboard is reachable from your laptop browser at the cluster's IP.
+The `--device` flag takes `cpu` (default), `mps` (Apple Silicon), or `cuda`. On CUDA, biota uses `torch.cuda` directly for single-rollout execution. For parallel rollouts through Ray, see below.
 
-## What it produces
+## Running on Ray
 
-(Hero screenshot lands here once we have one.)
+Three modes:
 
-The atlas is a 3D MAP-Elites archive over (speed, size, structure), rendered as three pairwise 2D projections that share the same cell-rendering code. Click any cell to see the creature in detail with its full parameters and lineage.
+```bash
+# Default: synchronous, no Ray
+uv run biota search --preset dev --budget 50
+
+# Local Ray: fresh Ray instance in the driver process
+uv run biota search --preset dev --budget 50 --local-ray --num-workers 4
+
+# Attach to an existing Ray cluster
+uv run biota search --preset dev --budget 50 --ray-address 10.10.12.1:6379
+```
+
+`--local-ray` and `--ray-address` are mutually exclusive. `--ray-address` takes `host`, `host:port` (port defaults to 6379), or `ray://host:port` for Ray Client protocol. For GPU-backed Ray runs, add `--device cuda`: biota declares `@ray.remote(num_gpus=1)` on CUDA rollouts so Ray schedules onto GPU-bearing workers correctly.
+
+### Multi-node cluster setup
+
+For a multi-node Ray cluster with GPUs, start Ray explicitly with `--num-gpus` declared on each node before launching biota:
+
+```bash
+# On the head node
+ray start --head --node-ip-address=<head-ip> --port=6379 \
+  --dashboard-host=0.0.0.0 --num-gpus=<gpus-per-node>
+
+# On each worker node
+ray start --address=<head-ip>:6379 --num-gpus=<gpus-per-node>
+
+# Verify from any node
+ray status
+
+# Run from the head (or any node with biota installed)
+uv run biota search --ray-address <head-ip>:6379 --preset dev --budget 50 --device cuda
+```
+
+Known issue: Ray's working_dir packaging rebuilds the biota venv on each worker before running any rollouts, adding ~10 seconds of per-worker setup. This dominates wall clock at small budgets. The fix lands in M2.
+
+## CLI reference
+
+**`biota search`** runs a MAP-Elites search and writes results to `runs/<run_id>/`. Flags:
+
+| Flag | Default | Description |
+|---|---|---|
+| `--preset` | `standard` | `dev` (96x96, 200 steps), `standard` (192x192, 300), `pretty` (384x384, 500) |
+| `--budget` | `500` | Total rollouts to run |
+| `--random-phase` | `200` | Rollouts of uniform random sampling before mutation |
+| `--max-concurrent` | `8` | Maximum in-flight rollouts |
+| `--local-ray` | off | Start a fresh local Ray instance |
+| `--ray-address` | none | Attach to an existing Ray cluster at `HOST[:PORT]` |
+| `--num-workers` | auto | Worker count for `--local-ray` (ignored when attaching) |
+| `--device` | `cpu` | `cpu`, `mps`, or `cuda` |
+| `--base-seed` | `0` | Seed for reproducibility |
+| `--checkpoint-every` | `100` | Atomic archive checkpoint cadence |
+| `--runs-root` | `runs` | Root directory for run output |
+| `--grid` | preset | Override preset grid size |
+| `--steps` | preset | Override preset step count |
+
+**`biota doctor`** prints runtime info (Python, torch, device availability, Ray version, biota module health) and exits.
+
+## What's in a run directory
+
+```
+runs/20260408-175341-quiet-junco/
+├── manifest.json       # run metadata, versions, git commit
+├── config.json         # the exact SearchConfig used
+├── archive.pkl         # the MAP-Elites archive, rewritten periodically
+└── events.jsonl        # append-only log of every insertion/rejection
+```
+
+The archive is a 3D MAP-Elites grid (32x32x16 over speed, size, structure). Each populated cell contains a creature's parameters, descriptors, quality score, parent cell, and a small set of preview frames for visualization.
+
+## Development
+
+```bash
+just check           # ruff + format + pyright + pytest (116 tests)
+just smoke-ray       # manual Ray-mode smoke test (uv run biota search --local-ray ...)
+```
+
+Run `just check` after any change to `ray_compat.py` or the search loop. `just smoke-ray` catches a class of Ray-mode bugs that pytest deliberately can't exercise.
 
 ## Architecture
 
-A single Python process is the driver. It owns the in-memory archive, runs the search loop, hosts the FastAPI dashboard server, and writes checkpoints to local disk. Ray workers are stateless: they take parameters, run a Flow-Lenia rollout, compute behavior descriptors, and return a result. A FrameRelay Ray actor lets workers push live preview frames back to the dashboard's Live tab without breaking the stateless contract.
+Single Python process is the driver. Driver owns the in-memory archive, runs the search loop, writes checkpoints to local disk, and (in M2) will host the dashboard. Ray workers are stateless: they take parameters, run a Flow-Lenia rollout, compute descriptors and quality, and return a result. Nothing persistent lives on the workers.
 
-## Benchmarks
+The full design, including the driver-owns-state rationale, worker protocol, storage layout, and planned dashboard shape, is in `SPEC.md`.
 
-Empty until M4 ships. The structure is fixed so the file looks the same once numbers land.
+## Roadmap
 
-| Configuration | Rollouts/sec | Creatures/hour | Notes |
-|---|---|---|---|
-| Laptop M4 (MPS) | TBD | TBD | dev preset |
-| Cluster CPU-only (3 nodes) | TBD | TBD | standard preset |
-| Cluster GPU (3x RTX 5060 Ti) | TBD | TBD | standard preset |
-
-Random search vs MAP-Elites at the same compute budget, same seed:
-
-| Mode | Cells filled | Distinct creatures |
-|---|---|---|
-| `--mode random` | TBD | TBD |
-| `--mode qd` | TBD | TBD |
+- **v0.1.0 (M0)** ✅ Flow-Lenia PyTorch port, mass conservation verified against JAX reference
+- **v0.2.0 (M1)** ✅ Driver, Ray runtime, search loop, multi-node GPU Ray verified — *you are here*
+- **v0.3.0 (M2)** Perf fixes (working_dir overhead), baseline measurements, static dashboard, GPU fractioning investigation
+- **v0.4.0 (M3)** Atlas tab with three projections, live websocket updates, CSS polish
+- **v0.5.0 (M4)** Live/Metrics/Cluster tabs, random-vs-MAP-Elites comparison *(v1 release)*
+- **v0.6.0 (M5)** Cluster benchmarks
+- **v0.7.0 (M6)** Crash recovery, lineage view
+- **v1.0.0 (M7)** Static export, public atlas hosted *(v2 release)*
+- **v2.0.0 (M8)** Learned descriptors *(v3 release, optional)*
 
 ## References
 
@@ -67,7 +146,3 @@ Random search vs MAP-Elites at the same compute budget, same seed:
 - Reference JAX implementation: https://github.com/erwanplantec/FlowLenia
 - Mouret and Clune 2015, MAP-Elites: https://arxiv.org/abs/1504.04909
 - Moroz, Reintegration tracking: https://michaelmoroz.github.io/Reintegration-Tracking/
-
-## Status
-
-Pre-alpha. The repo exists, the design is locked, M0 (FlowLenia port and mass-conservation verification) is the active milestone.
