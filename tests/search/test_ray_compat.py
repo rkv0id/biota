@@ -8,6 +8,7 @@ import pytest
 
 from biota.ray_compat import (
     RolloutHandle,
+    _is_attaching_to_existing_cluster,  # pyright: ignore[reportPrivateUsage]
     init,
     is_ray_active,
     shutdown,
@@ -54,6 +55,58 @@ def test_shutdown_clears_state() -> None:
     assert is_ray_active() is False
     # After shutdown, init can be called again
     init(no_ray=True)
+
+
+# === cluster detection ===
+
+
+def _always_false(_p: str) -> bool:
+    return False
+
+
+def _always_true(_p: str) -> bool:
+    return True
+
+
+def test_cluster_detection_false_when_no_env_no_file(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With neither RAY_ADDRESS nor the cookie file present, init() should
+    take the fresh-local branch and pass num_cpus."""
+    monkeypatch.delenv("RAY_ADDRESS", raising=False)
+    monkeypatch.setattr("os.path.exists", _always_false)
+    assert _is_attaching_to_existing_cluster() is False
+
+
+def test_cluster_detection_true_when_env_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With RAY_ADDRESS set, init() should take the attach branch and NOT
+    pass num_cpus (which would raise ValueError)."""
+    monkeypatch.setenv("RAY_ADDRESS", "auto")
+    monkeypatch.setattr("os.path.exists", _always_false)
+    assert _is_attaching_to_existing_cluster() is True
+
+
+def test_cluster_detection_true_when_cookie_file_exists(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With the ray_current_cluster file present (as 'ray start' would write),
+    init() should take the attach branch even if RAY_ADDRESS is unset."""
+    monkeypatch.delenv("RAY_ADDRESS", raising=False)
+
+    def fake_exists(p: str) -> bool:
+        return p == "/tmp/ray/ray_current_cluster"
+
+    monkeypatch.setattr("os.path.exists", fake_exists)
+    assert _is_attaching_to_existing_cluster() is True
+
+
+def test_cluster_detection_env_takes_precedence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If both signals are present, either one is enough; both -> True."""
+    monkeypatch.setenv("RAY_ADDRESS", "auto")
+    monkeypatch.setattr("os.path.exists", _always_true)
+    assert _is_attaching_to_existing_cluster() is True
 
 
 def test_submit_before_init_raises() -> None:

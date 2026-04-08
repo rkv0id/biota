@@ -59,6 +59,18 @@ def init(num_workers: int | None = None, *, no_ray: bool = False) -> None:
     parallelism if set; if None, Ray uses its default (typically detected CPU
     count, or whatever the cluster's resources expose).
 
+    Cluster connection: ray.init() may connect to an already-running Ray
+    cluster instead of starting a fresh local one. This happens when:
+
+    1. The RAY_ADDRESS env var is set (commonly to 'auto' or 'host:port').
+    2. A running local cluster is detected via /tmp/ray/ray_current_cluster,
+       which ray itself writes when 'ray start --head' runs on the machine.
+
+    In either case we do NOT pass num_cpus, because the cluster's resources
+    were already configured at 'ray start' time; passing num_cpus to a
+    cluster-connecting ray.init() raises ValueError. num_workers is effectively
+    ignored when attaching; the cluster decides its own resource counts.
+
     Calling init twice in the same process is an error - either shutdown
     first or trust that the existing runtime is correctly configured.
     """
@@ -77,9 +89,34 @@ def init(num_workers: int | None = None, *, no_ray: bool = False) -> None:
     import ray
 
     if not ray.is_initialized():
-        ray.init(num_cpus=num_workers, ignore_reinit_error=False)
+        if _is_attaching_to_existing_cluster():
+            # Joining an existing cluster. Don't pass num_cpus; the cluster's
+            # resources were set when 'ray start' was run on the nodes.
+            ray.init(ignore_reinit_error=False)
+        else:
+            # Starting a fresh local Ray instance in the driver process.
+            ray.init(num_cpus=num_workers, ignore_reinit_error=False)
     _state["mode"] = "ray"
     _state["initialized"] = True
+
+
+def _is_attaching_to_existing_cluster() -> bool:
+    """Return True if ray.init() will connect to an already-running cluster
+    rather than starting a fresh local one.
+
+    Mirrors Ray's own autodetection order:
+    1. RAY_ADDRESS env var is set
+    2. /tmp/ray/ray_current_cluster file exists (written by 'ray start')
+
+    Used to decide whether to pass num_cpus to ray.init(): passing num_cpus
+    when attaching to an existing cluster raises ValueError, so we only pass
+    it when starting a fresh instance.
+    """
+    import os
+
+    if os.environ.get("RAY_ADDRESS"):
+        return True
+    return os.path.exists("/tmp/ray/ray_current_cluster")
 
 
 def shutdown() -> None:
