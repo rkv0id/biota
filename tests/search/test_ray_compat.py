@@ -1,14 +1,19 @@
-"""Tests for biota.ray_compat in --no-ray mode.
+"""Tests for biota.ray_compat in default (no-ray) mode.
 
 These tests never import ray or spin up a Ray cluster. The Ray-mode code path
-is exercised by the cluster smoke test in step 9-10, not by pytest.
+(local_ray=True, ray_address=...) is exercised by the cluster smoke test in
+step 9-10, not by pytest. The one exception is _build_ray_init_kwargs, which
+is a pure function that just builds the kwargs dict to pass to ray.init() -
+no ray import required, safe to unit-test directly.
 """
+
+from typing import Any
 
 import pytest
 
 from biota.ray_compat import (
     RolloutHandle,
-    _is_attaching_to_existing_cluster,  # pyright: ignore[reportPrivateUsage]
+    _build_ray_init_kwargs,  # pyright: ignore[reportPrivateUsage]
     init,
     is_ray_active,
     shutdown,
@@ -38,75 +43,74 @@ def test_shutdown_on_uninitialized_is_idempotent() -> None:
     shutdown()  # still no error
 
 
-def test_init_no_ray_marks_initialized() -> None:
-    init(no_ray=True)
+def test_init_default_is_no_ray() -> None:
+    """Default init() with no flags runs in no-Ray mode (synchronous)."""
+    init()
     assert is_ray_active() is False
 
 
 def test_double_init_raises() -> None:
-    init(no_ray=True)
+    init()
     with pytest.raises(RuntimeError, match="already initialized"):
-        init(no_ray=True)
+        init()
 
 
 def test_shutdown_clears_state() -> None:
-    init(no_ray=True)
+    init()
     shutdown()
     assert is_ray_active() is False
     # After shutdown, init can be called again
-    init(no_ray=True)
+    init()
 
 
-# === cluster detection ===
+def test_init_rejects_conflicting_flags() -> None:
+    """local_ray and ray_address are mutually exclusive."""
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        init(local_ray=True, ray_address="10.10.12.1:6379")
 
 
-def _always_false(_p: str) -> bool:
-    return False
+# === _build_ray_init_kwargs ===
 
 
-def _always_true(_p: str) -> bool:
-    return True
+def test_build_kwargs_local_ray_with_num_workers() -> None:
+    """Local Ray with num_workers set: pass num_cpus to ray.init."""
+    kwargs: dict[str, Any] = _build_ray_init_kwargs(num_workers=4, ray_address=None)
+    assert kwargs == {"num_cpus": 4, "ignore_reinit_error": False}
 
 
-def test_cluster_detection_false_when_no_env_no_file(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """With neither RAY_ADDRESS nor the cookie file present, init() should
-    take the fresh-local branch and pass num_cpus."""
-    monkeypatch.delenv("RAY_ADDRESS", raising=False)
-    monkeypatch.setattr("os.path.exists", _always_false)
-    assert _is_attaching_to_existing_cluster() is False
+def test_build_kwargs_local_ray_without_num_workers() -> None:
+    """Local Ray without num_workers: pass num_cpus=None (Ray picks default)."""
+    kwargs: dict[str, Any] = _build_ray_init_kwargs(num_workers=None, ray_address=None)
+    assert kwargs == {"num_cpus": None, "ignore_reinit_error": False}
 
 
-def test_cluster_detection_true_when_env_set(monkeypatch: pytest.MonkeyPatch) -> None:
-    """With RAY_ADDRESS set, init() should take the attach branch and NOT
-    pass num_cpus (which would raise ValueError)."""
-    monkeypatch.setenv("RAY_ADDRESS", "auto")
-    monkeypatch.setattr("os.path.exists", _always_false)
-    assert _is_attaching_to_existing_cluster() is True
+def test_build_kwargs_attach_ignores_num_workers() -> None:
+    """Attach mode: pass address=, never num_cpus (even if num_workers is set).
+
+    Passing num_cpus to a cluster-connecting ray.init() raises ValueError. The
+    num_workers arg is silently dropped in this branch; the cluster's
+    resources were already configured at 'ray start' time.
+    """
+    kwargs: dict[str, Any] = _build_ray_init_kwargs(num_workers=8, ray_address="10.10.12.1:6379")
+    assert kwargs == {
+        "address": "10.10.12.1:6379",
+        "ignore_reinit_error": False,
+    }
+    assert "num_cpus" not in kwargs
 
 
-def test_cluster_detection_true_when_cookie_file_exists(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """With the ray_current_cluster file present (as 'ray start' would write),
-    init() should take the attach branch even if RAY_ADDRESS is unset."""
-    monkeypatch.delenv("RAY_ADDRESS", raising=False)
-
-    def fake_exists(p: str) -> bool:
-        return p == "/tmp/ray/ray_current_cluster"
-
-    monkeypatch.setattr("os.path.exists", fake_exists)
-    assert _is_attaching_to_existing_cluster() is True
+def test_build_kwargs_attach_with_ray_client_url() -> None:
+    """Ray Client URLs (ray://host:port) pass through verbatim."""
+    kwargs: dict[str, Any] = _build_ray_init_kwargs(
+        num_workers=None, ray_address="ray://head.example.com:10001"
+    )
+    assert kwargs == {
+        "address": "ray://head.example.com:10001",
+        "ignore_reinit_error": False,
+    }
 
 
-def test_cluster_detection_env_takes_precedence(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """If both signals are present, either one is enough; both -> True."""
-    monkeypatch.setenv("RAY_ADDRESS", "auto")
-    monkeypatch.setattr("os.path.exists", _always_true)
-    assert _is_attaching_to_existing_cluster() is True
+# === submit/wait state checks ===
 
 
 def test_submit_before_init_raises() -> None:
@@ -120,18 +124,18 @@ def test_wait_before_init_raises() -> None:
         wait_for_completed([])  # type: ignore[arg-type]
 
 
-# === submit and wait in no_ray mode ===
+# === submit and wait in default (no-Ray) mode ===
 
 
 def test_submit_returns_handle() -> None:
-    init(no_ray=True)
+    init()
     params = sample_random(kernels=10, seed=0)
     handle = submit_rollout(params, seed=42, config=CHEAP_CONFIG)
     assert isinstance(handle, RolloutHandle)
 
 
 def test_submit_then_wait_returns_correct_seed_and_params() -> None:
-    init(no_ray=True)
+    init()
     params = sample_random(kernels=10, seed=0)
     handle = submit_rollout(params, seed=42, config=CHEAP_CONFIG)
     completed, _ = wait_for_completed([handle])
@@ -141,7 +145,7 @@ def test_submit_then_wait_returns_correct_seed_and_params() -> None:
 
 
 def test_submit_passes_through_parent_cell() -> None:
-    init(no_ray=True)
+    init()
     params = sample_random(kernels=10, seed=0)
     handle = submit_rollout(params, seed=0, config=CHEAP_CONFIG, parent_cell=(5, 10, 3))
     completed, _ = wait_for_completed([handle])
@@ -149,7 +153,7 @@ def test_submit_passes_through_parent_cell() -> None:
 
 
 def test_wait_for_completed_drains_all_handles() -> None:
-    init(no_ray=True)
+    init()
     handles = [
         submit_rollout(sample_random(kernels=10, seed=i), seed=i, config=CHEAP_CONFIG)
         for i in range(3)
@@ -163,7 +167,7 @@ def test_wait_for_completed_drains_all_handles() -> None:
 
 
 def test_wait_for_completed_empty_raises() -> None:
-    init(no_ray=True)
+    init()
     with pytest.raises(ValueError, match="at least one handle"):
         wait_for_completed([])
 
@@ -171,9 +175,9 @@ def test_wait_for_completed_empty_raises() -> None:
 # === mini end-to-end search loop simulation ===
 
 
-def test_mini_search_loop_no_ray() -> None:
+def test_mini_search_loop_default() -> None:
     """Simulate the search loop's submit-then-drain pattern with 5 rollouts."""
-    init(no_ray=True)
+    init()
 
     handles: list[RolloutHandle] = []
     for i in range(5):

@@ -1,8 +1,8 @@
 """Tests for the biota CLI.
 
 Uses Typer's CliRunner to invoke commands in-process without spawning
-subprocesses. All tests use --no-ray and tiny configs to keep runtime
-low.
+subprocesses. Tests that run actual searches use the default no-ray mode
+and tiny configs to keep runtime low.
 """
 
 import re
@@ -74,7 +74,8 @@ def test_search_help_lists_all_flags() -> None:
         "--budget",
         "--random-phase",
         "--max-concurrent",
-        "--no-ray",
+        "--local-ray",
+        "--ray-address",
         "--num-workers",
         "--device",
         "--base-seed",
@@ -87,11 +88,31 @@ def test_search_help_lists_all_flags() -> None:
 
 
 def test_search_unknown_preset_errors_cleanly() -> None:
-    result = runner.invoke(app, ["search", "--preset", "nonexistent", "--no-ray", "--budget", "1"])
+    result = runner.invoke(app, ["search", "--preset", "nonexistent", "--budget", "1"])
     assert result.exit_code != 0
 
 
-# === search end-to-end (small, --no-ray) ===
+def test_search_local_ray_and_ray_address_mutually_exclusive() -> None:
+    """Passing both --local-ray and --ray-address should error cleanly."""
+    result = runner.invoke(
+        app,
+        [
+            "search",
+            "--local-ray",
+            "--ray-address",
+            "10.10.12.1",
+            "--budget",
+            "1",
+        ],
+    )
+    assert result.exit_code != 0
+    # Typer's BadParameter writes to the click error stream, which shows up
+    # in result.output (not result.stdout).
+    output = _strip_ansi(result.output)
+    assert "mutually exclusive" in output.lower()
+
+
+# === search end-to-end (small, default no-ray) ===
 
 
 def test_search_runs_to_completion(tmp_path: Path) -> None:
@@ -105,7 +126,6 @@ def test_search_runs_to_completion(tmp_path: Path) -> None:
             "5",
             "--random-phase",
             "5",
-            "--no-ray",
             "--grid",
             "32",
             "--steps",
@@ -130,7 +150,6 @@ def test_search_creates_run_dir(tmp_path: Path) -> None:
             "5",
             "--random-phase",
             "5",
-            "--no-ray",
             "--grid",
             "32",
             "--steps",
@@ -161,7 +180,6 @@ def test_search_grid_steps_override_applies(tmp_path: Path) -> None:
             "3",
             "--random-phase",
             "3",
-            "--no-ray",
             "--grid",
             "32",
             "--steps",

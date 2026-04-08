@@ -6,8 +6,9 @@ function, and returns a RolloutResult that's safe to pickle and ship back to
 the driver.
 
 This module is the only place biota.search talks to biota.sim. Step 7
-(ray_compat.py) wraps `rollout` in a Ray task; the --no-ray code path calls
-`rollout` directly. Tests use the direct path so Ray never starts.
+(ray_compat.py) wraps `rollout` in a Ray task when Ray mode is enabled;
+the default no-Ray code path calls `rollout` directly. Tests use the
+direct path so Ray never starts.
 
 Per-step stats (COM and bbox-fraction) are computed on CPU after a small
 device->host transfer. The overhead is ~10% on CPU device and a similar order

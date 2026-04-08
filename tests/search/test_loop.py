@@ -8,7 +8,7 @@ despite each rollout taking ~2 seconds at the cheap config.
 The determinism test runs its own pair of searches because it needs to
 compare two independent runs.
 
-All tests use --no-ray mode so pytest never spins up Ray.
+All tests use the default no-Ray mode so pytest never spins up Ray.
 """
 
 import json
@@ -46,7 +46,6 @@ def _cheap_config(budget: int = 10, random_phase_size: int = 5, **kwargs: Any) -
         budget=budget,
         random_phase_size=random_phase_size,
         max_concurrent=2,
-        no_ray=True,
         base_seed=42,
         checkpoint_every=3,
         **kwargs,
@@ -174,9 +173,9 @@ def test_mutation_phase_runs_to_completion(session_search: SessionSearch) -> Non
 
 
 def test_random_phase_is_deterministic(tmp_path: Path) -> None:
-    """Same base_seed -> same sequence of random-phase results in --no-ray
-    mode. Runs two independent searches with random_phase_size == budget so
-    no mutation-phase nondeterminism enters the picture."""
+    """Same base_seed -> same sequence of random-phase results in default
+    no-Ray mode. Runs two independent searches with random_phase_size == budget
+    so no mutation-phase nondeterminism enters the picture."""
     events_a: list[SearchEvent] = []
     events_b: list[SearchEvent] = []
     cfg = _cheap_config(budget=5, random_phase_size=5)

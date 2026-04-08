@@ -3,18 +3,21 @@
 mode. All Ray imports and decorators live here so the rest of the codebase can stay
 strict.
 
-Two runtime modes:
+Three runtime modes, selected by the init() flags:
 
-- no_ray: rollouts run synchronously in the driver process. submit_rollout
-  builds and immediately resolves a RolloutHandle; wait_for_completed returns
-  everything in one call.
-- ray:    rollouts run as Ray tasks on workers in the cluster. submit_rollout
-  returns a handle wrapping a Ray ObjectRef; wait_for_completed uses ray.wait
-  to drain completed handles as they finish.
+- default (no flags): rollouts run synchronously in the driver process.
+  submit_rollout builds and immediately resolves a RolloutHandle;
+  wait_for_completed returns everything in one call.
+- local_ray=True: a fresh Ray instance is started in the driver process,
+  and rollouts run as Ray tasks. Use num_workers to cap parallelism.
+- ray_address=<str>: attach to an already-running Ray cluster at the given
+  address. Rollouts run as Ray tasks on whatever nodes the cluster has.
 
-The search loop calls the same five functions in both modes:
+local_ray and ray_address are mutually exclusive.
 
-    init(num_workers, no_ray)
+The search loop calls the same five functions in all three modes:
+
+    init(num_workers, local_ray=..., ray_address=...)
     handle = submit_rollout(params, seed, config, device, parent_cell)
     completed, still_pending = wait_for_completed(handles, min_completed=1)
     is_ray_active()
@@ -52,24 +55,33 @@ class RolloutHandle:
     _ray_ref: Any  # ray.ObjectRef[RolloutResult] in ray mode, None in no_ray mode
 
 
-def init(num_workers: int | None = None, *, no_ray: bool = False) -> None:
+def init(
+    num_workers: int | None = None,
+    *,
+    local_ray: bool = False,
+    ray_address: str | None = None,
+) -> None:
     """Initialize the runtime. Must be called once before any submit_rollout.
 
-    In no_ray mode, num_workers is ignored. In ray mode, num_workers caps the
-    parallelism if set; if None, Ray uses its default (typically detected CPU
-    count, or whatever the cluster's resources expose).
+    Three modes, selected by the flags:
 
-    Cluster connection: ray.init() may connect to an already-running Ray
-    cluster instead of starting a fresh local one. This happens when:
+    - **default (no flags)**: no Ray. Rollouts run synchronously in the driver
+      process. Zero Ray startup overhead, ideal for laptop dev iteration and
+      for CI where parallelism comes from pytest itself.
 
-    1. The RAY_ADDRESS env var is set (commonly to 'auto' or 'host:port').
-    2. A running local cluster is detected via /tmp/ray/ray_current_cluster,
-       which ray itself writes when 'ray start --head' runs on the machine.
+    - **local_ray=True**: start a fresh Ray instance in the driver process.
+      num_workers caps the parallelism if set; if None, Ray uses its default
+      (typically detected CPU count).
 
-    In either case we do NOT pass num_cpus, because the cluster's resources
-    were already configured at 'ray start' time; passing num_cpus to a
-    cluster-connecting ray.init() raises ValueError. num_workers is effectively
-    ignored when attaching; the cluster decides its own resource counts.
+    - **ray_address=<str>**: attach to an already-running Ray cluster at the
+      given address. Value is passed verbatim to ray.init(address=...). Use
+      "host:port" for a GCS-level connection from the same network, or
+      "ray://host:port" for Ray Client protocol. num_workers is ignored when
+      attaching because cluster resources were fixed at 'ray start' time;
+      passing num_cpus to a cluster-connecting ray.init() raises ValueError.
+
+    local_ray and ray_address are mutually exclusive. Passing both raises
+    ValueError. Passing neither is the no-ray default.
 
     Calling init twice in the same process is an error - either shutdown
     first or trust that the existing runtime is correctly configured.
@@ -79,44 +91,44 @@ def init(num_workers: int | None = None, *, no_ray: bool = False) -> None:
             "ray_compat already initialized; call shutdown() first if you need to reinitialize"
         )
 
-    if no_ray:
+    if local_ray and ray_address is not None:
+        raise ValueError("local_ray and ray_address are mutually exclusive; pass one or the other")
+
+    # Default: no Ray. Synchronous in the driver.
+    if not local_ray and ray_address is None:
         _state["mode"] = "no_ray"
         _state["initialized"] = True
         return
 
-    # Ray mode: import lazily so unit tests in no_ray mode don't have to spin
-    # up Ray or even resolve its import path
+    # Ray mode: import lazily so no-ray callers don't have to spin up Ray or
+    # even resolve its import path.
     import ray
 
     if not ray.is_initialized():
-        if _is_attaching_to_existing_cluster():
-            # Joining an existing cluster. Don't pass num_cpus; the cluster's
-            # resources were set when 'ray start' was run on the nodes.
-            ray.init(ignore_reinit_error=False)
-        else:
-            # Starting a fresh local Ray instance in the driver process.
-            ray.init(num_cpus=num_workers, ignore_reinit_error=False)
+        init_kwargs = _build_ray_init_kwargs(num_workers=num_workers, ray_address=ray_address)
+        ray.init(**init_kwargs)
     _state["mode"] = "ray"
     _state["initialized"] = True
 
 
-def _is_attaching_to_existing_cluster() -> bool:
-    """Return True if ray.init() will connect to an already-running cluster
-    rather than starting a fresh local one.
+def _build_ray_init_kwargs(num_workers: int | None, ray_address: str | None) -> dict[str, Any]:
+    """Build the kwargs dict to pass to ray.init() based on our mode flags.
 
-    Mirrors Ray's own autodetection order:
-    1. RAY_ADDRESS env var is set
-    2. /tmp/ray/ray_current_cluster file exists (written by 'ray start')
+    Extracted as a pure function so it can be unit-tested without importing
+    ray or spinning up a cluster. The branching logic is small enough that
+    directly testing it is overkill, but we had two real production bugs in
+    this branching already (see DECISIONS.md 2026-04-07 and 2026-04-08), so
+    the tiny test surface is worth it.
 
-    Used to decide whether to pass num_cpus to ray.init(): passing num_cpus
-    when attaching to an existing cluster raises ValueError, so we only pass
-    it when starting a fresh instance.
+    Rules:
+    - If ray_address is set, pass address=<value> and never num_cpus
+      (ray.init raises ValueError if both are given when attaching).
+    - If ray_address is None, pass num_cpus=num_workers for fresh local Ray.
+    - Always pass ignore_reinit_error=False so double-init is a loud error.
     """
-    import os
-
-    if os.environ.get("RAY_ADDRESS"):
-        return True
-    return os.path.exists("/tmp/ray/ray_current_cluster")
+    if ray_address is not None:
+        return {"address": ray_address, "ignore_reinit_error": False}
+    return {"num_cpus": num_workers, "ignore_reinit_error": False}
 
 
 def shutdown() -> None:
@@ -135,7 +147,7 @@ def shutdown() -> None:
 
 
 def is_ray_active() -> bool:
-    """True if init was called with no_ray=False."""
+    """True if init was called with local_ray=True or ray_address set."""
     return _state["initialized"] and _state["mode"] == "ray"
 
 

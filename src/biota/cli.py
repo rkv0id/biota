@@ -5,8 +5,9 @@ Two commands:
     biota search    Run a MAP-Elites search with configurable flags.
     biota doctor    Print runtime info (versions, devices, module health).
 
-Most users only need `biota search --preset dev --no-ray` for quick local
-runs; `biota search --preset standard` for a serious search. `biota doctor`
+Most users only need `biota search --preset dev` for quick local runs
+(synchronous, no Ray). Add `--local-ray` for local parallelism, or
+`--ray-address HOST` to attach to an existing cluster. `biota doctor`
 is a one-command install sanity check.
 
 The CLI is thin: it parses flags into a SearchConfig and calls
@@ -113,6 +114,27 @@ def _print_event(event: SearchEvent, budget: int) -> None:
         )
 
 
+RAY_DEFAULT_PORT = 6379
+
+
+def _normalize_ray_address(value: str | None) -> str | None:
+    """Add the default port to a host-only ray_address if no port is given.
+
+    Rules:
+    - None -> None
+    - "ray://..." -> passed through verbatim (Ray Client URL)
+    - "host:port" -> passed through verbatim
+    - "host" -> "host:6379" (append default GCS port)
+    """
+    if value is None:
+        return None
+    if value.startswith("ray://"):
+        return value
+    if ":" in value:
+        return value
+    return f"{value}:{RAY_DEFAULT_PORT}"
+
+
 @app.command(name="search")
 def search_cmd(
     preset: str = typer.Option(
@@ -123,11 +145,25 @@ def search_cmd(
         200, "--random-phase", help="Random sampling rollouts before mutation."
     ),
     max_concurrent: int = typer.Option(8, "--max-concurrent", help="Maximum in-flight rollouts."),
-    no_ray: bool = typer.Option(
-        False, "--no-ray", help="Bypass Ray; run synchronously in the driver."
+    local_ray: bool = typer.Option(
+        False,
+        "--local-ray",
+        help="Start a fresh local Ray instance. Default: no Ray (synchronous).",
+    ),
+    ray_address: str | None = typer.Option(
+        None,
+        "--ray-address",
+        help=(
+            "Attach to an existing Ray cluster at HOST[:PORT]. "
+            f"Port defaults to {RAY_DEFAULT_PORT} if not given. "
+            "Use 'ray://host:port' for Ray Client protocol. "
+            "Mutually exclusive with --local-ray."
+        ),
     ),
     num_workers: int | None = typer.Option(
-        None, "--num-workers", help="Ray worker cap (ignored with --no-ray)."
+        None,
+        "--num-workers",
+        help="Worker cap for --local-ray (ignored when attaching to a cluster).",
     ),
     device: str = typer.Option("cpu", "--device", help="Torch device: cpu, mps, or cuda."),
     base_seed: int = typer.Option(0, "--base-seed", help="Seed for reproducibility."),
@@ -145,13 +181,20 @@ def search_cmd(
     ),
 ) -> None:
     """Run a MAP-Elites search over Flow-Lenia parameters."""
+    if local_ray and ray_address is not None:
+        raise typer.BadParameter(
+            "--local-ray and --ray-address are mutually exclusive; pass one or the other",
+            param_hint="--local-ray / --ray-address",
+        )
+
     rollout_cfg = _override_sim(_resolve_preset(preset), grid=grid, steps=steps)
     config = SearchConfig(
         rollout=rollout_cfg,
         budget=budget,
         random_phase_size=random_phase,
         max_concurrent=max_concurrent,
-        no_ray=no_ray,
+        local_ray=local_ray,
+        ray_address=_normalize_ray_address(ray_address),
         num_workers=num_workers,
         device=device,
         base_seed=base_seed,
@@ -227,14 +270,14 @@ def _format_doctor() -> str:
     except ImportError as e:
         lines.append(f"biota.search: FAIL ({e})")
 
-    # biota.ray_compat health in no_ray mode
+    # biota.ray_compat health in default (no-Ray) mode
     try:
         from biota.ray_compat import init, is_ray_active, shutdown
 
-        init(no_ray=True)
+        init()
         assert is_ray_active() is False
         shutdown()
-        lines.append("biota.ray_compat: ok (no-ray init successful)")
+        lines.append("biota.ray_compat: ok (default init successful)")
     except Exception as e:
         lines.append(f"biota.ray_compat: FAIL ({e})")
 

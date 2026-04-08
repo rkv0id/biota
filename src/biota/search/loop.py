@@ -22,8 +22,8 @@ The loop writes a run directory under runs/<run_id>/ containing:
 Events also flow to an optional on_event callback so the CLI can print
 progress and (eventually) the dashboard can stream live updates.
 
-The submit-and-drain pattern uses ray_compat for both --no-ray and ray modes
-behind the same five-function API.
+The submit-and-drain pattern uses ray_compat for all three modes (default
+no-Ray, local Ray, attach to existing cluster) behind the same five-function API.
 """
 
 import json
@@ -70,12 +70,21 @@ class SearchConfig:
     max_concurrent: int = 8
     """Maximum number of in-flight rollouts at any time."""
 
-    no_ray: bool = False
-    """If True, run rollouts synchronously in the driver process. Used for
-    tests and debugging."""
+    local_ray: bool = False
+    """If True, start a fresh local Ray instance in the driver process and run
+    rollouts as Ray tasks. Mutually exclusive with ray_address."""
+
+    ray_address: str | None = None
+    """If set, attach to an already-running Ray cluster at this address. Value
+    is passed verbatim to ray.init(address=...). Use 'host:port' for GCS-level
+    connection or 'ray://host:port' for Ray Client. Mutually exclusive with
+    local_ray. When neither local_ray nor ray_address is set, rollouts run
+    synchronously in the driver (the no-Ray default)."""
 
     num_workers: int | None = None
-    """Number of Ray workers (None = ray default). Ignored when no_ray=True."""
+    """Number of Ray workers (None = ray default). Only meaningful with
+    local_ray=True; ignored when attaching to an existing cluster (the
+    cluster's resources were fixed at 'ray start' time)."""
 
     device: str = "cpu"
     """Torch device for the rollouts: 'cpu', 'mps', or 'cuda'."""
@@ -88,6 +97,12 @@ class SearchConfig:
     produces the same sequence of sampled params (the mutation phase is
     nondeterministic in parallel mode because parent picking depends on
     completion order)."""
+
+    def __post_init__(self) -> None:
+        if self.local_ray and self.ray_address is not None:
+            raise ValueError(
+                "local_ray and ray_address are mutually exclusive; pass one or the other, not both"
+            )
 
 
 # === events ===
@@ -182,7 +197,11 @@ def search(
         SearchStarted(run_id=run_id, run_dir=run_dir, config=config, started_at=started_at),
     )
 
-    init(num_workers=config.num_workers, no_ray=config.no_ray)
+    init(
+        num_workers=config.num_workers,
+        local_ray=config.local_ray,
+        ray_address=config.ray_address,
+    )
     try:
         in_flight: list[RolloutHandle] = []
         next_seed = config.base_seed
@@ -475,7 +494,8 @@ def _config_to_jsonable(config: SearchConfig) -> dict[str, Any]:
         "budget",
         "random_phase_size",
         "max_concurrent",
-        "no_ray",
+        "local_ray",
+        "ray_address",
         "num_workers",
         "device",
         "checkpoint_every",
