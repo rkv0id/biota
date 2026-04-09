@@ -31,8 +31,19 @@ from biota.search.result import CellCoord, ParamDict, RolloutResult
 from biota.sim.flowlenia import Config as SimConfig
 from biota.sim.flowlenia import FlowLenia, Params
 
-THUMBNAIL_FRAMES = 16
-THUMBNAIL_SIZE = 32
+THUMBNAIL_FRAMES = 32
+"""Default number of frames captured per rollout into the thumbnail buffer.
+Chosen to give animations smooth motion without ballooning archive size.
+At 32 frames per cell, a 250-cell archive with 192-pixel grayscale frames
+weighs about 280 MB - still small enough to scp around without thinking."""
+
+THUMBNAIL_SIZE = 192
+"""Default target edge length for downsampled thumbnail frames, in pixels.
+Clamped at call time to min(THUMBNAIL_SIZE, sim_grid) so dev preset (64-grid)
+doesn't try to upsample - it naturally produces 64-pixel thumbnails, while
+standard preset (192-grid) produces 192-pixel thumbnails at native resolution.
+192 matches the standard preset's sim grid, which means click-to-detail in
+the viewer shows the full sim resolution with no aliasing."""
 TRACE_TAIL_STEPS = 100  # the persistent filter needs two 50-step windows
 
 
@@ -175,6 +186,12 @@ def rollout(
     )
     initial_mass = float(state.sum().item())
 
+    # Clamp the thumbnail target to the sim grid so dev preset (small grid)
+    # doesn't try to upsample - if the configured thumbnail size is larger
+    # than the sim grid, cap it at the grid itself. This lets us keep a
+    # single sensible default (192) without per-preset overrides.
+    thumbnail_size = min(config.thumbnail_size, config.sim.grid)
+
     # 3. Pick frame indices for the thumbnail (uniform across the full rollout)
     if config.thumbnail_frames > 0:
         indices = np.linspace(0, config.steps, config.thumbnail_frames)
@@ -196,7 +213,7 @@ def rollout(
         com_x_np[step] = com_x
         bbox_np[step] = bbox
         if step in frame_indices:
-            thumb_buf.append(_downsample_frame(state, config.thumbnail_size))
+            thumb_buf.append(_downsample_frame(state, thumbnail_size))
         if step < config.steps:
             state = fl.step(state)
 
@@ -211,7 +228,7 @@ def rollout(
         thumbnail = (
             _quantize_thumbnail(torch.stack(thumb_buf, dim=0))
             if thumb_buf
-            else _empty_thumbnail(config.thumbnail_frames, config.thumbnail_size)
+            else _empty_thumbnail(config.thumbnail_frames, thumbnail_size)
         )
         return RolloutResult(
             params=params,
@@ -250,7 +267,7 @@ def rollout(
     if thumb_buf:
         thumbnail = _quantize_thumbnail(torch.stack(thumb_buf, dim=0))
     else:
-        thumbnail = _empty_thumbnail(config.thumbnail_frames, config.thumbnail_size)
+        thumbnail = _empty_thumbnail(config.thumbnail_frames, thumbnail_size)
 
     compute_seconds = time.perf_counter() - started_at
     return RolloutResult(

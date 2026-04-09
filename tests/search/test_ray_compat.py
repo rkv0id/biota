@@ -23,7 +23,11 @@ from biota.ray_compat import (
     wait_for_completed,
 )
 from biota.search.params import sample_random
-from biota.search.rollout import RolloutConfig
+from biota.search.rollout import (
+    THUMBNAIL_FRAMES,
+    THUMBNAIL_SIZE,
+    RolloutConfig,
+)
 from biota.sim.flowlenia import Config as SimConfig
 
 CHEAP_CONFIG = RolloutConfig(sim=SimConfig(grid=32, kernels=10), steps=50)
@@ -269,9 +273,10 @@ def test_mini_search_loop_default() -> None:
 
     assert len(all_results) == 5
     # All results have valid params and seeds
+    expected_size = min(THUMBNAIL_SIZE, CHEAP_CONFIG.sim.grid)
     for result in all_results:
         assert isinstance(result.seed, int)
         assert result.params is not None
         # Most will fail the persistent filter at this small config but they
         # should all return successfully (not raise)
-        assert result.thumbnail.shape == (16, 32, 32)
+        assert result.thumbnail.shape == (THUMBNAIL_FRAMES, expected_size, expected_size)

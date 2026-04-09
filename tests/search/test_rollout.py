@@ -72,7 +72,10 @@ def test_rollout_returns_result_for_random_params() -> None:
     assert result.seed == 42
     assert result.created_at > 0
     assert result.compute_seconds > 0
-    assert result.thumbnail.shape == (THUMBNAIL_FRAMES, THUMBNAIL_SIZE, THUMBNAIL_SIZE)
+    # Thumbnail size is clamped to min(THUMBNAIL_SIZE, sim.grid) so a small
+    # test preset doesn't get an upsampled thumbnail.
+    expected_size = min(THUMBNAIL_SIZE, CHEAP_CONFIG.sim.grid)
+    assert result.thumbnail.shape == (THUMBNAIL_FRAMES, expected_size, expected_size)
     assert result.thumbnail.dtype == np.uint8
 
 
