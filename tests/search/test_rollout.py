@@ -151,11 +151,18 @@ def test_rollout_m0_fixture_produces_accepted_creature() -> None:
     for d in result.descriptors:
         assert 0.0 <= d <= 1.0
 
-    # M0 fixture is a stationary, well-localized, structured creature
-    speed, size, structure = result.descriptors
-    assert speed < 0.1, f"M0 fixture should barely move, got speed={speed}"
-    assert size < 0.5, f"M0 fixture should stay localized, got size={size}"
-    assert structure > 0.5, f"M0 fixture should be structured, got structure={structure}"
+    # M0 fixture is a stationary, well-localized, symmetric creature.
+    # Under the new (velocity, gyradius, dgm) descriptors:
+    # - velocity: near-zero for a stationary creature
+    # - gyradius: moderate; the fixture is a smallish blob on a 96-grid so
+    #   gyradius lands around 0.6 (mass-weighted RMS distance ~15 cells
+    #   versus the grid/4 normalizer of 24)
+    # - dgm: near-zero; the fixture is a symmetric stable creature so mass
+    #   COM and growth-field COM essentially coincide
+    velocity, gyradius, dgm = result.descriptors
+    assert velocity < 0.1, f"M0 fixture should barely move, got velocity={velocity}"
+    assert gyradius < 0.9, f"M0 fixture should not fill the grid, got gyradius={gyradius}"
+    assert dgm < 0.2, f"M0 fixture should be symmetric, got dgm={dgm}"
 
     # Compactness should be very high (almost all mass inside the bbox)
     assert result.quality > 0.9

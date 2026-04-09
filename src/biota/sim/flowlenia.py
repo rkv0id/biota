@@ -94,6 +94,33 @@ class FlowLenia:
         new_A2 = self._reintegration(A2, F_flow)
         return new_A2.unsqueeze(-1)
 
+    def growth_field(self, A: torch.Tensor) -> torch.Tensor:
+        """Compute the per-cell summed growth field G(x) for a state.
+
+        This is the same `U_sum` quantity that drives the flow term inside
+        step(): for each cell, sum over all kernels of the growth function
+        applied to the local neighborhood convolution. Positive values mean
+        "mass should grow here," negative values mean "mass should shrink
+        here."
+
+        Returns a (grid, grid) tensor on the same device as the state. Used
+        by the descriptor module to compute Chan's growth-centroid distance
+        (dgm), which compares the center of mass of this growth field
+        against the center of mass of the actual matter to detect
+        asymmetric or structured creatures. See descriptors.py.
+
+        Pure recomputation, no state mutation. Cheaper than a full step
+        because we skip the gradient/alpha/reintegration phases.
+        """
+        A2 = A[:, :, 0]
+        fA = torch.fft.fft2(A2)
+        U = torch.fft.ifft2(self._fK * fA.unsqueeze(0)).real  # (k, X, Y)
+        m = self.params.m.view(-1, 1, 1)
+        s = self.params.s.view(-1, 1, 1)
+        h = self.params.h.view(-1, 1, 1)
+        G = (torch.exp(-(((U - m) / s) ** 2) / 2.0) * 2.0 - 1.0) * h
+        return G.sum(dim=0)
+
     def rollout(self, A0: torch.Tensor, steps: int) -> torch.Tensor:
         A = A0
         for _ in range(steps):

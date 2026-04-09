@@ -39,10 +39,17 @@ class ParamDict(TypedDict):
 
 
 Descriptors = tuple[float, float, float]
-"""Three normalized behavior descriptors: (speed, size, structure), each in [0, 1]."""
+"""Three normalized behavior descriptors: (velocity, gyradius, dgm), each in
+[0, 1]. The tuple positions are unchanged from the M1 (speed, size, structure)
+design but the underlying observables and normalizers were replaced as part of
+the descriptor rework. See descriptors.py and DECISIONS.md 2026-04-09 for the
+new design."""
 
 CellCoord = tuple[int, int, int]
-"""Discrete archive cell coordinate: (speed_bin, size_bin, structure_bin)."""
+"""Discrete archive cell coordinate. Tuple positions correspond to the three
+descriptors in Descriptors above. Field names elsewhere in the codebase still
+use the historical (speed, size, structure) names; rename is deferred to a
+follow-up cleanup."""
 
 
 # === RolloutResult ===
@@ -55,9 +62,11 @@ class RolloutResult:
     Attributes:
         params: The parameter dict that produced this rollout.
         seed: The integer seed used for the initial state.
-        descriptors: The (speed, size, structure) tuple in [0, 1]^3, or None if
-            the rollout failed early enough that descriptors couldn't be
-            computed (e.g. mass collapsed to zero).
+        descriptors: The (velocity, gyradius, dgm) tuple in [0, 1]^3, or None
+            if the rollout failed early enough that descriptors couldn't be
+            computed (e.g. mass collapsed to zero). Tuple positions are
+            unchanged from M1 but the underlying observables were replaced;
+            see descriptors.py.
         quality: The quality score in [0, 1], or None if the rollout was
             rejected by a filter (or descriptors are None).
         rejection_reason: Short human-readable reason if quality is None.
