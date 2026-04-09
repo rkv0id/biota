@@ -157,6 +157,7 @@ def submit_rollout(
     config: RolloutConfig,
     device: str = "cpu",
     parent_cell: CellCoord | None = None,
+    gpus_per_rollout: float = 1.0,
 ) -> RolloutHandle:
     """Submit one rollout for execution and return an opaque handle.
 
@@ -166,6 +167,12 @@ def submit_rollout(
 
     The same handle type works for both modes; wait_for_completed knows how
     to drain it.
+
+    gpus_per_rollout controls Ray's GPU allocation per task and is ignored in
+    no_ray mode and on non-CUDA devices. Default 1.0 means one rollout per
+    GPU. Lower values (e.g. 0.33) enable GPU sharing across concurrent
+    rollouts via fractional num_gpus allocation. See
+    _num_gpus_for_device() for the full rationale.
     """
     _require_initialized()
 
@@ -174,7 +181,9 @@ def submit_rollout(
         return RolloutHandle(_result=result, _ray_ref=None)
 
     # Ray mode
-    ref = _get_rollout_remote(device).remote(params, seed, config, device, parent_cell)
+    ref = _get_rollout_remote(device, gpus_per_rollout).remote(
+        params, seed, config, device, parent_cell
+    )
     return RolloutHandle(_result=None, _ray_ref=ref)
 
 
@@ -236,47 +245,75 @@ def _rollout_remote_impl(
     return rollout(params, seed, config, device=device, parent_cell=parent_cell)
 
 
-def _num_gpus_for_device(device: str) -> int:
-    """Map a torch device string to the Ray num_gpus resource count.
+def _num_gpus_for_device(device: str, gpus_per_rollout: float = 1.0) -> float:
+    """Map a torch device string and a per-rollout GPU fraction to the Ray
+    num_gpus resource count.
 
-    CUDA devices need num_gpus=1 so Ray schedules the task onto a GPU-bearing
-    worker and sets CUDA_VISIBLE_DEVICES correctly. Everything else (cpu, mps)
-    uses num_gpus=0. Pure function for testability.
+    CUDA devices need num_gpus > 0 so Ray schedules the task onto a GPU-bearing
+    worker and sets CUDA_VISIBLE_DEVICES correctly. The fractional value
+    enables GPU sharing: with gpus_per_rollout=0.33, Ray schedules ~3 rollouts
+    onto the same GPU concurrently (Ray's accounting is logical; actual
+    sharing happens via CUDA streams). Memory is not partitioned, so the
+    workload must fit multiple instances in VRAM - biota's Flow-Lenia state
+    is kilobytes per rollout so this is fine.
+
+    CPU and MPS always return 0.0 regardless of gpus_per_rollout.
+
+    Pure function for testability.
     """
-    return 1 if device.startswith("cuda") else 0
+    if not device.startswith("cuda"):
+        return 0.0
+    return gpus_per_rollout
 
 
-# Cached Ray remote wrappers, one per device class. Built lazily on first
-# access via _get_rollout_remote() so `import ray` is deferred until actually
-# needed. Keyed by a normalized device tag so CPU and CUDA rollouts get
-# different @ray.remote decorations (CUDA requires num_gpus=1 so Ray doesn't
-# hide the GPU from the worker via CUDA_VISIBLE_DEVICES=""). In no_ray mode
-# this cache is never populated.
-_rollout_remote_cache: dict[str, Any] = {}
+def _rollout_remote_cache_key(device: str, gpus_per_rollout: float) -> tuple[str, float]:
+    """Cache key for the lazily-built Ray remote wrappers.
+
+    Different (device-class, num_gpus) pairs need different @ray.remote
+    decorations, so we key on both. CPU normalizes to a single key
+    regardless of gpus_per_rollout (since CPU tasks ignore num_gpus).
+    CUDA keys on the actual num_gpus value so changing gpus_per_rollout
+    between submits gets a fresh decorated remote.
+
+    Pure function for testability.
+    """
+    if not device.startswith("cuda"):
+        return ("cpu", 0.0)
+    return ("cuda", gpus_per_rollout)
 
 
-def _get_rollout_remote(device: str) -> Any:
+# Cached Ray remote wrappers, one per (device-class, num_gpus) pair. Built
+# lazily on first access via _get_rollout_remote() so `import ray` is
+# deferred until actually needed. In no_ray mode this cache is never
+# populated.
+_rollout_remote_cache: dict[tuple[str, float], Any] = {}
+
+
+def _get_rollout_remote(device: str, gpus_per_rollout: float = 1.0) -> Any:
     """Return the Ray-remote-decorated version of _rollout_remote_impl for the
-    given device class, building it on first call. This is the only thing that
-    triggers `import ray` in normal use.
+    given device class and GPU fraction, building it on first call. This is
+    the only thing that triggers `import ray` in normal use.
 
     Device handling:
 
     - "cpu" -> ray.remote(num_gpus=0)(impl). CPU-only task, Ray keeps
-      CUDA_VISIBLE_DEVICES clear.
-    - "cuda" or "cuda:N" -> ray.remote(num_gpus=1)(impl). Task requires one
-      GPU. Ray schedules onto a GPU-bearing worker and sets
-      CUDA_VISIBLE_DEVICES to the assigned GPU index so torch sees it.
+      CUDA_VISIBLE_DEVICES clear. gpus_per_rollout is ignored.
+    - "cuda" or "cuda:N" -> ray.remote(num_gpus=gpus_per_rollout)(impl).
+      Task requires the specified fraction of a GPU. With 1.0 (default),
+      one rollout per GPU. With 0.33, three rollouts share one GPU via
+      CUDA streams; Ray's accounting is logical and memory is not
+      partitioned. See DECISIONS.md 2026-04-09 "GPU fractioning" for the
+      sizing rationale.
     - "mps" -> ray.remote(num_gpus=0)(impl). MPS is macOS-local; there's no
       way to schedule MPS tasks through Ray's resource system. MPS + Ray is
       effectively unsupported but we don't error out here; the rollout will
       work if the Ray worker happens to be on the same machine as an MPS
       device, which on macOS it always is.
     """
-    key = "cuda" if device.startswith("cuda") else "cpu"
+    key = _rollout_remote_cache_key(device, gpus_per_rollout)
     if key not in _rollout_remote_cache:
         import ray
 
-        num_gpus = _num_gpus_for_device(device)
+        num_gpus = _num_gpus_for_device(device, gpus_per_rollout)
         _rollout_remote_cache[key] = ray.remote(num_gpus=num_gpus)(_rollout_remote_impl)
     return _rollout_remote_cache[key]

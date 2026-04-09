@@ -89,6 +89,15 @@ class SearchConfig:
     device: str = "cpu"
     """Torch device for the rollouts: 'cpu', 'mps', or 'cuda'."""
 
+    gpus_per_rollout: float = 1.0
+    """Fraction of a GPU each rollout reserves via Ray's num_gpus accounting.
+    Only meaningful when device='cuda' and Ray is in use. Default 1.0 means
+    one rollout per GPU. Lower values (e.g. 0.33) enable GPU sharing across
+    concurrent rollouts via CUDA streams; Ray's accounting is logical and
+    memory is not partitioned, so the workload must fit multiple instances
+    in VRAM. Biota's Flow-Lenia state is kilobytes per rollout so this is
+    fine. Must be > 0."""
+
     checkpoint_every: int = 100
     """Rewrite the archive checkpoint after this many completed rollouts."""
 
@@ -103,6 +112,8 @@ class SearchConfig:
             raise ValueError(
                 "local_ray and ray_address are mutually exclusive; pass one or the other, not both"
             )
+        if self.gpus_per_rollout <= 0:
+            raise ValueError(f"gpus_per_rollout must be > 0, got {self.gpus_per_rollout}")
 
 
 # === events ===
@@ -320,6 +331,7 @@ def _submit_phase(
             config=state.config.rollout,
             device=state.config.device,
             parent_cell=parent_cell,
+            gpus_per_rollout=state.config.gpus_per_rollout,
         )
         in_flight.append(handle)
         next_seed += 1

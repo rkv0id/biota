@@ -192,3 +192,28 @@ def test_random_phase_is_deterministic(tmp_path: Path) -> None:
         assert a.result.descriptors == b.result.descriptors
         assert a.result.quality == b.result.quality
         assert a.result.seed == b.result.seed
+
+
+# === SearchConfig validation ===
+
+
+def test_searchconfig_rejects_zero_gpus_per_rollout() -> None:
+    """gpus_per_rollout must be strictly positive. Zero is meaningless
+    (Ray would never schedule the task) and indicates a CLI misuse."""
+    with pytest.raises(ValueError, match="gpus_per_rollout"):
+        _cheap_config(gpus_per_rollout=0.0)
+
+
+def test_searchconfig_rejects_negative_gpus_per_rollout() -> None:
+    with pytest.raises(ValueError, match="gpus_per_rollout"):
+        _cheap_config(gpus_per_rollout=-0.5)
+
+
+def test_searchconfig_accepts_fractional_gpus_per_rollout() -> None:
+    cfg = _cheap_config(gpus_per_rollout=0.33)
+    assert cfg.gpus_per_rollout == 0.33
+
+
+def test_searchconfig_default_gpus_per_rollout_is_one() -> None:
+    cfg = _cheap_config()
+    assert cfg.gpus_per_rollout == 1.0

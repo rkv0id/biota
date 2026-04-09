@@ -15,6 +15,7 @@ from biota.ray_compat import (
     RolloutHandle,
     _build_ray_init_kwargs,  # pyright: ignore[reportPrivateUsage]
     _num_gpus_for_device,  # pyright: ignore[reportPrivateUsage]
+    _rollout_remote_cache_key,  # pyright: ignore[reportPrivateUsage]
     init,
     is_ray_active,
     shutdown,
@@ -115,24 +116,76 @@ def test_build_kwargs_attach_with_ray_client_url() -> None:
 
 
 def test_num_gpus_for_cpu_is_zero() -> None:
-    assert _num_gpus_for_device("cpu") == 0
+    assert _num_gpus_for_device("cpu") == 0.0
 
 
-def test_num_gpus_for_cuda_is_one() -> None:
-    """CUDA tasks need num_gpus=1 so Ray schedules onto a GPU worker and
-    doesn't hide the GPU via CUDA_VISIBLE_DEVICES=''."""
-    assert _num_gpus_for_device("cuda") == 1
+def test_num_gpus_for_cuda_default_is_one() -> None:
+    """CUDA tasks need num_gpus>0 so Ray schedules onto a GPU worker and
+    doesn't hide the GPU via CUDA_VISIBLE_DEVICES=''. Default is 1.0 (one
+    rollout per GPU)."""
+    assert _num_gpus_for_device("cuda") == 1.0
 
 
-def test_num_gpus_for_cuda_indexed_is_one() -> None:
-    """Device strings like 'cuda:0' or 'cuda:1' should also map to 1 GPU."""
-    assert _num_gpus_for_device("cuda:0") == 1
-    assert _num_gpus_for_device("cuda:3") == 1
+def test_num_gpus_for_cuda_indexed_default_is_one() -> None:
+    """Device strings like 'cuda:0' or 'cuda:1' should also map to 1.0 GPU
+    at the default fractioning."""
+    assert _num_gpus_for_device("cuda:0") == 1.0
+    assert _num_gpus_for_device("cuda:3") == 1.0
 
 
 def test_num_gpus_for_mps_is_zero() -> None:
     """MPS is macOS-local, not schedulable via Ray's resource system."""
-    assert _num_gpus_for_device("mps") == 0
+    assert _num_gpus_for_device("mps") == 0.0
+
+
+def test_num_gpus_for_cuda_fractional() -> None:
+    """gpus_per_rollout=0.33 means 'three rollouts share one GPU'."""
+    assert _num_gpus_for_device("cuda", gpus_per_rollout=0.33) == 0.33
+    assert _num_gpus_for_device("cuda:1", gpus_per_rollout=0.5) == 0.5
+    assert _num_gpus_for_device("cuda", gpus_per_rollout=2.0) == 2.0
+
+
+def test_num_gpus_for_cpu_ignores_gpus_per_rollout() -> None:
+    """CPU tasks always use num_gpus=0 regardless of the fractioning value."""
+    assert _num_gpus_for_device("cpu", gpus_per_rollout=0.33) == 0.0
+    assert _num_gpus_for_device("cpu", gpus_per_rollout=2.0) == 0.0
+
+
+def test_num_gpus_for_mps_ignores_gpus_per_rollout() -> None:
+    """MPS tasks always use num_gpus=0 regardless of the fractioning value."""
+    assert _num_gpus_for_device("mps", gpus_per_rollout=0.33) == 0.0
+
+
+# === _rollout_remote_cache_key ===
+
+
+def test_cache_key_cpu_normalizes_regardless_of_fraction() -> None:
+    """CPU keys should collapse to a single entry regardless of
+    gpus_per_rollout, since CPU tasks ignore num_gpus."""
+    assert _rollout_remote_cache_key("cpu", 1.0) == ("cpu", 0.0)
+    assert _rollout_remote_cache_key("cpu", 0.33) == ("cpu", 0.0)
+    assert _rollout_remote_cache_key("cpu", 99.0) == ("cpu", 0.0)
+
+
+def test_cache_key_mps_normalizes_to_cpu_key() -> None:
+    """MPS uses num_gpus=0 just like CPU, so it shares the cache slot."""
+    assert _rollout_remote_cache_key("mps", 1.0) == ("cpu", 0.0)
+
+
+def test_cache_key_cuda_carries_fraction() -> None:
+    """Different CUDA fractions need different @ray.remote decorations,
+    so they must produce different cache keys."""
+    assert _rollout_remote_cache_key("cuda", 1.0) == ("cuda", 1.0)
+    assert _rollout_remote_cache_key("cuda", 0.33) == ("cuda", 0.33)
+    assert _rollout_remote_cache_key("cuda:0", 0.5) == ("cuda", 0.5)
+
+
+def test_cache_key_cuda_indexed_normalizes_to_cuda() -> None:
+    """cuda:0, cuda:1, cuda:2 should all map to the same 'cuda' family;
+    Ray itself decides which physical GPU runs the task."""
+    assert _rollout_remote_cache_key("cuda:0", 1.0) == ("cuda", 1.0)
+    assert _rollout_remote_cache_key("cuda:1", 1.0) == ("cuda", 1.0)
+    assert _rollout_remote_cache_key("cuda:2", 1.0) == ("cuda", 1.0)
 
 
 # === submit/wait state checks ===
