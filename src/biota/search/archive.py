@@ -23,7 +23,11 @@ from biota.search.result import CellCoord, Descriptors, RolloutResult
 DEFAULT_BINS_SPEED = 32
 DEFAULT_BINS_SIZE = 32
 DEFAULT_BINS_STRUCTURE = 16
-DEFAULT_SIMILARITY_EPSILON = 0.05
+# Lowered from 0.05 to 0.025 in A3 (2026-04-09) after the A2 baseline measured
+# 58% rej:sim at the old value with the standard preset. The previous threshold
+# was rejecting most candidates as too-similar to existing neighbors and capping
+# the archive at ~20 cells out of 16384. See DECISIONS.md 2026-04-09 "A3".
+DEFAULT_SIMILARITY_EPSILON = 0.025
 DEFAULT_QUALITY_OVERRIDE_FACTOR = 1.2
 
 

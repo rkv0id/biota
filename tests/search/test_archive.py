@@ -122,7 +122,10 @@ def test_similarity_rejects_close_neighbor_with_lower_quality() -> None:
     # bin to cells 15 and 16 - different but adjacent cells. Their L2 distance
     # is 0.03125, well under epsilon=0.05.
     # Second quality equals first, so override (1.2x) does not apply.
-    archive = Archive()
+    # Pin epsilon=0.05 explicitly: this test was designed around that distance
+    # and the default was lowered to 0.025 in A3, so the default would no
+    # longer reject this candidate.
+    archive = Archive(similarity_epsilon=0.05)
     r1 = _result(descriptors=(0.5, 0.5, 0.5), quality=0.6, seed=1)
     r2 = _result(descriptors=(0.46875, 0.5, 0.5), quality=0.6, seed=2)
     archive.try_insert(r1)
@@ -135,7 +138,8 @@ def test_similarity_override_when_quality_much_better() -> None:
     # Same neighboring-cells setup. r2 has quality 0.7, r1 has 0.5.
     # 0.7 > 1.2 * 0.5 = 0.6, so the override applies and r2 inserts despite
     # being too descriptor-similar.
-    archive = Archive()
+    # Pin epsilon=0.05 for the same reason as the test above.
+    archive = Archive(similarity_epsilon=0.05)
     r1 = _result(descriptors=(0.5, 0.5, 0.5), quality=0.5, seed=1)
     r2 = _result(descriptors=(0.46875, 0.5, 0.5), quality=0.7, seed=2)
     archive.try_insert(r1)
@@ -152,6 +156,33 @@ def test_similarity_does_not_apply_to_distant_neighbors() -> None:
     archive.try_insert(r1)
     status = archive.try_insert(r2)
     assert status == InsertionStatus.INSERTED
+
+
+def test_default_similarity_epsilon_rejects_very_close_pair() -> None:
+    # Sanity check on the actual default epsilon (0.025 after A3).
+    # speed=0.49 -> cell 15, speed=0.5 -> cell 16. Adjacent cells. Raw L2
+    # distance is 0.01, well under the 0.025 default. Equal quality so the
+    # 1.2x override does not apply.
+    archive = Archive()  # use default epsilon
+    r1 = _result(descriptors=(0.5, 0.5, 0.5), quality=0.6, seed=1)
+    r2 = _result(descriptors=(0.49, 0.5, 0.5), quality=0.6, seed=2)
+    archive.try_insert(r1)
+    status = archive.try_insert(r2)
+    assert status == InsertionStatus.REJECTED_SIMILARITY
+    assert len(archive) == 1
+
+
+def test_default_similarity_epsilon_admits_pair_at_old_threshold() -> None:
+    # Regression test for the A3 epsilon lowering. Descriptors 0.46875 and 0.5
+    # have L2 distance 0.03125, which used to trigger rejection at the old
+    # epsilon=0.05 default. Under the new 0.025 default, they should pass.
+    archive = Archive()  # use default epsilon
+    r1 = _result(descriptors=(0.5, 0.5, 0.5), quality=0.6, seed=1)
+    r2 = _result(descriptors=(0.46875, 0.5, 0.5), quality=0.6, seed=2)
+    archive.try_insert(r1)
+    status = archive.try_insert(r2)
+    assert status == InsertionStatus.INSERTED
+    assert len(archive) == 2
 
 
 def test_distant_descriptors_dont_trigger_similarity() -> None:
