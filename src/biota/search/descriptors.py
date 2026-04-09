@@ -80,6 +80,34 @@ SPECTRAL_RADIAL_BINS = 32
 spectrum into a 1D radial profile. The spectral entropy descriptor takes
 Shannon entropy of this 1D profile (normalized to a probability mass)."""
 
+SPECTRAL_ENTROPY_FLOOR = 0.55
+"""Empirical lower bound of spectral entropy across biota's discovered
+population at standard preset.
+
+The raw spectral_entropy value (Shannon entropy of the radial FFT profile,
+divided by log(SPECTRAL_RADIAL_BINS)) lives in [0, 1] in principle but
+in practice biota's discovered creatures are all sharp-edged structured
+solitons whose spectral entropy lands in roughly [0.55, 0.95]. Pure
+Gaussians give 0.14-0.45 but the search never finds those, because the
+parameter prior + survival filters exclude smooth diffuse blobs.
+
+Without a remap, ~80% of the discovered population would crowd into the
+top 4 of 16 structure bins (everything between [0.85, 0.95]). With the
+remap (raw - FLOOR) / (1 - FLOOR), the same population spreads across
+the full [0, 1] range and uses all 16 bins.
+
+Calibrated against the iteration-2 cluster run (run id eager-bramble,
+166 cells) which observed a minimum spectral entropy of 0.59 across the
+discovered population. The 0.55 floor is set slightly below the minimum
+with margin for slightly less-structured outliers.
+
+This is an empirical fudge factor, not a theoretical bound. If a future
+change to the parameter prior or the survival filters produces creatures
+with spectral entropy below 0.55, those would clip to 0 here and the
+floor should be re-lowered. If they produce creatures all above 0.85,
+the floor should be raised. Re-calibrate against fresh data, not against
+intuition about what range "should" be useful."""
+
 
 @dataclass(frozen=True)
 class RolloutTrace:
@@ -191,11 +219,15 @@ def compute_spectral_entropy(trace: RolloutTrace) -> float:
     """Shannon entropy of the radially-averaged FFT magnitude spectrum, in [0, 1].
 
     Captures spatial frequency content of the final-step mass distribution.
-    A smooth disk has all energy concentrated in low-frequency bins
-    (entropy near 0). A dotted texture or fine lattice has energy spread
-    across many spatial frequencies (entropy near 1). A bullseye with
-    periodic rings has energy concentrated in a few mid-frequency bins
-    (intermediate entropy).
+    The descriptor's actual discrimination dimension is "smoothness vs
+    sharpness" rather than literal frequency content. A smooth Gaussian
+    has energy concentrated in a few low-radial-wavenumber bins (raw
+    entropy ~0.3) and clips to 0 after the empirical floor remap. A
+    sharp-edged disk produces broad spectral content via Gibbs ringing
+    at the edge (raw entropy ~0.92, post-remap ~0.82). A bullseye with
+    periodic rings is similar (~0.91 raw, ~0.80 post-remap). A dotted
+    lattice concentrates energy at specific harmonics (~0.60 raw,
+    ~0.12 post-remap).
 
     Computation:
 
@@ -207,7 +239,9 @@ def compute_spectral_entropy(trace: RolloutTrace) -> float:
             sqrt(kx^2 + ky^2)
         normalize the radial profile to a probability distribution
         entropy = -sum(p * log(p)) for nonzero p
-        normalized = entropy / log(SPECTRAL_RADIAL_BINS)
+        raw = entropy / log(SPECTRAL_RADIAL_BINS)
+        # empirical remap so biota's [0.55, 0.95] population uses [0, 1]
+        return clip((raw - SPECTRAL_ENTROPY_FLOOR) / (1 - FLOOR), 0, 1)
 
     Why radial average instead of full 2D entropy: radial averaging is
     rotation-invariant, which is the right symmetry for biota's
@@ -219,7 +253,17 @@ def compute_spectral_entropy(trace: RolloutTrace) -> float:
     conserves. Including it would dominate the magnitude spectrum across
     all creatures and dampen the entropy signal.
 
-    Returns 0.0 for empty or constant final states.
+    Why the empirical floor remap: see SPECTRAL_ENTROPY_FLOOR docstring.
+    Briefly: biota's discovered population concentrates in raw values
+    [0.55, 0.95] because all discovered creatures are sharp-edged
+    structured solitons. Without the remap, ~80% of cells crowd into the
+    top 4 of 16 archive structure bins. With the remap, the same
+    population spreads across all 16 bins.
+
+    Returns 0.0 for empty or constant final states, and for any creature
+    whose raw spectral entropy is below SPECTRAL_ENTROPY_FLOOR (which in
+    practice means the synthetic test patterns the descriptor is
+    calibrated against, not real biota creatures).
     """
     state = trace.final_state
     if float(state.sum()) <= 0.0:
@@ -272,7 +316,14 @@ def compute_spectral_entropy(trace: RolloutTrace) -> float:
     max_entropy = float(np.log(SPECTRAL_RADIAL_BINS))
     if max_entropy <= 0.0:
         return 0.0
-    return float(np.clip(entropy / max_entropy, 0.0, 1.0))
+
+    # Raw value is in [0, 1] but biota's discovered population concentrates
+    # in [SPECTRAL_ENTROPY_FLOOR, 1]. Remap that band to [0, 1] so the
+    # archive's structure axis uses its full bin range. See the
+    # SPECTRAL_ENTROPY_FLOOR docstring for the calibration story.
+    raw = entropy / max_entropy
+    remapped = (raw - SPECTRAL_ENTROPY_FLOOR) / (1.0 - SPECTRAL_ENTROPY_FLOOR)
+    return float(np.clip(remapped, 0.0, 1.0))
 
 
 def compute_descriptors(trace: RolloutTrace) -> Descriptors | None:

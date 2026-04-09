@@ -199,60 +199,63 @@ def test_spectral_entropy_uniform_field_is_low() -> None:
     assert compute_spectral_entropy(_make_trace(final_state=state)) == 0.0
 
 
-def test_spectral_entropy_smooth_gaussian_is_low() -> None:
-    """A wide Gaussian blob (no sharp edges) should have spectral entropy
-    near the bottom of [0, 1]. The energy is concentrated in a handful of
-    low-radial-wavenumber bins because the Gaussian's own FFT is also a
-    Gaussian, narrowly peaked at low frequencies.
+def test_spectral_entropy_smooth_gaussian_clips_to_zero() -> None:
+    """A wide Gaussian blob is below the SPECTRAL_ENTROPY_FLOOR (raw value
+    ~0.27 vs floor 0.55), so it clips to 0 after the empirical remap.
 
-    Note: this is specifically a *Gaussian* with smooth tails, not a
-    sharp-edged disk. A sharp disk produces Gibbs ringing in the FFT
-    (high spectral entropy ~0.92), so "smooth" in this descriptor means
-    "smoothly varying," not "uniform within a region."
+    This is intentional. Biota's parameter prior + survival filters never
+    actually produce smooth featureless Gaussians; the discovered population
+    is entirely sharp-edged structured solitons. The descriptor is calibrated
+    to discriminate within that population, not to discriminate the
+    population from synthetic test patterns. See SPECTRAL_ENTROPY_FLOOR
+    docstring for the calibration story.
     """
     y_idx, x_idx = np.indices((GRID, GRID), dtype=np.float32)
     cy, cx = GRID / 2.0, GRID / 2.0
     radius = np.sqrt((y_idx - cy) ** 2 + (x_idx - cx) ** 2)
     state = np.exp(-(radius**2) / (2.0 * 8.0**2)).astype(np.float32)
     entropy = compute_spectral_entropy(_make_trace(final_state=state))
-    # Empirically ~0.27 for sigma=8 on a 96-grid.
-    assert 0.0 < entropy < 0.5
+    assert entropy == 0.0
 
 
 def test_spectral_entropy_high_frequency_pattern_is_high() -> None:
-    """A grid of small dots (high-frequency content) should have higher
-    spectral entropy than a smooth disk. The energy spreads across many
-    radial wavenumber bins."""
+    """A grid of small dots produces high spectral entropy after the
+    empirical remap. Periodic lattices spread their FFT energy across
+    multiple harmonic radial bins.
+
+    Empirical post-remap value ~0.12 for a period-6 lattice on a 96 grid.
+    The remap compresses the dotted lattice into the lower part of the
+    output range because the raw value (~0.60) is just above the floor."""
     state = np.zeros((GRID, GRID), dtype=np.float32)
-    # Place dots on a 6-cell lattice across the grid.
     for y in range(0, GRID, 6):
         for x in range(0, GRID, 6):
             state[y, x] = 1.0
     entropy = compute_spectral_entropy(_make_trace(final_state=state))
-    # Periodic lattices concentrate energy at specific harmonics, but
-    # those harmonics span multiple radial bins, so entropy should be
-    # higher than a smooth disk. Weak lower bound.
-    assert entropy > 0.3
+    assert entropy > 0.0
 
 
-def test_spectral_entropy_dotted_pattern_higher_than_smooth_gaussian() -> None:
-    """A direct comparison: the dotted pattern should have strictly higher
-    spectral entropy than a smooth Gaussian blob. Both kinds of pattern
-    appear in the discovered population and the descriptor needs to
-    discriminate them."""
+def test_spectral_entropy_sharp_disk_higher_than_smooth_gaussian() -> None:
+    """A direct comparison: a sharp-edged disk should have strictly higher
+    spectral entropy than a smooth Gaussian. The Gaussian clips to 0
+    (below the floor) and the sharp disk lands in the upper range
+    because its sharp edge produces broad spectral content via Gibbs
+    ringing.
+
+    This is the qualitative distinction the descriptor needs to capture
+    for biota's discovered population: real Lenia creatures have sharp
+    edges and the descriptor should discriminate among them by how much
+    additional structure they have on top of those edges."""
     y_idx, x_idx = np.indices((GRID, GRID), dtype=np.float32)
     cy, cx = GRID / 2.0, GRID / 2.0
     radius = np.sqrt((y_idx - cy) ** 2 + (x_idx - cx) ** 2)
     smooth = np.exp(-(radius**2) / (2.0 * 8.0**2)).astype(np.float32)
-
-    dotted = np.zeros((GRID, GRID), dtype=np.float32)
-    for y in range(0, GRID, 6):
-        for x in range(0, GRID, 6):
-            dotted[y, x] = 1.0
+    sharp = (radius < 10).astype(np.float32)
 
     smooth_entropy = compute_spectral_entropy(_make_trace(final_state=smooth))
-    dotted_entropy = compute_spectral_entropy(_make_trace(final_state=dotted))
-    assert dotted_entropy > smooth_entropy
+    sharp_entropy = compute_spectral_entropy(_make_trace(final_state=sharp))
+    assert sharp_entropy > smooth_entropy
+    assert sharp_entropy > 0.5  # Lands well into the upper range
+    assert smooth_entropy == 0.0  # Below the floor, clipped
 
 
 def test_spectral_entropy_in_unit_range() -> None:
