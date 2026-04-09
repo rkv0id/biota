@@ -27,16 +27,10 @@ def _make_trace(
     if final_state is None:
         final_state = np.zeros((GRID, GRID), dtype=np.float32)
         final_state[40:50, 40:50] = 1.0
-    # Quality tests don't exercise the dgm descriptor (they use zero or
-    # uniform growth fields), so the default growth field is zeros - which
-    # makes the dgm computation return 0.0 via the early-out for zero total
-    # growth. Tests that need real growth-field behavior should override.
-    growth = np.zeros_like(final_state)
     return RolloutTrace(
         com_history=com_path.astype(np.float32),
         bbox_fraction_history=bbox_history.astype(np.float32),
         final_state=final_state.astype(np.float32),
-        final_growth_field=growth.astype(np.float32),
         grid_size=GRID,
         total_steps=STEPS,
     )
@@ -169,7 +163,6 @@ def test_short_trace_persistence_rejects() -> None:
         com_history=short_coms,
         bbox_fraction_history=short_bbox,
         final_state=state,
-        final_growth_field=np.zeros_like(state),
         grid_size=GRID,
         total_steps=STEPS,
     )

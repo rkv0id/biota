@@ -151,18 +151,27 @@ def test_rollout_m0_fixture_produces_accepted_creature() -> None:
     for d in result.descriptors:
         assert 0.0 <= d <= 1.0
 
-    # M0 fixture is a stationary, well-localized, symmetric creature.
-    # Under the new (velocity, gyradius, dgm) descriptors:
-    # - velocity: near-zero for a stationary creature
-    # - gyradius: moderate; the fixture is a smallish blob on a 96-grid so
-    #   gyradius lands around 0.6 (mass-weighted RMS distance ~15 cells
-    #   versus the grid/4 normalizer of 24)
-    # - dgm: near-zero; the fixture is a symmetric stable creature so mass
-    #   COM and growth-field COM essentially coincide
-    velocity, gyradius, dgm = result.descriptors
-    assert velocity < 0.1, f"M0 fixture should barely move, got velocity={velocity}"
+    # M0 fixture is a stationary, well-localized creature with sharp internal
+    # structure. Empirically observed values:
+    # - velocity: small for a stationary creature, but the new normalizer
+    #   is 0.02 (was 0.5), so the same raw velocity gives 25x larger
+    #   normalized values. Loosen the threshold accordingly.
+    # - gyradius: ~0.6 in practice; mass-weighted RMS ~15 cells against the
+    #   grid/4 = 24 normalizer
+    # - spectral_entropy: ~0.92 in practice. Real Lenia creatures have sharp
+    #   edges and internal structure, which produces high spectral entropy
+    #   even for "smooth-looking" stationary creatures. The descriptor's
+    #   useful range across the discovered population is roughly [0.6, 0.95]
+    #   rather than [0, 1] - it discriminates sharpness/structure rather
+    #   than literal frequency content. See descriptors.py for the design
+    #   discussion.
+    velocity, gyradius, spectral_entropy = result.descriptors
+    assert velocity < 0.3, f"M0 fixture should barely move, got velocity={velocity}"
     assert gyradius < 0.9, f"M0 fixture should not fill the grid, got gyradius={gyradius}"
-    assert dgm < 0.2, f"M0 fixture should be symmetric, got dgm={dgm}"
+    assert 0.5 < spectral_entropy < 1.0, (
+        f"M0 fixture spectral_entropy should be in the structured range, "
+        f"got spectral_entropy={spectral_entropy}"
+    )
 
     # Compactness should be very high (almost all mass inside the bbox)
     assert result.quality > 0.9

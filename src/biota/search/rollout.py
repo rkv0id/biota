@@ -202,12 +202,8 @@ def rollout(
 
     final_mass = float(state.sum().item())
 
-    # 6. Final state to numpy for descriptor functions, plus the final growth
-    # field (Chan's G_t / FlowLenia's U_sum) which the dgm descriptor needs.
-    # The growth field is recomputed once here at the end rather than tracked
-    # per-step, since only the final-step value is consumed downstream.
+    # 6. Final state to numpy for descriptor functions
     final_state_np = state[:, :, 0].detach().cpu().numpy().astype(np.float32)
-    final_growth_field_np = fl.growth_field(state).detach().cpu().numpy().astype(np.float32)
 
     if not np.isfinite(final_mass) or not np.isfinite(com_y_np).all():
         # Defensive: NaN/inf in the state means the sim went off the rails.
@@ -237,7 +233,6 @@ def rollout(
         com_history=com_history[-tail:].astype(np.float32),
         bbox_fraction_history=bbox_np[-tail:].astype(np.float32),
         final_state=final_state_np,
-        final_growth_field=final_growth_field_np,
         grid_size=config.sim.grid,
         total_steps=config.steps,
     )
