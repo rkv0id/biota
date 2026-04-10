@@ -1,0 +1,120 @@
+<svg width="100%" viewBox="0 0 680 340" role="img" xmlns="http://www.w3.org/2000/svg">
+  <title>biota archive grid</title>
+  <desc>The MAP-Elites archive is a 3D grid. Rows encode velocity (how fast a creature moves), columns encode gyradius (how spread-out its mass is), and depth encodes spectral entropy (internal structural complexity). Each occupied cell holds the best creature found with that behavioral fingerprint.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+      .th  { font-size: 14px; font-weight: 500; fill: #f4f4f5; }
+      .ts  { font-size: 12px; font-weight: 400; fill: #71717a; }
+      .tsa { font-size: 11px; font-weight: 400; fill: #52525b; }
+      .tsh { font-size: 11px; font-weight: 500; fill: #a1a1aa; }
+    </style>
+  </defs>
+
+  <!-- Grid cells - a sample 7x7 visible portion of the 32x32 grid -->
+  <!-- Each cell is 36x28, gap 3, origin at x=160 y=52 -->
+  <!-- Magma-ish fill colors for occupied cells, dim for empty -->
+
+  <!-- Row 0 (fastest) -->
+  <rect x="160" y="52"  width="36" height="28" rx="3" fill="#1a0a1e" stroke="#3f3f46" stroke-width="0.3"/>
+  <rect x="199" y="52"  width="36" height="28" rx="3" fill="#4a1628" stroke="#3f3f46" stroke-width="0.3"/>
+  <rect x="238" y="52"  width="36" height="28" rx="3" fill="#0d0d0f" stroke="#27272a" stroke-width="0.3"/>
+  <rect x="277" y="52"  width="36" height="28" rx="3" fill="#0d0d0f" stroke="#27272a" stroke-width="0.3"/>
+  <rect x="316" y="52"  width="36" height="28" rx="3" fill="#7c1d3a" stroke="#3f3f46" stroke-width="0.3"/>
+  <rect x="355" y="52"  width="36" height="28" rx="3" fill="#9c2840" stroke="#52525b" stroke-width="0.3"/>
+  <rect x="394" y="52"  width="36" height="28" rx="3" fill="#0d0d0f" stroke="#27272a" stroke-width="0.3"/>
+
+  <!-- Row 1 -->
+  <rect x="160" y="83"  width="36" height="28" rx="3" fill="#0d0d0f" stroke="#27272a" stroke-width="0.3"/>
+  <rect x="199" y="83"  width="36" height="28" rx="3" fill="#2d0e30" stroke="#3f3f46" stroke-width="0.3"/>
+  <rect x="238" y="83"  width="36" height="28" rx="3" fill="#6a1e42" stroke="#3f3f46" stroke-width="0.3"/>
+  <rect x="277" y="83"  width="36" height="28" rx="3" fill="#b03248" stroke="#52525b" stroke-width="0.3"/>
+  <rect x="316" y="83"  width="36" height="28" rx="3" fill="#c84040" stroke="#71717a" stroke-width="0.3"/>
+  <rect x="355" y="83"  width="36" height="28" rx="3" fill="#d45230" stroke="#71717a" stroke-width="0.3"/>
+  <rect x="394" y="83"  width="36" height="28" rx="3" fill="#b83428" stroke="#52525b" stroke-width="0.3"/>
+
+  <!-- Row 2 -->
+  <rect x="160" y="114" width="36" height="28" rx="3" fill="#0d0d0f" stroke="#27272a" stroke-width="0.3"/>
+  <rect x="199" y="114" width="36" height="28" rx="3" fill="#0d0d0f" stroke="#27272a" stroke-width="0.3"/>
+  <rect x="238" y="114" width="36" height="28" rx="3" fill="#381030" stroke="#3f3f46" stroke-width="0.3"/>
+  <rect x="277" y="114" width="36" height="28" rx="3" fill="#8c2848" stroke="#52525b" stroke-width="0.3"/>
+  <rect x="316" y="114" width="36" height="28" rx="3" fill="#dc6030" stroke="#71717a" stroke-width="0.3"/>
+  <rect x="355" y="114" width="36" height="28" rx="3" fill="#f07820" stroke="#a1a1aa" stroke-width="0.5"/>
+  <rect x="394" y="114" width="36" height="28" rx="3" fill="#e06820" stroke="#71717a" stroke-width="0.3"/>
+
+  <!-- Row 3 -->
+  <rect x="160" y="145" width="36" height="28" rx="3" fill="#0d0d0f" stroke="#27272a" stroke-width="0.3"/>
+  <rect x="199" y="145" width="36" height="28" rx="3" fill="#200c20" stroke="#3f3f46" stroke-width="0.3"/>
+  <rect x="238" y="145" width="36" height="28" rx="3" fill="#5c1c38" stroke="#3f3f46" stroke-width="0.3"/>
+  <rect x="277" y="145" width="36" height="28" rx="3" fill="#c04838" stroke="#71717a" stroke-width="0.3"/>
+  <rect x="316" y="145" width="36" height="28" rx="3" fill="#f08828" stroke="#a1a1aa" stroke-width="0.5"/>
+  <rect x="355" y="145" width="36" height="28" rx="3" fill="#f8a830" stroke="#a1a1aa" stroke-width="0.5"/>
+  <rect x="394" y="145" width="36" height="28" rx="3" fill="#f09030" stroke="#a1a1aa" stroke-width="0.5"/>
+
+  <!-- Row 4 -->
+  <rect x="160" y="176" width="36" height="28" rx="3" fill="#0d0d0f" stroke="#27272a" stroke-width="0.3"/>
+  <rect x="199" y="176" width="36" height="28" rx="3" fill="#0d0d0f" stroke="#27272a" stroke-width="0.3"/>
+  <rect x="238" y="176" width="36" height="28" rx="3" fill="#280a20" stroke="#3f3f46" stroke-width="0.3"/>
+  <rect x="277" y="176" width="36" height="28" rx="3" fill="#8c2438" stroke="#52525b" stroke-width="0.3"/>
+  <rect x="316" y="176" width="36" height="28" rx="3" fill="#e07028" stroke="#71717a" stroke-width="0.3"/>
+  <rect x="355" y="176" width="36" height="28" rx="3" fill="#f8c050" stroke="#a1a1aa" stroke-width="0.5"/>
+  <rect x="394" y="176" width="36" height="28" rx="3" fill="#f8d070" stroke="#a1a1aa" stroke-width="0.5"/>
+
+  <!-- Row 5 -->
+  <rect x="160" y="207" width="36" height="28" rx="3" fill="#0d0d0f" stroke="#27272a" stroke-width="0.3"/>
+  <rect x="199" y="207" width="36" height="28" rx="3" fill="#0d0d0f" stroke="#27272a" stroke-width="0.3"/>
+  <rect x="238" y="207" width="36" height="28" rx="3" fill="#0d0d0f" stroke="#27272a" stroke-width="0.3"/>
+  <rect x="277" y="207" width="36" height="28" rx="3" fill="#581828" stroke="#3f3f46" stroke-width="0.3"/>
+  <rect x="316" y="207" width="36" height="28" rx="3" fill="#c84828" stroke="#71717a" stroke-width="0.3"/>
+  <rect x="355" y="207" width="36" height="28" rx="3" fill="#f0a840" stroke="#a1a1aa" stroke-width="0.5"/>
+  <rect x="394" y="207" width="36" height="28" rx="3" fill="#fce090" stroke="#d4d4d8" stroke-width="0.5"/>
+
+  <!-- Row 6 (stationary) -->
+  <rect x="160" y="238" width="36" height="28" rx="3" fill="#0d0d0f" stroke="#27272a" stroke-width="0.3"/>
+  <rect x="199" y="238" width="36" height="28" rx="3" fill="#0d0d0f" stroke="#27272a" stroke-width="0.3"/>
+  <rect x="238" y="238" width="36" height="28" rx="3" fill="#0d0d0f" stroke="#27272a" stroke-width="0.3"/>
+  <rect x="277" y="238" width="36" height="28" rx="3" fill="#0d0d0f" stroke="#27272a" stroke-width="0.3"/>
+  <rect x="316" y="238" width="36" height="28" rx="3" fill="#481020" stroke="#3f3f46" stroke-width="0.3"/>
+  <rect x="355" y="238" width="36" height="28" rx="3" fill="#a83030" stroke="#52525b" stroke-width="0.3"/>
+  <rect x="394" y="238" width="36" height="28" rx="3" fill="#e08030" stroke="#71717a" stroke-width="0.3"/>
+
+  <!-- "..." rows indicator -->
+  <text class="tsa" x="217" y="285" text-anchor="middle">···</text>
+  <text class="tsa" x="256" y="285" text-anchor="middle">···</text>
+  <text class="tsa" x="295" y="285" text-anchor="middle">···</text>
+  <text class="tsa" x="334" y="285" text-anchor="middle">···</text>
+  <text class="tsa" x="373" y="285" text-anchor="middle">···</text>
+  <text class="tsa" x="412" y="285" text-anchor="middle">···</text>
+
+  <!-- Column ellipsis -->
+  <text class="tsa" x="448" y="162" text-anchor="start">···</text>
+
+  <!-- Axis: velocity (left, vertical) -->
+  <line x1="152" y1="52" x2="152" y2="266" stroke="#3f3f46" stroke-width="0.5" marker-end="url(#arrow)"/>
+  <text class="tsa" x="148" y="52"  text-anchor="end">fast</text>
+  <text class="tsa" x="148" y="266" text-anchor="end">slow</text>
+  <text class="tsh" x="60" y="162" text-anchor="middle" dominant-baseline="central" transform="rotate(-90 60 162)">velocity</text>
+
+  <!-- Axis: gyradius (bottom, horizontal) -->
+  <line x1="160" y1="274" x2="430" y2="274" stroke="#3f3f46" stroke-width="0.5" marker-end="url(#arrow)"/>
+  <text class="tsa" x="160" y="290" text-anchor="start">compact</text>
+  <text class="tsa" x="430" y="290" text-anchor="end">spread</text>
+  <text class="tsh" x="295" y="308" text-anchor="middle">gyradius</text>
+
+  <!-- Third axis: spectral entropy (depth, shown as callout) -->
+  <line x1="432" y1="52" x2="432" y2="266" stroke="#3f3f46" stroke-width="0.5" stroke-dasharray="3 3"/>
+  <text class="tsa" x="480" y="56"  text-anchor="start">high entropy</text>
+  <text class="tsa" x="480" y="74"  text-anchor="start">(sharp structure)</text>
+  <text class="tsa" x="480" y="262" text-anchor="start">low entropy</text>
+  <text class="tsa" x="480" y="280" text-anchor="start">(smooth blob)</text>
+  <text class="tsh" x="545" y="162" text-anchor="middle" dominant-baseline="central" transform="rotate(90 545 162)">spectral entropy</text>
+
+  <!-- Legend -->
+  <rect x="160" y="22" width="16" height="10" rx="2" fill="#fce090" stroke="#d4d4d8" stroke-width="0.5"/>
+  <text class="tsa" x="180" y="31">occupied cell — best creature with this behavioral fingerprint</text>
+  <rect x="430" y="22" width="16" height="10" rx="2" fill="#0d0d0f" stroke="#27272a" stroke-width="0.3"/>
+  <text class="tsa" x="450" y="31">empty — no creature found here yet</text>
+</svg>

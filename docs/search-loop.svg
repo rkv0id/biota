@@ -1,0 +1,89 @@
+<svg width="100%" viewBox="0 0 680 380" role="img" xmlns="http://www.w3.org/2000/svg">
+  <title>biota search loop</title>
+  <desc>Data flow diagram: parameter space feeds rollout workers which compute descriptors and quality, which feed the MAP-Elites archive. The archive feeds back into parameter space via mutation.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+      .th  { font-size: 14px; font-weight: 500; fill: #f4f4f5; }
+      .ts  { font-size: 12px; font-weight: 400; fill: #71717a; }
+      .tsa { font-size: 11px; font-weight: 400; fill: #52525b; }
+      .box-vel  { fill: #1c1726; stroke: #7c3aed; stroke-width: 0.5; }
+      .box-gyr  { fill: #0e1a1a; stroke: #0f6e56; stroke-width: 0.5; }
+      .box-arc  { fill: #1c1208; stroke: #ba7517; stroke-width: 0.5; }
+      .box-wkr  { fill: #111318; stroke: #185fa5; stroke-width: 0.5; }
+      .box-drv  { fill: #0f0f0f; stroke: #3f3f46; stroke-width: 0.5; }
+      .conn     { fill: none; stroke: #3f3f46; stroke-width: 1; }
+      .conn-mut { fill: none; stroke: #7c3aed; stroke-width: 1; stroke-dasharray: 4 3; }
+      .conn-ins { fill: none; stroke: #ba7517; stroke-width: 1; }
+      .conn-ray { fill: none; stroke: #185fa5; stroke-width: 1; }
+      .worker-dot { fill: #1d4068; stroke: #378add; stroke-width: 0.5; }
+    </style>
+  </defs>
+
+  <!-- Background panel: driver process -->
+  <rect x="32" y="24" width="616" height="132" rx="10" fill="#0d0d0f" stroke="#27272a" stroke-width="0.5"/>
+  <text class="tsa" x="50" y="42">driver process</text>
+
+  <!-- Archive cell -->
+  <rect class="box-arc" x="50" y="54" width="168" height="86" rx="6"/>
+  <text class="th" x="134" y="88" text-anchor="middle" dominant-baseline="central">MAP-Elites archive</text>
+  <text class="ts" x="134" y="110" text-anchor="middle" dominant-baseline="central">32 × 32 × 16 cells</text>
+  <text class="tsa" x="134" y="128" text-anchor="middle" dominant-baseline="central">velocity · gyradius · spectral</text>
+
+  <!-- Driver: search loop -->
+  <rect class="box-drv" x="258" y="54" width="140" height="86" rx="6"/>
+  <text class="th" x="328" y="90" text-anchor="middle" dominant-baseline="central">search loop</text>
+  <text class="ts" x="328" y="112" text-anchor="middle" dominant-baseline="central">mutate · select · queue</text>
+
+  <!-- Driver: result handler -->
+  <rect class="box-drv" x="446" y="54" width="160" height="86" rx="6"/>
+  <text class="th" x="526" y="90" text-anchor="middle" dominant-baseline="central">result handler</text>
+  <text class="ts" x="526" y="112" text-anchor="middle" dominant-baseline="central">score · place · checkpoint</text>
+
+  <!-- Arrow: archive -> search loop (parent selection) -->
+  <path class="conn-mut" d="M218 97 L256 97" marker-end="url(#arrow)"/>
+  <text class="tsa" x="237" y="90" text-anchor="middle">select parent</text>
+
+  <!-- Arrow: search loop -> result handler (params dispatched) -->
+  <path class="conn" d="M398 97 L444 97" marker-end="url(#arrow)"/>
+  <text class="tsa" x="421" y="90" text-anchor="middle">params</text>
+
+  <!-- Arrow: result handler -> archive (insertion) -->
+  <path class="conn-ins" d="M526 140 L526 172 L134 172 L134 142" marker-end="url(#arrow)"/>
+  <text class="tsa" x="330" y="168" text-anchor="middle">insert or replace</text>
+
+  <!-- Ray workers panel -->
+  <rect x="32" y="196" width="616" height="150" rx="10" fill="#0d0f14" stroke="#27272a" stroke-width="0.5"/>
+  <text class="tsa" x="50" y="214">ray workers  (local · cluster · GPU)</text>
+
+  <!-- Worker boxes -->
+  <rect class="box-wkr" x="60" y="226" width="130" height="100" rx="6"/>
+  <text class="th" x="125" y="268" text-anchor="middle" dominant-baseline="central">Flow-Lenia</text>
+  <text class="ts" x="125" y="290" text-anchor="middle" dominant-baseline="central">rollout</text>
+  <text class="tsa" x="125" y="310" text-anchor="middle" dominant-baseline="central">300 steps · CPU or GPU</text>
+
+  <rect class="box-gyr" x="222" y="226" width="130" height="100" rx="6"/>
+  <text class="th" x="287" y="261" text-anchor="middle" dominant-baseline="central">descriptor</text>
+  <text class="ts" x="287" y="283" text-anchor="middle" dominant-baseline="central">velocity</text>
+  <text class="ts" x="287" y="299" text-anchor="middle" dominant-baseline="central">gyradius</text>
+  <text class="ts" x="287" y="315" text-anchor="middle" dominant-baseline="central">spectral entropy</text>
+
+  <rect class="box-vel" x="384" y="226" width="130" height="100" rx="6"/>
+  <text class="th" x="449" y="268" text-anchor="middle" dominant-baseline="central">quality</text>
+  <text class="ts" x="449" y="290" text-anchor="middle" dominant-baseline="central">filter · score</text>
+  <text class="tsa" x="449" y="310" text-anchor="middle" dominant-baseline="central">persistence · mass · smoothness</text>
+
+  <!-- Arrow chain inside workers -->
+  <path class="conn-ray" d="M190 276 L220 276" marker-end="url(#arrow)"/>
+  <path class="conn-ray" d="M352 276 L382 276" marker-end="url(#arrow)"/>
+
+  <!-- Dispatch arrow: driver -> workers -->
+  <path class="conn-ray" d="M328 140 L328 175 L125 175 L125 224" marker-end="url(#arrow)"/>
+
+  <!-- Return arrow: workers -> result handler -->
+  <path class="conn-ins" d="M514 224 L514 175 L526 175 L526 142" marker-end="url(#arrow)"/>
+  <text class="tsa" x="560" y="186" text-anchor="start">result</text>
+</svg>
