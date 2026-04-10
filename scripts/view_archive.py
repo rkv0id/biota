@@ -38,10 +38,10 @@ from typing import Any
 
 import imageio.v3 as iio
 import numpy as np
-from biota.viz.colormap import apply_magma
 
 from biota.search.archive import Archive
 from biota.search.result import RolloutResult
+from biota.viz.colormap import apply_magma
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_RUNS_ROOT = ROOT / "runs"
