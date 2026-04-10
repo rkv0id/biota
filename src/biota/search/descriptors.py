@@ -17,13 +17,12 @@ final state, bundles them into a RolloutTrace, and passes that to
 compute_descriptors.
 
 These descriptors replace the M1 (speed, size, structure) triple, which
-was demonstrated to be degenerate (see DECISIONS.md 2026-04-09 "descriptor
-degeneracy diagnosis"). They also replace an interim attempt that used
+was demonstrated to be degenerate. They also replace an interim attempt that used
 Chan's growth-centroid distance (dgm) for the third axis - the dgm
 descriptor turned out to be structurally degenerate for the radially
 symmetric solitons biota's parameter prior produces, since the growth-
 field COM and mass COM mathematically coincide for any radially symmetric
-creature. See DECISIONS.md 2026-04-09 "descriptor rework iteration".
+creature.
 
 Spectral entropy captures spatial frequency content directly: a smooth
 disk has all energy concentrated in low-frequency bins (low entropy),

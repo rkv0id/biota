@@ -42,7 +42,7 @@ Descriptors = tuple[float, float, float]
 """Three normalized behavior descriptors: (velocity, gyradius, dgm), each in
 [0, 1]. The tuple positions are unchanged from the M1 (speed, size, structure)
 design but the underlying observables and normalizers were replaced as part of
-the descriptor rework. See descriptors.py and DECISIONS.md 2026-04-09 for the
+the descriptor rework. See descriptors.py for the
 new design."""
 
 CellCoord = tuple[int, int, int]

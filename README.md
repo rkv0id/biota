@@ -16,8 +16,6 @@ Flow-Lenia is a continuous cellular automaton where matter is conserved by const
 
 **M2 closing out.** Perf fixes (wheel install, GPU fractioning), descriptor rework (velocity, gyradius, spectral entropy, all calibrated against real cluster measurements), and a visual pipeline overhaul have all shipped. A 500-rollout standard-preset search on a 24-core cluster produces 228 distinct archive cells in ~340s with a 45.6% insertion rate and a visibly diverse archive. Remaining M2 work is a small static-index build step and a per-run metrics view.
 
-See `SPEC.md` for the full design, `SUMMARY.md` for current state, `DECISIONS.md` for the history of how we got here.
-
 ## Quickstart
 
 ```bash
@@ -126,8 +124,6 @@ Run `just check` after any change to `ray_compat.py` or the search loop. `just s
 ## Architecture
 
 Single Python process is the driver. Driver owns the in-memory archive, runs the search loop, writes checkpoints to local disk, and (in M2) will host the dashboard. Ray workers are stateless: they take parameters, run a Flow-Lenia rollout, compute descriptors and quality, and return a result. Nothing persistent lives on the workers.
-
-The full design, including the driver-owns-state rationale, worker protocol, storage layout, and planned dashboard shape, is in `SPEC.md`.
 
 ## Roadmap
 

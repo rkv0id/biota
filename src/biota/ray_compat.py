@@ -26,8 +26,6 @@ The search loop calls the same five functions in all three modes:
 The exported types are properly annotated; callers get full pyright strictness
 across the rest of the project. The internal Ray plumbing is the only thing
 that escapes type checking.
-
-See DECISIONS.md (2026-04-06) for why we firewall Ray here.
 """
 
 from dataclasses import dataclass
@@ -117,7 +115,7 @@ def _build_ray_init_kwargs(num_workers: int | None, ray_address: str | None) -> 
     Extracted as a pure function so it can be unit-tested without importing
     ray or spinning up a cluster. The branching logic is small enough that
     directly testing it is overkill, but we had two real production bugs in
-    this branching already (see DECISIONS.md 2026-04-07 and 2026-04-08), so
+    this branching already, so
     the tiny test surface is worth it.
 
     Rules:
@@ -302,8 +300,7 @@ def _get_rollout_remote(device: str, gpus_per_rollout: float = 1.0) -> Any:
       Task requires the specified fraction of a GPU. With 1.0 (default),
       one rollout per GPU. With 0.33, three rollouts share one GPU via
       CUDA streams; Ray's accounting is logical and memory is not
-      partitioned. See DECISIONS.md 2026-04-09 "GPU fractioning" for the
-      sizing rationale.
+      partitioned.
     - "mps" -> ray.remote(num_gpus=0)(impl). MPS is macOS-local; there's no
       way to schedule MPS tasks through Ray's resource system. MPS + Ray is
       effectively unsupported but we don't error out here; the rollout will

@@ -7,7 +7,7 @@ Two functions:
 
 Parameter ranges follow the JAX reference (erwanplantec/FlowLenia)'s __init__,
 not paper Table 1: tighter on h, b, and s_growth to avoid degenerate kernels.
-Mutation sigma is 10% of each parameter's range width per DECISIONS.md.
+Mutation sigma is 10% of each parameter's range width.
 
 Returns ParamDict (TypedDict of plain Python primitives) rather than the
 Params dataclass from biota.sim.flowlenia. The rollout function (step 6)

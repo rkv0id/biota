@@ -13,7 +13,6 @@
 # defeats that detection - Ray sees biota the same way it sees torch or numpy
 # (a normal third-party package) and doesn't do anything special.
 #
-# See DECISIONS.md 2026-04-09 "A1 fix" for the full story.
 #
 # Usage:
 #
@@ -124,7 +123,7 @@ cat <<EOF
 Next steps on this node:
 
   source ${RUNTIME_VENV}/bin/activate
-  ray start ...    # head or worker, see SUMMARY.md for the full command
+  ray start ...    # head or worker
 
 After activating, 'biota' on the PATH points at the wheel-installed binary,
 not the source tree. ray start launched from this shell will inherit the same

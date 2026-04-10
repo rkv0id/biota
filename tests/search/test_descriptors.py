@@ -15,8 +15,6 @@ produces. dgm was abandoned in favor of spectral entropy of the radially-
 averaged FFT magnitude spectrum, which captures spatial frequency content
 directly.
 
-See DECISIONS.md 2026-04-09 for the full diagnostic history.
-
 To prevent the normalizer-degeneracy class of bug going forward, each
 descriptor has calibration tests of the form "a creature with observable
 X should produce normalized descriptor value Y." If a normalizer is off
