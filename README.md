@@ -4,13 +4,15 @@ Distributed quality-diversity search over Flow-Lenia.
 
 ## What this is
 
-Biota runs MAP-Elites over Flow-Lenia parameter space — locally, on a single GPU, or across a Ray cluster — and produces a 3D archive of artificial creatures organized by how they move, how big they are, and how structurally complex they are. The compute fabric is Ray. The artifact is the archive.
+Biota runs MAP-Elites over Flow-Lenia parameter space — locally, on a single GPU, or across a Ray cluster — and produces a 3D archive of artificial creatures organized by how fast they move, how spread out their mass is, and how spectrally structured their final state is. The compute fabric is Ray. The artifact is the archive.
 
 Flow-Lenia is a continuous cellular automaton where matter is conserved by construction. It produces life-like creatures across a much wider parameter range than vanilla Lenia because the mass-conservation invariant prevents the explode/collapse failure modes that dominate Lenia's parameter space. MAP-Elites fills a grid of behavior cells, keeping the best creature found so far in each cell, producing an atlas of qualitatively distinct solutions instead of a single winner.
 
 ## Status
 
-**v0.2.0 (2026-04-08) — M1 complete.** Search loop works end to end in three modes: synchronous no-Ray, local Ray, and multi-node Ray cluster attach. Multi-node GPU Ray verified on a 3-node homelab cluster with RTX 5060 Ti GPUs. No dashboard yet (that's M2). Visual inspection of completed runs is via the `scripts/view_archive.py` HTML viewer.
+**v0.2.0 (2026-04-08) — M1 complete.** Search loop works end to end in three modes: synchronous no-Ray, local Ray, and multi-node Ray cluster attach.
+
+**M2 in progress.** Perf work (GPU fractioning, wheel install), descriptor rework, and visual pipeline all shipped. Latest descriptor-verification cluster run produces 228 distinct archive cells per 500-rollout standard-preset search on a 24-core cluster in ~340s, with a visibly diverse archive across velocity, gyradius, and spectral entropy. Next workitem is the static dashboard.
 
 See `SPEC.md` for the full design, `SUMMARY.md` for current state, `DECISIONS.md` for the history of how we got here.
 
@@ -75,16 +77,13 @@ ray status
 # Run from the head (or any node with biota installed)
 uv run biota search --ray-address <head-ip>:6379 --preset dev --budget 50 --device cuda
 ```
-
-Known issue: Ray's working_dir packaging rebuilds the biota venv on each worker before running any rollouts, adding ~10 seconds of per-worker setup. This dominates wall clock at small budgets. The fix lands in M2.
-
 ## CLI reference
 
 **`biota search`** runs a MAP-Elites search and writes results to `runs/<run_id>/`. Flags:
 
 | Flag | Default | Description |
 |---|---|---|
-| `--preset` | `standard` | `dev` (96x96, 200 steps), `standard` (192x192, 300), `pretty` (384x384, 500) |
+| `--preset` | `standard` | `dev` (64x64, 200 steps), `standard` (192x192, 300), `pretty` (384x384, 500) |
 | `--budget` | `500` | Total rollouts to run |
 | `--random-phase` | `200` | Rollouts of uniform random sampling before mutation |
 | `--max-concurrent` | `8` | Maximum in-flight rollouts |
@@ -92,6 +91,7 @@ Known issue: Ray's working_dir packaging rebuilds the biota venv on each worker 
 | `--ray-address` | none | Attach to an existing Ray cluster at `HOST[:PORT]` |
 | `--num-workers` | auto | Worker count for `--local-ray` (ignored when attaching) |
 | `--device` | `cpu` | `cpu`, `mps`, or `cuda` |
+| `--gpus-per-rollout` | `1.0` | GPU fraction per rollout. Set to `0.25` to fit 4 rollouts per GPU |
 | `--base-seed` | `0` | Seed for reproducibility |
 | `--checkpoint-every` | `100` | Atomic archive checkpoint cadence |
 | `--runs-root` | `runs` | Root directory for run output |
@@ -110,12 +110,12 @@ runs/20260408-175341-quiet-junco/
 └── events.jsonl        # append-only log of every insertion/rejection
 ```
 
-The archive is a 3D MAP-Elites grid (32x32x16 over speed, size, structure). Each populated cell contains a creature's parameters, descriptors, quality score, parent cell, and a small set of preview frames for visualization.
+The archive is a 3D MAP-Elites grid (32x32x16 over velocity, gyradius, spectral entropy). Each populated cell contains a creature's parameters, descriptors, quality score, parent cell, and a small set of preview frames for visualization.
 
 ## Development
 
 ```bash
-just check           # ruff + format + pyright + pytest (116 tests)
+just check           # ruff + format + pyright + pytest (143 tests)
 just smoke-ray       # manual Ray-mode smoke test (uv run biota search --local-ray ...)
 ```
 
@@ -130,8 +130,8 @@ The full design, including the driver-owns-state rationale, worker protocol, sto
 ## Roadmap
 
 - **v0.1.0 (M0)** ✅ Flow-Lenia PyTorch port, mass conservation verified against JAX reference
-- **v0.2.0 (M1)** ✅ Driver, Ray runtime, search loop, multi-node GPU Ray verified — *you are here*
-- **v0.3.0 (M2)** Perf fixes (working_dir overhead), baseline measurements, static dashboard, GPU fractioning investigation
+- **v0.2.0 (M1)** ✅ Driver, Ray runtime, search loop, multi-node GPU Ray verified
+- **v0.3.0 (M2)** ✅ Perf fixes (wheel install, GPU fractioning), ✅ baseline measurements, ✅ descriptor rework (velocity/gyradius/spectral entropy), static dashboard — *in progress*
 - **v0.4.0 (M3)** Atlas tab with three projections, live websocket updates, CSS polish
 - **v0.5.0 (M4)** Live/Metrics/Cluster tabs, random-vs-MAP-Elites comparison *(v1 release)*
 - **v0.6.0 (M5)** Cluster benchmarks
