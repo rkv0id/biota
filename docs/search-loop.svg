@@ -7,77 +7,80 @@
     </marker>
     <style>
       text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
-      .th  { font-size: 13px; font-weight: 600; fill: #18181b; }
-      .ts  { font-size: 11px; font-weight: 400; fill: #52525b; }
-      .tsa { font-size: 10px; font-weight: 400; fill: #71717a; }
-      .tlabel { font-size: 10px; font-weight: 500; fill: #a1a1aa; letter-spacing: 0.06em; }
+      .th   { font-size: 13px; font-weight: 500; fill: #f4f4f5; }
+      .ts   { font-size: 11px; font-weight: 400; fill: #71717a; }
+      .tsa  { font-size: 10px; font-weight: 400; fill: #52525b; }
+      .tlabel { font-size: 10px; font-weight: 500; fill: #3f3f46; letter-spacing: 0.07em; }
     </style>
   </defs>
 
+  <!-- Page background so it renders correctly in light-mode img tags -->
+  <rect x="0" y="0" width="680" height="400" fill="#09090b"/>
+
   <!-- Driver process panel -->
-  <rect x="28" y="20" width="624" height="148" rx="8" fill="#fafafa" stroke="#e4e4e7" stroke-width="1"/>
+  <rect x="28" y="20" width="624" height="148" rx="8" fill="#0d0d0f" stroke="#27272a" stroke-width="1"/>
   <text class="tlabel" x="44" y="38">DRIVER PROCESS</text>
 
   <!-- Archive box -->
-  <rect x="44" y="48" width="172" height="104" rx="6" fill="#fff7ed" stroke="#f59e0b" stroke-width="1"/>
+  <rect x="44" y="48" width="172" height="104" rx="6" fill="#1c1208" stroke="#ba7517" stroke-width="0.5"/>
   <text class="th" x="130" y="82" text-anchor="middle" dominant-baseline="central">MAP-Elites archive</text>
   <text class="ts" x="130" y="102" text-anchor="middle" dominant-baseline="central">32 × 32 × 16 cells</text>
   <text class="tsa" x="130" y="120" text-anchor="middle" dominant-baseline="central">velocity · gyradius · spectral</text>
-  <text class="tsa" x="130" y="138" text-anchor="middle" dominant-baseline="central">one best creature per cell</text>
+  <text class="tsa" x="130" y="136" text-anchor="middle" dominant-baseline="central">one best creature per cell</text>
 
   <!-- Search loop box -->
-  <rect x="256" y="48" width="148" height="104" rx="6" fill="#f4f4f5" stroke="#d4d4d8" stroke-width="1"/>
+  <rect x="256" y="48" width="148" height="104" rx="6" fill="#0f0f0f" stroke="#3f3f46" stroke-width="0.5"/>
   <text class="th" x="330" y="90" text-anchor="middle" dominant-baseline="central">search loop</text>
   <text class="ts" x="330" y="112" text-anchor="middle" dominant-baseline="central">mutate · select · queue</text>
 
   <!-- Result handler box -->
-  <rect x="448" y="48" width="172" height="104" rx="6" fill="#f4f4f5" stroke="#d4d4d8" stroke-width="1"/>
+  <rect x="448" y="48" width="172" height="104" rx="6" fill="#0f0f0f" stroke="#3f3f46" stroke-width="0.5"/>
   <text class="th" x="534" y="90" text-anchor="middle" dominant-baseline="central">result handler</text>
   <text class="ts" x="534" y="112" text-anchor="middle" dominant-baseline="central">score · place · checkpoint</text>
 
-  <!-- Arrow: archive -> search loop -->
-  <path d="M216 100 L254 100" fill="none" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+  <!-- Arrow: archive -> search loop (parent selection, amber dashed) -->
+  <path d="M216 100 L254 100" fill="none" stroke="#ba7517" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
   <text class="tsa" x="235" y="92" text-anchor="middle">select parent</text>
 
   <!-- Arrow: search loop -> result handler -->
-  <path d="M404 100 L446 100" fill="none" stroke="#a1a1aa" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <path d="M404 100 L446 100" fill="none" stroke="#3f3f46" stroke-width="1" marker-end="url(#arrow)"/>
   <text class="tsa" x="425" y="92" text-anchor="middle">params</text>
 
-  <!-- Insertion arc: result handler -> archive (goes below both panels) -->
-  <path d="M534 152 L534 186 L130 186 L130 154" fill="none" stroke="#f59e0b" stroke-width="1.5" marker-end="url(#arrow)"/>
-  <text class="tsa" x="332" y="198" text-anchor="middle">insert or replace</text>
+  <!-- Insertion arc: result handler -> archive -->
+  <path d="M534 152 L534 188 L130 188 L130 154" fill="none" stroke="#ba7517" stroke-width="1" marker-end="url(#arrow)"/>
+  <text class="tsa" x="332" y="200" text-anchor="middle">insert or replace</text>
 
   <!-- Workers panel -->
-  <rect x="28" y="216" width="624" height="164" rx="8" fill="#f8faff" stroke="#e4e4e7" stroke-width="1"/>
+  <rect x="28" y="216" width="624" height="164" rx="8" fill="#0d0f14" stroke="#27272a" stroke-width="1"/>
   <text class="tlabel" x="44" y="234">RAY WORKERS — stateless, local or cluster, CPU or GPU</text>
 
-  <!-- Worker boxes: centered in panel. 3 boxes × 168px + 2 gaps × 20px = 544, offset = (624-544)/2 + 28 = 68 -->
-  <rect x="68"  y="244" width="168" height="120" rx="6" fill="#eff6ff" stroke="#93c5fd" stroke-width="1"/>
-  <text class="th" x="152" y="286" text-anchor="middle" dominant-baseline="central">Flow-Lenia rollout</text>
-  <text class="ts" x="152" y="308" text-anchor="middle" dominant-baseline="central">simulate 300 steps</text>
-  <text class="tsa" x="152" y="326" text-anchor="middle" dominant-baseline="central">PyTorch · CPU or GPU</text>
-  <text class="tsa" x="152" y="344" text-anchor="middle" dominant-baseline="central">mass-conserving CA</text>
+  <!-- Worker boxes: 3 × 168px + 2 × 20px gap = 544, left offset = 28 + (624-544)/2 = 68 -->
+  <rect x="68"  y="244" width="168" height="120" rx="6" fill="#111318" stroke="#185fa5" stroke-width="0.5"/>
+  <text class="th" x="152" y="284" text-anchor="middle" dominant-baseline="central">Flow-Lenia rollout</text>
+  <text class="ts" x="152" y="306" text-anchor="middle" dominant-baseline="central">simulate 300 steps</text>
+  <text class="tsa" x="152" y="324" text-anchor="middle" dominant-baseline="central">PyTorch · CPU or GPU</text>
+  <text class="tsa" x="152" y="342" text-anchor="middle" dominant-baseline="central">mass-conserving CA</text>
 
-  <rect x="256" y="244" width="168" height="120" rx="6" fill="#f0fdf4" stroke="#86efac" stroke-width="1"/>
-  <text class="th" x="340" y="280" text-anchor="middle" dominant-baseline="central">descriptors</text>
-  <text class="ts" x="340" y="302" text-anchor="middle" dominant-baseline="central">velocity</text>
-  <text class="ts" x="340" y="320" text-anchor="middle" dominant-baseline="central">gyradius</text>
-  <text class="ts" x="340" y="338" text-anchor="middle" dominant-baseline="central">spectral entropy</text>
+  <rect x="256" y="244" width="168" height="120" rx="6" fill="#0e1a1a" stroke="#0f6e56" stroke-width="0.5"/>
+  <text class="th" x="340" y="278" text-anchor="middle" dominant-baseline="central">descriptors</text>
+  <text class="ts" x="340" y="300" text-anchor="middle" dominant-baseline="central">velocity</text>
+  <text class="ts" x="340" y="318" text-anchor="middle" dominant-baseline="central">gyradius</text>
+  <text class="ts" x="340" y="336" text-anchor="middle" dominant-baseline="central">spectral entropy</text>
 
-  <rect x="444" y="244" width="168" height="120" rx="6" fill="#fdf4ff" stroke="#d8b4fe" stroke-width="1"/>
-  <text class="th" x="528" y="286" text-anchor="middle" dominant-baseline="central">quality</text>
-  <text class="ts" x="528" y="308" text-anchor="middle" dominant-baseline="central">filter · score</text>
-  <text class="tsa" x="528" y="326" text-anchor="middle" dominant-baseline="central">persistence · mass</text>
-  <text class="tsa" x="528" y="344" text-anchor="middle" dominant-baseline="central">smoothness</text>
+  <rect x="444" y="244" width="168" height="120" rx="6" fill="#1c1726" stroke="#7c3aed" stroke-width="0.5"/>
+  <text class="th" x="528" y="284" text-anchor="middle" dominant-baseline="central">quality</text>
+  <text class="ts" x="528" y="306" text-anchor="middle" dominant-baseline="central">filter · score</text>
+  <text class="tsa" x="528" y="324" text-anchor="middle" dominant-baseline="central">persistence · mass</text>
+  <text class="tsa" x="528" y="342" text-anchor="middle" dominant-baseline="central">smoothness</text>
 
   <!-- Arrows between worker boxes -->
-  <path d="M236 304 L254 304" fill="none" stroke="#a1a1aa" stroke-width="1.5" marker-end="url(#arrow)"/>
-  <path d="M424 304 L442 304" fill="none" stroke="#a1a1aa" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <path d="M236 304 L254 304" fill="none" stroke="#185fa5" stroke-width="1" marker-end="url(#arrow)"/>
+  <path d="M424 304 L442 304" fill="none" stroke="#0f6e56" stroke-width="1" marker-end="url(#arrow)"/>
 
-  <!-- Dispatch arrow: search loop down to rollout worker -->
-  <path d="M330 152 L330 206 L152 206 L152 242" fill="none" stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+  <!-- Dispatch arrow: search loop down into rollout worker -->
+  <path d="M330 152 L330 206 L152 206 L152 242" fill="none" stroke="#185fa5" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
 
   <!-- Return arrow: quality worker up to result handler -->
-  <path d="M528 242 L528 206 L534 206 L534 152" fill="none" stroke="#f59e0b" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <path d="M528 242 L528 206 L534 206 L534 152" fill="none" stroke="#ba7517" stroke-width="1" marker-end="url(#arrow)"/>
   <text class="tsa" x="578" y="202" text-anchor="start">result</text>
 </svg>
