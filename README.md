@@ -1,10 +1,12 @@
 # biota
 
-Distributed quality-diversity search over Flow-Lenia.
+Quality-diversity search and population dynamics for Flow-Lenia creatures.
 
 ## What this is
 
-Biota runs MAP-Elites over Flow-Lenia parameter space — locally, on a single GPU, or across a Ray cluster — and produces a 3D archive of artificial creatures organized by how fast they move, how spread out their mass is, and how spectrally structured their final state is. The compute fabric is Ray. The artifact is the archive.
+biota finds, catalogs, and studies Flow-Lenia creatures. It runs locally, on a single GPU, or across a Ray cluster, and produces an archive of structurally distinct creatures that can be explored individually or studied collectively.
+
+The engine is MAP-Elites over Flow-Lenia parameter space. The artifact is a 3D archive organized by velocity (how fast creatures move), gyradius (how spread out their mass is), and spectral entropy (how much internal structure they have). The compute fabric is Ray, so the same code runs from a laptop up to a multi-node GPU cluster without changes to the search loop.
 
 Flow-Lenia is a continuous cellular automaton where matter is conserved by construction. It produces life-like creatures across a much wider parameter range than vanilla Lenia because the mass-conservation invariant prevents the explode/collapse failure modes that dominate Lenia's parameter space. MAP-Elites fills a grid of behavior cells, keeping the best creature found so far in each cell, producing an atlas of qualitatively distinct solutions instead of a single winner.
 
@@ -12,7 +14,7 @@ Flow-Lenia is a continuous cellular automaton where matter is conserved by const
 
 **v0.2.0 (2026-04-08) — M1 complete.** Search loop works end to end in three modes: synchronous no-Ray, local Ray, and multi-node Ray cluster attach.
 
-**M2 in progress.** Perf work (GPU fractioning, wheel install), descriptor rework, and visual pipeline all shipped. Latest descriptor-verification cluster run produces 228 distinct archive cells per 500-rollout standard-preset search on a 24-core cluster in ~340s, with a visibly diverse archive across velocity, gyradius, and spectral entropy. Next workitem is the static dashboard.
+**M2 closing out.** Perf fixes (wheel install, GPU fractioning), descriptor rework (velocity, gyradius, spectral entropy, all calibrated against real cluster measurements), and a visual pipeline overhaul have all shipped. A 500-rollout standard-preset search on a 24-core cluster produces 228 distinct archive cells in ~340s with a 45.6% insertion rate and a visibly diverse archive. Remaining M2 work is a small static-index build step and a per-run metrics view.
 
 See `SPEC.md` for the full design, `SUMMARY.md` for current state, `DECISIONS.md` for the history of how we got here.
 
@@ -131,13 +133,18 @@ The full design, including the driver-owns-state rationale, worker protocol, sto
 
 - **v0.1.0 (M0)** ✅ Flow-Lenia PyTorch port, mass conservation verified against JAX reference
 - **v0.2.0 (M1)** ✅ Driver, Ray runtime, search loop, multi-node GPU Ray verified
-- **v0.3.0 (M2)** ✅ Perf fixes (wheel install, GPU fractioning), ✅ baseline measurements, ✅ descriptor rework (velocity/gyradius/spectral entropy), static dashboard — *in progress*
-- **v0.4.0 (M3)** Atlas tab with three projections, live websocket updates, CSS polish
-- **v0.5.0 (M4)** Live/Metrics/Cluster tabs, random-vs-MAP-Elites comparison *(v1 release)*
-- **v0.6.0 (M5)** Cluster benchmarks
-- **v0.7.0 (M6)** Crash recovery, lineage view
-- **v1.0.0 (M7)** Static export, public atlas hosted *(v2 release)*
-- **v2.0.0 (M8)** Learned descriptors *(v3 release, optional)*
+- **v0.3.0 (M2)** Perf fixes, descriptor rework (velocity/gyradius/spectral entropy), visual pipeline overhaul, static index with per-run metrics — *closing out*
+- **v1.0.0 (M3)** Lineage view + public atlas launch. Visualize archive cell ancestry trees ("do good creatures come from few ancestors or many?"). Launch `rkv0id.github.io/biota/` as the project landing page with example published runs under `rkv0id.github.io/biota/runs/<run_id>/`, plus written documentation for how to publish additional runs. **Declared v1.0.0 because this is when biota becomes a finished, polished, shareable artifact — search works well, viewer is polished, archives are explorable, the project has a public face and a clear way for others to use it.**
+- **v2.0.0 (M4)** Ecosystem simulation. Standalone script that spawns selected archive creatures on a large Flow-Lenia grid and studies emergent population dynamics. Placement (grid/random/Poisson), spawning (instantaneous/sequential), parameter regimes (global/union). Turns biota from an atlas into a platform for studying Flow-Lenia populations at scale — the first thing biota does that nobody has done before. **Declared v2.0.0 because this is a major scientific jump, not incremental polish.**
+- **v3.0.0 (M5)** Learned descriptors. Unsupervised autoencoder-based descriptors trained on archive phenotypes or ecosystem outcomes. Revisit only if ecosystem results suggest hand-picked descriptors are missing meaningful structure.
+
+**Explicitly not planned:**
+
+- Atlas view with three simultaneous projections (current 2D projection is sufficient)
+- Live dashboard / websocket updates / metrics / cluster tabs (Ray already provides cluster and worker dashboards; no live-data use case for biota's own search)
+- Random-vs-MAP-Elites comparison (validates what's already known from the literature)
+- Biota-specific cluster benchmarks (Ray provides all relevant monitoring)
+- Crash recovery (deferred indefinitely; revisit only when a biota search is long enough that a crash would cost real time)
 
 ## References
 
