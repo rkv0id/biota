@@ -26,16 +26,21 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from jinja2 import Environment, FileSystemLoader
+
 from biota.search.archive import Archive
 from biota.viz.render import render_archive_page
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_RUNS_ROOT = ROOT / "runs"
 
-
-# ---------------------------------------------------------------------------
-# Events parsing
-# ---------------------------------------------------------------------------
+_TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "src" / "biota" / "viz" / "templates"
+_ENV = Environment(
+    loader=FileSystemLoader(_TEMPLATES_DIR),
+    autoescape=False,
+    keep_trailing_newline=True,
+)
+_STATS_CSS = (_TEMPLATES_DIR / "stats_section.css").read_text()
 
 
 def _load_events(run_dir: Path) -> list[dict[str, Any]]:
@@ -63,11 +68,7 @@ def _load_manifest(run_dir: Path) -> dict[str, Any]:
         return {}
 
 
-# ---------------------------------------------------------------------------
-# SVG chart helpers
-# No matplotlib.  We produce SVG strings directly.
-# ---------------------------------------------------------------------------
-
+# SVG chart helpers - no matplotlib, strings produced directly.
 _SVG_W = 320
 _SVG_H = 160
 _PAD_L = 36
@@ -275,10 +276,6 @@ def _svg_histogram(
     return "".join(parts)
 
 
-# ---------------------------------------------------------------------------
-# Metrics computation
-# ---------------------------------------------------------------------------
-
 _WINDOW = 50  # rolling window size for rate charts
 
 
@@ -372,7 +369,7 @@ def _compute_metrics(events: list[dict[str, Any]], started_at: float) -> dict[st
 
 
 def _build_metrics_html(metrics: dict[str, Any]) -> str:
-    """Return the HTML for the collapsed stats section to embed in a view.html."""
+    """Render the collapsed stats section HTML from the Jinja2 template."""
     if not metrics:
         return ""
 
@@ -387,7 +384,6 @@ def _build_metrics_html(metrics: dict[str, Any]) -> str:
     rej_sim_pct = f"{100 * totals['rejected_sim'] / n:.1f}%" if n else "-"
     rej_filt_pct = f"{100 * totals['rejected_filter'] / n:.1f}%" if n else "-"
 
-    # Build SVGs
     rej_svg = (
         _svg_line_chart(
             metrics["rej_series"],
@@ -419,7 +415,6 @@ def _build_metrics_html(metrics: dict[str, Any]) -> str:
         else ""
     )
 
-    # Legend for rejection chart
     legend_items = [
         (_C_INSERTED, "inserted"),
         (_C_REPLACED, "replaced"),
@@ -427,152 +422,20 @@ def _build_metrics_html(metrics: dict[str, Any]) -> str:
         (_C_REJ_SIM, "rej:sim"),
         (_C_REJ_FILT, "rej:filt"),
     ]
-    legend_html = "".join(
-        f'<span class="stats-legend-item">'
-        f'<span class="stats-legend-dot" style="background:{c}"></span>{label}'
-        f"</span>"
-        for c, label in legend_items
+
+    template = _ENV.get_template("stats_section.html")
+    return template.render(
+        n_rollouts=n,
+        wall_str=wall_str,
+        insert_pct=insert_pct,
+        rej_qual_pct=rej_qual_pct,
+        rej_sim_pct=rej_sim_pct,
+        rej_filt_pct=rej_filt_pct,
+        rej_svg=rej_svg,
+        cpm_svg=cpm_svg,
+        qual_svg=qual_svg,
+        legend_items=legend_items,
     )
-
-    return f"""
-<div class="stats-section" id="stats-section">
-    <button class="stats-toggle" type="button"
-            onclick="document.getElementById('stats-section').classList.toggle('open')"
-            aria-expanded="false">
-        <span class="stats-toggle-label">run stats</span>
-        <span class="stats-toggle-arrow">&#9660;</span>
-    </button>
-    <div class="stats-body">
-        <div class="stats-summary">
-            <div class="stats-kv"><span class="stats-k">rollouts</span>
-                <span class="stats-v">{n}</span></div>
-            <div class="stats-kv"><span class="stats-k">wall time</span>
-                <span class="stats-v">{wall_str}</span></div>
-            <div class="stats-kv"><span class="stats-k">insertion rate</span>
-                <span class="stats-v">{insert_pct}</span></div>
-            <div class="stats-kv"><span class="stats-k">rej:qual</span>
-                <span class="stats-v">{rej_qual_pct}</span></div>
-            <div class="stats-kv"><span class="stats-k">rej:sim</span>
-                <span class="stats-v">{rej_sim_pct}</span></div>
-            <div class="stats-kv"><span class="stats-k">rej:filt</span>
-                <span class="stats-v">{rej_filt_pct}</span></div>
-        </div>
-        <div class="stats-charts">
-            <div class="stats-chart">{rej_svg}</div>
-            <div class="stats-chart">{cpm_svg}</div>
-            <div class="stats-chart">{qual_svg}</div>
-        </div>
-        <div class="stats-legend">{legend_html}</div>
-    </div>
-</div>
-"""
-
-
-_STATS_CSS = """
-/* === stats section === */
-.stats-section {
-    border-top: 1px solid rgba(255,255,255,0.05);
-    margin-top: 16px;
-}
-.stats-toggle {
-    width: 100%;
-    background: none;
-    border: none;
-    color: #71717a;
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    font-weight: 600;
-    padding: 14px 48px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-family: inherit;
-    text-align: left;
-}
-.stats-toggle:hover { color: #a1a1aa; }
-.stats-toggle-arrow { transition: transform 0.2s ease; }
-.stats-section.open .stats-toggle-arrow { transform: rotate(180deg); }
-.stats-body {
-    display: none;
-    padding: 0 48px 32px 48px;
-}
-.stats-section.open .stats-body { display: block; }
-.stats-summary {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px 32px;
-    margin-bottom: 20px;
-}
-.stats-kv {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-.stats-k {
-    font-size: 9px;
-    color: #52525b;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-}
-.stats-v {
-    font-size: 13px;
-    color: #e4e4e7;
-    font-variant-numeric: tabular-nums;
-}
-.stats-charts {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 16px;
-    margin-bottom: 12px;
-}
-.stats-chart svg {
-    display: block;
-    background: rgba(0,0,0,0.2);
-    border-radius: 4px;
-    border: 1px solid rgba(255,255,255,0.04);
-}
-.stats-legend {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px 16px;
-}
-.stats-legend-item {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 9px;
-    color: #71717a;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-.stats-legend-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    flex-shrink: 0;
-}
-"""
-
-
-def _inject_stats(html: str, metrics_html: str, stats_css: str) -> str:
-    """Inject the stats section and CSS into a rendered archive page.
-
-    Inserts the CSS before </style> and the stats HTML before </body>.
-    Uses simple string replacement - the renderer produces known marker
-    strings we can anchor on.
-    """
-    if not metrics_html:
-        return html
-    html = html.replace("</style>", stats_css + "\n    </style>", 1)
-    html = html.replace("</body>", metrics_html + "\n</body>", 1)
-    return html
-
-
-# ---------------------------------------------------------------------------
-# Per-run rendering
-# ---------------------------------------------------------------------------
 
 
 def _render_run(run_dir: Path, archive: Archive) -> str:
@@ -582,14 +445,18 @@ def _render_run(run_dir: Path, archive: Archive) -> str:
     manifest = _load_manifest(run_dir)
     started_at = manifest.get("started_at", 0.0)
 
-    html = render_archive_page(archive, run_id, run_dir)
-
+    stats_html = ""
     if events:
         metrics = _compute_metrics(events, started_at)
-        metrics_html = _build_metrics_html(metrics)
-        html = _inject_stats(html, metrics_html, _STATS_CSS)
+        stats_html = _build_metrics_html(metrics)
 
-    return html
+    return render_archive_page(
+        archive,
+        run_id,
+        run_dir,
+        stats_html=stats_html,
+        stats_css=_STATS_CSS if stats_html else "",
+    )
 
 
 def _load_archive(run_dir: Path) -> Archive | None:
@@ -603,11 +470,6 @@ def _load_archive(run_dir: Path) -> Archive | None:
     return obj
 
 
-# ---------------------------------------------------------------------------
-# Index page
-# ---------------------------------------------------------------------------
-
-
 def _first_thumbnail_data_url(archive: Archive) -> str | None:
     """Return the data URL of the first occupied cell's thumbnail, or None."""
     import base64
@@ -619,7 +481,6 @@ def _first_thumbnail_data_url(archive: Archive) -> str | None:
 
     for _coord, result in archive.iter_occupied():
         colored = apply_magma(result.thumbnail)
-        # Use the middle frame
         frame = colored[len(colored) // 2]
         buf = io.BytesIO()
         iio.imwrite(buf, frame, extension=".png")
@@ -628,177 +489,28 @@ def _first_thumbnail_data_url(archive: Archive) -> str | None:
     return None
 
 
-def _build_run_card(run_dir: Path, archive: Archive, events: list[dict[str, Any]]) -> str:
-    """Build one run card for the index page."""
-    run_id = run_dir.name
-    n_cells = len(archive)
-    fill_pct = f"{archive.fill_fraction * 100:.1f}%"
+def _build_card_context(
+    run_dir: Path, archive: Archive, events: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Build the context dict for one run card in the index template."""
     n_rollouts = len(events)
-
-    thumb = _first_thumbnail_data_url(archive)
-    thumb_html = (
-        f'<img class="card-thumb" src="{thumb}" alt="preview" />'
-        if thumb
-        else '<div class="card-thumb card-thumb-empty"></div>'
-    )
-
     insertion_rate = ""
     if n_rollouts:
         n_inserted = sum(1 for e in events if e.get("insertion_status") in ("inserted", "replaced"))
         insertion_rate = f"{100 * n_inserted / n_rollouts:.1f}%"
-
-    return f"""
-<a class="run-card" href="{run_id}/view.html">
-    {thumb_html}
-    <div class="card-body">
-        <div class="card-id">{run_id}</div>
-        <div class="card-stats">
-            <span class="card-stat"><span class="card-stat-v">{n_cells}</span> cells</span>
-            <span class="card-sep">&middot;</span>
-            <span class="card-stat"><span class="card-stat-v">{fill_pct}</span> fill</span>
-            {f'<span class="card-sep">&middot;</span><span class="card-stat"><span class="card-stat-v">{insertion_rate}</span> insertion</span>' if insertion_rate else ""}
-        </div>
-        <div class="card-rollouts">{n_rollouts} rollouts</div>
-    </div>
-</a>"""
+    return {
+        "run_id": run_dir.name,
+        "n_cells": len(archive),
+        "fill_pct": f"{archive.fill_fraction * 100:.1f}%",
+        "n_rollouts": n_rollouts,
+        "thumb_url": _first_thumbnail_data_url(archive),
+        "insertion_rate": insertion_rate,
+    }
 
 
-def _build_index_html(run_cards: list[str]) -> str:
-    cards_html = "\n".join(run_cards)
-    n = len(run_cards)
-    return f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>biota runs</title>
-    <style>
-        *, *::before, *::after {{ box-sizing: border-box; }}
-        html, body {{
-            margin: 0; padding: 0;
-            background: #08090b;
-            color: #e4e4e7;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
-                Helvetica, Arial, sans-serif;
-            font-size: 14px;
-            line-height: 1.5;
-            min-height: 100vh;
-            -webkit-font-smoothing: antialiased;
-        }}
-        body {{
-            background: radial-gradient(
-                ellipse at 50% 25%,
-                #141820 0%, #0b0d10 45%, #08090b 100%
-            );
-            background-attachment: fixed;
-            padding: 64px 48px 96px 48px;
-        }}
-        .page-header {{ margin-bottom: 48px; }}
-        .page-title {{
-            font-size: 32px;
-            font-weight: 300;
-            letter-spacing: -0.01em;
-            color: #f4f4f5;
-            margin: 0 0 8px 0;
-        }}
-        .page-title .title-prefix {{
-            color: #52525b;
-            font-weight: 300;
-            margin-right: 10px;
-        }}
-        .page-meta {{
-            font-size: 12px;
-            color: #71717a;
-        }}
-        .run-grid {{
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-            gap: 20px;
-        }}
-        .run-card {{
-            background: rgba(20, 22, 28, 0.6);
-            border: 1px solid rgba(255,255,255,0.06);
-            border-radius: 10px;
-            overflow: hidden;
-            text-decoration: none;
-            color: inherit;
-            display: flex;
-            flex-direction: column;
-            transition: border-color 0.15s ease, box-shadow 0.15s ease;
-        }}
-        .run-card:hover {{
-            border-color: rgba(251,191,119,0.3);
-            box-shadow:
-                0 0 0 1px rgba(251,191,119,0.15),
-                0 8px 24px rgba(0,0,0,0.4);
-        }}
-        .card-thumb {{
-            width: 100%;
-            aspect-ratio: 1;
-            object-fit: cover;
-            image-rendering: pixelated;
-            display: block;
-            background: #0b0d10;
-        }}
-        .card-thumb-empty {{
-            background: #0b0d10;
-        }}
-        .card-body {{
-            padding: 14px 16px 16px 16px;
-        }}
-        .card-id {{
-            font-size: 12px;
-            color: #f4f4f5;
-            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-            margin-bottom: 8px;
-            word-break: break-all;
-        }}
-        .card-stats {{
-            font-size: 11px;
-            color: #71717a;
-            display: flex;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 0 4px;
-            margin-bottom: 4px;
-        }}
-        .card-stat-v {{
-            color: #a1a1aa;
-            font-weight: 500;
-            font-variant-numeric: tabular-nums;
-        }}
-        .card-sep {{ color: #3f3f46; }}
-        .card-rollouts {{
-            font-size: 10px;
-            color: #52525b;
-            font-variant-numeric: tabular-nums;
-        }}
-        @media (max-width: 600px) {{
-            body {{ padding: 32px 20px 64px 20px; }}
-            .page-title {{ font-size: 24px; }}
-        }}
-    </style>
-</head>
-<body>
-    <header class="page-header">
-        <h1 class="page-title">
-            <span class="title-prefix">biota</span>runs
-        </h1>
-        <div class="page-meta">{n} run{"s" if n != 1 else ""}</div>
-    </header>
-    <main>
-        <div class="run-grid">
-            {cards_html}
-        </div>
-    </main>
-</body>
-</html>
-"""
-
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
+def _build_index_html(cards: list[dict[str, Any]]) -> str:
+    template = _ENV.get_template("index.html")
+    return template.render(n_runs=len(cards), cards=cards)
 
 
 def _discover_runs(runs_root: Path) -> list[Path]:
@@ -873,16 +585,16 @@ def main() -> None:
         return
 
     # Build the index
-    cards: list[str] = []
+    card_contexts: list[dict[str, Any]] = []
     for run_dir, archive in good_runs:
         events = _load_events(run_dir)
-        cards.append(_build_run_card(run_dir, archive, events))
+        card_contexts.append(_build_card_context(run_dir, archive, events))
 
-    index_html = _build_index_html(cards)
+    index_html = _build_index_html(card_contexts)
     index_out = args.runs_root / "index.html"
     index_out.write_text(index_html)
     size_kb = index_out.stat().st_size / 1024
-    print(f"index: {index_out} ({size_kb:.0f} KB, {len(cards)} runs)")
+    print(f"index: {index_out} ({size_kb:.0f} KB, {len(card_contexts)} runs)")
     print(f"open with: open {index_out}")
 
 

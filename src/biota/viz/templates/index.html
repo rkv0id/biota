@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>biota runs</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+        html, body {
+            margin: 0; padding: 0;
+            background: #08090b;
+            color: #e4e4e7;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+                Helvetica, Arial, sans-serif;
+            font-size: 14px;
+            line-height: 1.5;
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+        }
+        body {
+            background: radial-gradient(
+                ellipse at 50% 25%,
+                #141820 0%, #0b0d10 45%, #08090b 100%
+            );
+            background-attachment: fixed;
+            padding: 64px 48px 96px 48px;
+        }
+        .page-header { margin-bottom: 48px; }
+        .page-title {
+            font-size: 32px;
+            font-weight: 300;
+            letter-spacing: -0.01em;
+            color: #f4f4f5;
+            margin: 0 0 8px 0;
+        }
+        .page-title .title-prefix {
+            color: #52525b;
+            font-weight: 300;
+            margin-right: 10px;
+        }
+        .page-meta {
+            font-size: 12px;
+            color: #71717a;
+        }
+        .run-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 20px;
+        }
+        .run-card {
+            background: rgba(20, 22, 28, 0.6);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 10px;
+            overflow: hidden;
+            text-decoration: none;
+            color: inherit;
+            display: flex;
+            flex-direction: column;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+        .run-card:hover {
+            border-color: rgba(251,191,119,0.3);
+            box-shadow:
+                0 0 0 1px rgba(251,191,119,0.15),
+                0 8px 24px rgba(0,0,0,0.4);
+        }
+        .card-thumb {
+            width: 100%;
+            aspect-ratio: 1;
+            object-fit: cover;
+            image-rendering: pixelated;
+            display: block;
+            background: #0b0d10;
+        }
+        .card-thumb-empty {
+            background: #0b0d10;
+            aspect-ratio: 1;
+        }
+        .card-body {
+            padding: 14px 16px 16px 16px;
+        }
+        .card-id {
+            font-size: 12px;
+            color: #f4f4f5;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            margin-bottom: 8px;
+            word-break: break-all;
+        }
+        .card-stats {
+            font-size: 11px;
+            color: #71717a;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0 4px;
+            margin-bottom: 4px;
+        }
+        .card-stat-v {
+            color: #a1a1aa;
+            font-weight: 500;
+            font-variant-numeric: tabular-nums;
+        }
+        .card-sep { color: #3f3f46; }
+        .card-rollouts {
+            font-size: 10px;
+            color: #52525b;
+            font-variant-numeric: tabular-nums;
+        }
+        @media (max-width: 600px) {
+            body { padding: 32px 20px 64px 20px; }
+            .page-title { font-size: 24px; }
+        }
+    </style>
+</head>
+<body>
+    <header class="page-header">
+        <h1 class="page-title">
+            <span class="title-prefix">biota</span>runs
+        </h1>
+        <div class="page-meta">{{ n_runs }} run{{ 's' if n_runs != 1 else '' }}</div>
+    </header>
+    <main>
+        <div class="run-grid">
+            {% for card in cards %}
+            <a class="run-card" href="{{ card.run_id }}/view.html">
+                {% if card.thumb_url %}
+                <img class="card-thumb" src="{{ card.thumb_url }}" alt="preview" />
+                {% else %}
+                <div class="card-thumb card-thumb-empty"></div>
+                {% endif %}
+                <div class="card-body">
+                    <div class="card-id">{{ card.run_id }}</div>
+                    <div class="card-stats">
+                        <span class="card-stat"><span class="card-stat-v">{{ card.n_cells }}</span> cells</span>
+                        <span class="card-sep">&middot;</span>
+                        <span class="card-stat"><span class="card-stat-v">{{ card.fill_pct }}</span> fill</span>
+                        {% if card.insertion_rate %}
+                        <span class="card-sep">&middot;</span>
+                        <span class="card-stat"><span class="card-stat-v">{{ card.insertion_rate }}</span> insertion</span>
+                        {% endif %}
+                    </div>
+                    <div class="card-rollouts">{{ card.n_rollouts }} rollouts</div>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </main>
+</body>
+</html>

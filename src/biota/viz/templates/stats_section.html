@@ -1,0 +1,48 @@
+<div class="stats-section" id="stats-section">
+    <button class="stats-toggle" type="button"
+            onclick="document.getElementById('stats-section').classList.toggle('open')"
+            aria-expanded="false">
+        <span class="stats-toggle-label">run stats</span>
+        <span class="stats-toggle-arrow">&#9660;</span>
+    </button>
+    <div class="stats-body">
+        <div class="stats-summary">
+            <div class="stats-kv">
+                <span class="stats-k">rollouts</span>
+                <span class="stats-v">{{ n_rollouts }}</span>
+            </div>
+            <div class="stats-kv">
+                <span class="stats-k">wall time</span>
+                <span class="stats-v">{{ wall_str }}</span>
+            </div>
+            <div class="stats-kv">
+                <span class="stats-k">insertion rate</span>
+                <span class="stats-v">{{ insert_pct }}</span>
+            </div>
+            <div class="stats-kv">
+                <span class="stats-k">rej:qual</span>
+                <span class="stats-v">{{ rej_qual_pct }}</span>
+            </div>
+            <div class="stats-kv">
+                <span class="stats-k">rej:sim</span>
+                <span class="stats-v">{{ rej_sim_pct }}</span>
+            </div>
+            <div class="stats-kv">
+                <span class="stats-k">rej:filt</span>
+                <span class="stats-v">{{ rej_filt_pct }}</span>
+            </div>
+        </div>
+        <div class="stats-charts">
+            {% if rej_svg %}<div class="stats-chart">{{ rej_svg }}</div>{% endif %}
+            {% if cpm_svg %}<div class="stats-chart">{{ cpm_svg }}</div>{% endif %}
+            {% if qual_svg %}<div class="stats-chart">{{ qual_svg }}</div>{% endif %}
+        </div>
+        <div class="stats-legend">
+            {% for color, label in legend_items %}
+            <span class="stats-legend-item">
+                <span class="stats-legend-dot" style="background:{{ color }}"></span>{{ label }}
+            </span>
+            {% endfor %}
+        </div>
+    </div>
+</div>

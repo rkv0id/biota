@@ -1,0 +1,84 @@
+/* === stats section === */
+.stats-section {
+    border-top: 1px solid rgba(255,255,255,0.05);
+    margin-top: 16px;
+}
+.stats-toggle {
+    width: 100%;
+    background: none;
+    border: none;
+    color: #71717a;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 600;
+    padding: 14px 48px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: inherit;
+    text-align: left;
+}
+.stats-toggle:hover { color: #a1a1aa; }
+.stats-toggle-arrow { transition: transform 0.2s ease; }
+.stats-section.open .stats-toggle-arrow { transform: rotate(180deg); }
+.stats-body {
+    display: none;
+    padding: 0 48px 32px 48px;
+}
+.stats-section.open .stats-body { display: block; }
+.stats-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 32px;
+    margin-bottom: 20px;
+}
+.stats-kv {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.stats-k {
+    font-size: 9px;
+    color: #52525b;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+.stats-v {
+    font-size: 13px;
+    color: #e4e4e7;
+    font-variant-numeric: tabular-nums;
+}
+.stats-charts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 12px;
+}
+.stats-chart svg {
+    display: block;
+    background: rgba(0,0,0,0.2);
+    border-radius: 4px;
+    border: 1px solid rgba(255,255,255,0.04);
+}
+.stats-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+}
+.stats-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 9px;
+    color: #71717a;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+.stats-legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
