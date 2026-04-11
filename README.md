@@ -123,7 +123,7 @@ The test suite does not require a GPU or a running Ray cluster. `just smoke-ray`
 
 - **v0.1.0** Flow-Lenia PyTorch port, mass conservation verified against JAX reference ✅
 - **v0.2.0** Driver, Ray runtime, search loop, multi-node GPU Ray ✅
-- **v0.3.0** Perf fixes, descriptor rework, visual pipeline, static index with metrics - *closing out*
+- **v0.3.0** Perf fixes, descriptor rework, visual pipeline, static index with per-run metrics ✅
 - **v1.0.0** Lineage view + public atlas at `rkv0id.github.io/biota/`
 - **v2.0.0** Ecosystem simulation - spawn archive creatures together on a large grid and study what happens
 - **v3.0.0** Learned descriptors
