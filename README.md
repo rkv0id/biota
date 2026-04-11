@@ -6,17 +6,16 @@ It runs locally, on a single GPU, or across a Ray cluster, and produces an archi
 
 ---
 
-<!-- Replace the block below with your demo GIF once you have it.
-     Recommended: a short screen recording of the archive viewer -
-     browsing the index, opening a cell, playing through the animation.
-     Link it to the YouTube video.
+[![biota demo](docs/demo.gif)](https://youtu.be/ZFrRKZXiH2Q)
+<p align="center">
+  <a href="https://youtu.be/ZFrRKZXiH2Q">
+    <img src="docs/demo.gif" width="900">
+  </a>
+</p>
 
-[![biota demo](docs/demo.gif)](https://youtube.com/your-link-here)
--->
-
-> *showcase runs and demo coming with v0.3.0*
-
----
+<p align="center">
+  <small><i>Click the GIF to watch the full archive demo video</i></small>
+</p>
 
 ## What it does
 
