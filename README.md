@@ -4,9 +4,6 @@ Quality-diversity search and population dynamics for Flow-Lenia creatures.
 
 It runs locally, on a single GPU, or across a Ray cluster, and produces an archive of structurally distinct creatures that can be explored individually or studied collectively.
 
----
-
-[![biota demo](docs/demo.gif)](https://youtu.be/ZFrRKZXiH2Q)
 <p align="center">
   <a href="https://youtu.be/ZFrRKZXiH2Q">
     <img src="docs/demo.gif" width="900">
