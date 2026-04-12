@@ -438,8 +438,14 @@ def _build_metrics_html(metrics: dict[str, Any]) -> str:
     )
 
 
-def _render_run(run_dir: Path, archive: Archive) -> str:
-    """Render a full view.html for a run, including the stats section."""
+def _render_run(run_dir: Path, archive: Archive, publish: bool = False) -> str:
+    """Render a full view.html for a run, including the stats section.
+
+    publish=True writes GIF thumbnails as separate files under run_dir/thumbs/
+    and references them by relative path. The HTML goes from ~250 MB to ~2 MB.
+    publish=False (default) embeds thumbnails as base64 data URLs for a fully
+    self-contained file suitable for local viewing without a server.
+    """
     run_id = run_dir.name
     events = _load_events(run_dir)
     manifest = _load_manifest(run_dir)
@@ -450,12 +456,15 @@ def _render_run(run_dir: Path, archive: Archive) -> str:
         metrics = _compute_metrics(events, started_at)
         stats_html = _build_metrics_html(metrics)
 
+    thumbs_dir = run_dir / "thumbs" if publish else None
+
     return render_archive_page(
         archive,
         run_id,
         run_dir,
         stats_html=stats_html,
         stats_css=_STATS_CSS if stats_html else "",
+        thumbs_dir=thumbs_dir,
     )
 
 
@@ -541,6 +550,17 @@ def main() -> None:
         action="store_true",
         help="Skip regenerating per-run view.html; only rebuild index.html.",
     )
+    parser.add_argument(
+        "--publish",
+        action="store_true",
+        help=(
+            "Write GIF thumbnails as separate files under runs/<run_id>/thumbs/ "
+            "and reference them by relative path. The view.html drops from ~250 MB "
+            "to ~2 MB per run. Use this when building for web hosting. "
+            "Without this flag, thumbnails are embedded as base64 (self-contained, "
+            "works offline, suitable for local viewing)."
+        ),
+    )
     args = parser.parse_args()
 
     if not args.runs_root.exists():
@@ -569,7 +589,7 @@ def main() -> None:
 
         if not args.no_regen:
             try:
-                html = _render_run(run_dir, archive)
+                html = _render_run(run_dir, archive, publish=args.publish)
                 out = run_dir / "view.html"
                 out.write_text(html)
                 size_kb = out.stat().st_size / 1024

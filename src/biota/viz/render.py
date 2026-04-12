@@ -19,6 +19,10 @@ stats_html and stats_css parameters, supplied by build_index.py.
 The HTML output is fully self-contained.  All thumbnails are embedded as
 base64 data URLs so the file can be scped off the cluster, emailed, or
 hosted on GitHub Pages without any accompanying assets.
+
+For publishing (web hosting), pass thumbs_dir to render_archive_page.
+GIF files are written there and referenced by relative path instead of
+being embedded as base64. The HTML drops from ~250 MB to ~2 MB per run.
 """
 
 import base64
@@ -56,6 +60,15 @@ _ENV = Environment(
 )
 
 
+def _thumbnail_to_gif_bytes(thumbnail: np.ndarray) -> bytes:
+    """Encode a (N, H, W) uint8 grayscale thumbnail as an animated GIF.
+    Returns raw bytes. Used in publishing mode to write GIFs to disk."""
+    colored = apply_magma(thumbnail)
+    buf = io.BytesIO()
+    iio.imwrite(buf, colored, extension=".gif", duration=GIF_FRAME_DURATION_MS, loop=0)
+    return buf.getvalue()
+
+
 def _thumbnail_to_data_url(thumbnail: np.ndarray) -> str:
     """Encode a (N, H, W) uint8 grayscale thumbnail as a base64 GIF data URL,
     applying the magma colormap so the GIF comes out colored.
@@ -78,6 +91,24 @@ def _thumbnail_to_data_url(thumbnail: np.ndarray) -> str:
     return f"data:image/gif;base64,{encoded}"
 
 
+def _card_thumbnail_src(thumbnail: np.ndarray, key: str, thumbs_dir: Path | None) -> str:
+    """Return a relative path (publishing mode) or base64 data URL (standalone mode).
+
+    Publishing mode (thumbs_dir set): write the GIF to thumbs_dir/<key>.gif
+    and return the src "thumbs/<key>.gif". The HTML references external assets,
+    keeping the page small enough to host anywhere.
+
+    Standalone mode (thumbs_dir None): embed as base64 data URL so the HTML
+    file is fully self-contained - works offline, can be scped or emailed.
+    """
+    if thumbs_dir is not None:
+        thumbs_dir.mkdir(parents=True, exist_ok=True)
+        gif_path = thumbs_dir / f"{key}.gif"
+        gif_path.write_bytes(_thumbnail_to_gif_bytes(thumbnail))
+        return f"thumbs/{key}.gif"
+    return _thumbnail_to_data_url(thumbnail)
+
+
 def _serialize_params(result: RolloutResult) -> dict[str, Any]:
     """Convert a result's params dict (with nested lists) into a JSON-safe
     dict that the modal can render."""
@@ -92,7 +123,11 @@ def _serialize_params(result: RolloutResult) -> dict[str, Any]:
     return out
 
 
-def _result_to_card_data(coord: tuple[int, int, int], result: RolloutResult) -> dict[str, Any]:
+def _result_to_card_data(
+    coord: tuple[int, int, int],
+    result: RolloutResult,
+    thumbs_dir: Path | None = None,
+) -> dict[str, Any]:
     """Build the per-cell payload embedded as a JSON blob in the page.
 
     Note: the field names in this JSON (speed/size/structure) are historical
@@ -102,6 +137,7 @@ def _result_to_card_data(coord: tuple[int, int, int], result: RolloutResult) -> 
     display labels via the DESC_LABELS JS constant.
     """
     y, x, z = coord
+    key = f"{y}_{x}_{z}"
     descriptors_obj: dict[str, float] | None = None
     if result.descriptors is not None:
         descriptors_obj = {
@@ -123,7 +159,7 @@ def _result_to_card_data(coord: tuple[int, int, int], result: RolloutResult) -> 
         "parent": parent,
         "rejection_reason": result.rejection_reason,
         "compute_seconds": round(float(result.compute_seconds), 3),
-        "thumbnail": _thumbnail_to_data_url(result.thumbnail),
+        "thumbnail": _card_thumbnail_src(result.thumbnail, key, thumbs_dir),
         "params": _serialize_params(result),
     }
 
@@ -222,6 +258,7 @@ def render_archive_page(
     run_dir: Path,
     stats_html: str = "",
     stats_css: str = "",
+    thumbs_dir: Path | None = None,
 ) -> str:
     """Render an archive as a self-contained HTML page string.
 
@@ -233,6 +270,10 @@ def render_archive_page(
                     produced by build_index.py.  Empty string omits it.
         stats_css:  Optional CSS for the stats section.  Empty string
                     omits it.  Should be provided alongside stats_html.
+        thumbs_dir: If set, GIF thumbnails are written to this directory
+                    and referenced by relative path rather than embedded
+                    as base64. Pass run_dir / "thumbs" for publishing.
+                    None (default) preserves fully self-contained output.
 
     Returns:
         A complete HTML document as a string.  Write it directly to disk.
@@ -244,7 +285,7 @@ def render_archive_page(
     for coord, result in occupied:
         y, x, z = coord
         key = f"{y}_{x}_{z}"
-        cards[key] = _result_to_card_data(coord, result)
+        cards[key] = _result_to_card_data(coord, result, thumbs_dir=thumbs_dir)
 
     swatch_stops = ", ".join(
         f"rgb({r},{g},{b})"
