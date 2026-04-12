@@ -22,6 +22,8 @@ biota searches Flow-Lenia's parameter space using [MAP-Elites](https://arxiv.org
 
 A 500-rollout standard-preset search on a 3-node RTX 5060 Ti cluster takes about 97 seconds and produces around 229 distinct archive cells at a 45% insertion rate (3.5x speedup over the pre-batching baseline at 91-92% GPU utilization).
 
+The public atlas is live at **[biota-atlas.pages.dev](https://biota-atlas.pages.dev)**.
+
 ## How it works
 
 The search loop runs in the driver process. Rollouts are dispatched as Ray tasks to workers - stateless functions that take parameters, simulate a creature, compute its behavioral descriptors and quality score, and return a result. The driver places results into the archive, selects parents for mutation, and queues the next batch. Nothing persistent lives on the workers.
@@ -125,13 +127,13 @@ The test suite does not require a GPU or a running Ray cluster. `just smoke-ray`
 
 ## Roadmap
 
-- **v0.1.0** Flow-Lenia PyTorch port, mass conservation verified against JAX reference ✅
-- **v0.2.0** Driver, Ray runtime, search loop, multi-node GPU Ray ✅
-- **v0.3.0** Perf fixes, descriptor rework, visual pipeline, static index with per-run metrics ✅
-- **v0.4.0** Batched rollout engine, CLI redesign (`--batch-size`, `--workers`), 3.5x cluster speedup ✅
-- **v1.0.0** Lineage view + public atlas at `rkv0id.github.io/biota/`
-- **v2.0.0** Ecosystem simulation - spawn archive creatures together on a large grid and study what happens
-- **v3.0.0** Learned descriptors
+- [x] **v0.1.0** Flow-Lenia PyTorch port, mass conservation verified against JAX reference
+- [x] **v0.2.0** Driver, Ray runtime, search loop, multi-node GPU Ray
+- [x] **v0.3.0** Perf fixes, descriptor rework, visual pipeline, static index with per-run metrics
+- [x] **v0.4.0** Batched rollout engine, CLI redesign (`--batch-size`, `--workers`), 3.5x cluster speedup
+- [x] **v1.0.0** Lineage view, atlas site (About / Runs / Reproduce / Contact), public launch at [biota-atlas.pages.dev](https://biota-atlas.pages.dev)
+- [ ] **v2.0.0** Ecosystem simulation - spawn archive creatures together on a large grid and study what happens
+- [ ] **v3.0.0** Learned descriptors
 
 ## References
 
