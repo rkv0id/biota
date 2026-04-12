@@ -35,17 +35,18 @@
             font-weight: 300;
             letter-spacing: -0.01em;
             color: #f4f4f5;
-            margin: 0 0 8px 0;
+            margin: 0 0 4px 0;
         }
         .page-title .title-prefix {
             color: #52525b;
             font-weight: 300;
             margin-right: 10px;
         }
-        .page-meta {
+        .page-tagline {
             font-size: 12px;
-            color: #71717a;
+            color: #3f3f46;
             margin-bottom: 28px;
+            letter-spacing: 0.02em;
         }
 
         /* === tabs === */
@@ -76,67 +77,94 @@
         }
 
         /* === tab panels === */
-        .tab-panel { display: none; padding: 40px 48px 80px 48px; }
+        .tab-panel { display: none; padding: 44px 48px 80px 48px; }
         .tab-panel.active { display: block; }
 
-        /* === about panel === */
-        .about-body {
-            max-width: 680px;
+        /* === shared prose styles === */
+        .prose {
+            max-width: 660px;
         }
-        .about-body p {
+        .prose p {
             color: #a1a1aa;
             margin: 0 0 18px 0;
             font-size: 14px;
-            line-height: 1.7;
+            line-height: 1.75;
         }
-        .about-body h2 {
-            font-size: 13px;
+        .prose h2 {
+            font-size: 11px;
             font-weight: 600;
-            color: #e4e4e7;
+            color: #52525b;
             text-transform: uppercase;
-            letter-spacing: 0.06em;
+            letter-spacing: 0.08em;
             margin: 36px 0 14px 0;
         }
-        .about-body h2:first-child { margin-top: 0; }
-        .about-stat-row {
+        .prose h2:first-child { margin-top: 0; }
+
+        /* pill links */
+        .pill-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 6px;
+            margin-bottom: 24px;
+        }
+        .pill {
+            font-size: 11px;
+            color: #63a0ff;
+            text-decoration: none;
+            padding: 5px 12px;
+            border: 1px solid rgba(99,160,255,0.2);
+            border-radius: 20px;
+            transition: border-color 0.12s, color 0.12s;
+            white-space: nowrap;
+        }
+        .pill:hover {
+            color: #93c0ff;
+            border-color: rgba(99,160,255,0.45);
+        }
+        .pill.amber {
+            color: #fbbf77;
+            border-color: rgba(251,191,119,0.2);
+        }
+        .pill.amber:hover {
+            color: #fcd9a0;
+            border-color: rgba(251,191,119,0.45);
+        }
+
+        /* stat row */
+        .stat-row {
             display: flex;
             gap: 32px;
             flex-wrap: wrap;
-            margin-bottom: 24px;
+            margin-bottom: 28px;
         }
-        .about-stat {
+        .stat {
             display: flex;
             flex-direction: column;
             gap: 3px;
         }
-        .about-stat-label {
+        .stat-label {
             font-size: 10px;
             color: #52525b;
             text-transform: uppercase;
             letter-spacing: 0.06em;
         }
-        .about-stat-value {
+        .stat-value {
             font-size: 20px;
             font-weight: 300;
             color: #fbbf77;
             font-variant-numeric: tabular-nums;
         }
-        .about-stat-unit {
+        .stat-unit {
             font-size: 11px;
             color: #71717a;
         }
-        .about-diagram {
-            margin: 28px 0;
-        }
-        .about-diagram img, .about-diagram svg {
-            max-width: 100%;
-            height: auto;
-            border-radius: 6px;
-        }
+
+        /* descriptor cards */
         .descriptor-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 16px;
+            gap: 12px;
             margin-bottom: 24px;
         }
         .descriptor-card {
@@ -146,39 +174,131 @@
             padding: 14px 16px;
         }
         .descriptor-name {
-            font-size: 11px;
+            font-size: 10px;
             font-weight: 600;
             color: #e4e4e7;
             text-transform: uppercase;
-            letter-spacing: 0.05em;
+            letter-spacing: 0.06em;
             margin-bottom: 6px;
         }
         .descriptor-desc {
             font-size: 11px;
             color: #71717a;
-            line-height: 1.5;
+            line-height: 1.55;
         }
-        .about-links {
+
+        /* code block */
+        .code-block {
+            background: rgba(0,0,0,0.35);
+            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 6px;
+            padding: 18px 20px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-size: 12px;
+            line-height: 1.7;
+            color: #a1a1aa;
+            margin-bottom: 20px;
+            overflow-x: auto;
+        }
+        .code-block .comment { color: #3f3f46; }
+        .code-block .cmd { color: #e4e4e7; }
+
+        /* step list */
+        .steps {
             display: flex;
-            flex-wrap: wrap;
+            flex-direction: column;
+            gap: 20px;
+            margin-bottom: 28px;
+        }
+        .step {
+            display: flex;
+            gap: 16px;
+            align-items: flex-start;
+        }
+        .step-num {
+            flex-shrink: 0;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: rgba(251,191,119,0.1);
+            border: 1px solid rgba(251,191,119,0.2);
+            color: #fbbf77;
+            font-size: 10px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-top: 2px;
+        }
+        .step-body { flex: 1; min-width: 0; }
+        .step-title {
+            font-size: 13px;
+            color: #e4e4e7;
+            margin-bottom: 4px;
+        }
+        .step-desc {
+            font-size: 12px;
+            color: #71717a;
+            line-height: 1.6;
+        }
+
+        /* contact card */
+        .contact-card {
+            background: rgba(20, 22, 28, 0.6);
+            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 10px;
+            padding: 28px 32px;
+            max-width: 480px;
+            margin-bottom: 32px;
+        }
+        .contact-name {
+            font-size: 18px;
+            font-weight: 400;
+            color: #f4f4f5;
+            margin-bottom: 4px;
+        }
+        .contact-bio {
+            font-size: 12px;
+            color: #71717a;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+        .contact-links {
+            display: flex;
+            flex-direction: column;
             gap: 10px;
-            margin-top: 6px;
         }
-        .about-link {
-            font-size: 11px;
-            color: #63a0ff;
+        .contact-link {
+            display: flex;
+            align-items: center;
+            gap: 10px;
             text-decoration: none;
-            padding: 4px 10px;
-            border: 1px solid rgba(99,160,255,0.2);
-            border-radius: 4px;
-            transition: border-color 0.12s, color 0.12s;
+            color: #a1a1aa;
+            font-size: 12px;
+            transition: color 0.12s;
         }
-        .about-link:hover {
-            color: #93c0ff;
-            border-color: rgba(99,160,255,0.4);
+        .contact-link:hover { color: #f4f4f5; }
+        .contact-link-icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.06);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 13px;
         }
 
         /* === runs panel === */
+        .runs-meta {
+            font-size: 11px;
+            color: #52525b;
+            margin-bottom: 24px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
         .run-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -209,10 +329,7 @@
             display: block;
             background: #0b0d10;
         }
-        .card-thumb-empty {
-            background: #0b0d10;
-            aspect-ratio: 1;
-        }
+        .card-thumb-empty { background: #0b0d10; aspect-ratio: 1; }
         .card-body { padding: 14px 16px 16px 16px; }
         .card-id {
             font-size: 12px;
@@ -247,6 +364,7 @@
             .tab-panel { padding: 28px 20px 64px 20px; }
             .page-title { font-size: 24px; }
             .descriptor-grid { grid-template-columns: 1fr; }
+            .contact-card { padding: 20px; }
         }
     </style>
 </head>
@@ -255,14 +373,74 @@
         <h1 class="page-title">
             <span class="title-prefix">biota</span>atlas
         </h1>
-        <div class="page-meta">{{ n_runs }} run{{ 's' if n_runs != 1 else '' }}</div>
+        <div class="page-tagline">quality-diversity search over Flow-Lenia creatures</div>
         <nav class="tabs">
-            <button class="tab-btn active" data-tab="runs">Runs</button>
-            <button class="tab-btn" data-tab="about">About</button>
+            <button class="tab-btn active" data-tab="about">About</button>
+            <button class="tab-btn" data-tab="runs">Runs</button>
+            <button class="tab-btn" data-tab="reproduce">Reproduce</button>
+            <button class="tab-btn" data-tab="contact">Contact</button>
+            <!-- v2.0.0: ecosystem tab
+            <button class="tab-btn" data-tab="ecosystem">Ecosystem</button>
+            -->
         </nav>
     </header>
 
-    <div class="tab-panel active" id="panel-runs">
+    <!-- === About === -->
+    <div class="tab-panel active" id="panel-about">
+        <div class="prose">
+            <h2>What is biota</h2>
+            <p>biota searches the parameter space of <a class="pill amber" href="https://arxiv.org/abs/2212.07906" target="_blank" style="display:inline;padding:2px 6px;border-radius:3px;font-size:inherit;">Flow-Lenia</a> - a continuous cellular automaton where matter is conserved by construction. Rather than finding a single best creature, it fills a behavioral grid where each cell holds the most compact creature with a particular phenotypic fingerprint. The result is a structured catalog of qualitatively distinct life-forms.</p>
+            <p>Each creature is a soliton: a stable, self-maintaining pattern that persists indefinitely given the right parameters. Mass conservation is what makes them viable across a wide parameter range - without it, most settings produce explosion or collapse within a few steps.</p>
+
+            <h2>The search algorithm</h2>
+            <p><a class="pill amber" href="https://arxiv.org/abs/1504.04909" target="_blank" style="display:inline;padding:2px 6px;border-radius:3px;font-size:inherit;">MAP-Elites</a> runs a loop: sample parameters, simulate a creature, measure its behavior, insert it into the matching archive cell if it beats whatever is already there. After thousands of rollouts the archive fills with creatures covering the behavioral space as broadly as possible - not optimizing toward one solution, but toward diversity.</p>
+            <p>Simulations run in parallel across a 3-node GPU cluster. One batch task evaluates B creatures as a single vectorized forward pass on one RTX 5060 Ti. The driver owns the archive and orchestrates the search; workers are stateless.</p>
+
+            <div class="stat-row">
+                <div class="stat">
+                    <div class="stat-label">archive capacity</div>
+                    <div class="stat-value">16,384 <span class="stat-unit">cells</span></div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">grid shape</div>
+                    <div class="stat-value">32 &times; 32 &times; 16</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">cluster throughput</div>
+                    <div class="stat-value">97 <span class="stat-unit">s / 500 rollouts</span></div>
+                </div>
+            </div>
+
+            <h2>Behavioral descriptors</h2>
+            <p>Three scalars measured from each rollout index the archive's three axes. All are empirically calibrated against real cluster runs, not derived from parameter values.</p>
+            <div class="descriptor-grid">
+                <div class="descriptor-card">
+                    <div class="descriptor-name">velocity</div>
+                    <div class="descriptor-desc">Mean center-of-mass displacement per step over the trailing 50 steps. Separates drifters from stationary creatures.</div>
+                </div>
+                <div class="descriptor-card">
+                    <div class="descriptor-name">gyradius</div>
+                    <div class="descriptor-desc">Mass-weighted RMS distance from the center of mass. Separates compact dots from spread-out rings and lattices.</div>
+                </div>
+                <div class="descriptor-card">
+                    <div class="descriptor-name">spectral entropy</div>
+                    <div class="descriptor-desc">Shannon entropy of the radially-averaged FFT spectrum. Separates smooth blobs from sharp-edged structured creatures.</div>
+                </div>
+            </div>
+
+            <h2>Further reading</h2>
+            <div class="pill-row">
+                <a class="pill" href="https://arxiv.org/abs/2212.07906" target="_blank">Flow-Lenia — Plantec et al. 2022</a>
+                <a class="pill" href="https://arxiv.org/abs/1504.04909" target="_blank">MAP-Elites — Mouret &amp; Clune 2015</a>
+                <a class="pill" href="https://arxiv.org/abs/2406.04235" target="_blank">Leniabreeder — Faldor &amp; Cully 2024</a>
+                <a class="pill amber" href="https://github.com/rkv0id/biota" target="_blank">github.com/rkv0id/biota</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- === Runs === -->
+    <div class="tab-panel" id="panel-runs">
+        <div class="runs-meta">{{ n_runs }} run{{ 's' if n_runs != 1 else '' }}</div>
         <div class="run-grid">
             {% for card in cards %}
             <a class="run-card" href="{{ card.run_id }}/view.html">
@@ -289,56 +467,99 @@
         </div>
     </div>
 
-    <div class="tab-panel" id="panel-about">
-        <div class="about-body">
-            <h2>What is this</h2>
-            <p>biota searches the parameter space of Flow-Lenia, a continuous cellular automaton where matter is conserved by construction. Rather than finding a single best creature, it fills a behavioral grid where each cell holds the most compact creature found with a particular phenotypic fingerprint. The result is a structured catalog of qualitatively distinct life-forms.</p>
-            <p>Each creature is a soliton: a stable, self-maintaining pattern that persists indefinitely given the right parameters. They move, rotate, and interact. Mass conservation is what makes them possible across a wide parameter range - without it, most settings produce explosion or collapse.</p>
+    <!-- === Reproduce === -->
+    <div class="tab-panel" id="panel-reproduce">
+        <div class="prose">
+            <h2>Run your own atlas</h2>
+            <p>biota is a self-contained CLI tool. You can run it on a laptop for quick iteration or across a Ray cluster for full-scale searches. The only hard dependencies are Python 3.12, PyTorch, and Ray.</p>
 
-            <h2>The search</h2>
-            <p>MAP-Elites runs a loop: sample parameters, simulate a creature for 300 steps, measure its behavior, and insert it into the matching archive cell if it is better than whatever is already there. After thousands of rollouts the archive fills with creatures covering the behavioral space as broadly as possible.</p>
-            <p>Each run dispatches batches of simulations in parallel across a 3-node GPU cluster. One batch task evaluates B creatures as a single vectorized forward pass on one RTX 5060 Ti, returning B results. The driver owns the archive; workers are stateless.</p>
-
-            <div class="about-stat-row">
-                <div class="about-stat">
-                    <div class="about-stat-label">archive capacity</div>
-                    <div class="about-stat-value">16,384 <span class="about-stat-unit">cells</span></div>
-                </div>
-                <div class="about-stat">
-                    <div class="about-stat-label">grid</div>
-                    <div class="about-stat-value">32 &times; 32 &times; 16</div>
-                </div>
-                <div class="about-stat">
-                    <div class="about-stat-label">cluster throughput</div>
-                    <div class="about-stat-value">97 <span class="about-stat-unit">s / 500 rollouts</span></div>
-                </div>
+            <h2>Install</h2>
+            <div class="code-block">
+<span class="comment"># Clone and install</span>
+<span class="cmd">git clone https://github.com/rkv0id/biota</span>
+<span class="cmd">cd biota</span>
+<span class="cmd">uv sync</span>
             </div>
 
-            <h2>Behavioral descriptors</h2>
-            <p>Three scalars, each measured empirically from the rollout rather than derived from the parameter values. Together they index the archive's three axes.</p>
-            <div class="descriptor-grid">
-                <div class="descriptor-card">
-                    <div class="descriptor-name">velocity</div>
-                    <div class="descriptor-desc">Mean center-of-mass displacement per step over the trailing 50 steps. Separates drifters from stationary creatures.</div>
-                </div>
-                <div class="descriptor-card">
-                    <div class="descriptor-name">gyradius</div>
-                    <div class="descriptor-desc">Mass-weighted RMS distance from the center of mass. Separates compact dots from spread-out rings and lattices.</div>
-                </div>
-                <div class="descriptor-card">
-                    <div class="descriptor-name">spectral entropy</div>
-                    <div class="descriptor-desc">Shannon entropy of the radially-averaged FFT spectrum of the final state. Separates smooth blobs from sharp-edged structured creatures.</div>
+            <h2>Quick start</h2>
+            <div class="steps">
+                <div class="step">
+                    <div class="step-num">1</div>
+                    <div class="step-body">
+                        <div class="step-title">Run a search</div>
+                        <div class="step-desc">The dev preset (64&times;64 grid, 200 steps) is fast enough for a laptop. No Ray needed.</div>
+                    </div>
                 </div>
             </div>
+            <div class="code-block">
+<span class="cmd">uv run biota search --preset dev --budget 200</span>
+            </div>
 
-            <h2>References</h2>
-            <div class="about-links">
-                <a class="about-link" href="https://arxiv.org/abs/2212.07906" target="_blank">Flow-Lenia (Plantec et al. 2022)</a>
-                <a class="about-link" href="https://arxiv.org/abs/1504.04909" target="_blank">MAP-Elites (Mouret &amp; Clune 2015)</a>
-                <a class="about-link" href="https://github.com/rkv0id/biota" target="_blank">github.com/rkv0id/biota</a>
+            <div class="steps">
+                <div class="step">
+                    <div class="step-num">2</div>
+                    <div class="step-body">
+                        <div class="step-title">Build the viewer</div>
+                        <div class="step-desc">Generates a self-contained HTML file for each run, plus an index.</div>
+                    </div>
+                </div>
+            </div>
+            <div class="code-block">
+<span class="cmd">python scripts/build_index.py</span>
+<span class="cmd">open runs/index.html</span>
+            </div>
+
+            <h2>GPU and cluster</h2>
+            <p>On Apple Silicon pass <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">--device mps --batch-size 32</code> for a meaningful speedup. On a CUDA cluster, use <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">--batch-size 64 --workers N</code> where N is the number of nodes. The standard preset (192&times;192, 300 steps) at B=64 on an RTX 5060 Ti cluster runs 500 rollouts in about 97 seconds.</p>
+            <div class="code-block">
+<span class="comment"># Single GPU, no Ray</span>
+<span class="cmd">uv run biota search --preset standard --budget 500 \</span>
+<span class="cmd">    --device cuda --batch-size 64</span>
+
+<span class="comment"># Multi-node Ray cluster</span>
+<span class="cmd">uv run biota search --ray-address head:6379 \</span>
+<span class="cmd">    --preset standard --budget 2000 \</span>
+<span class="cmd">    --device cuda --batch-size 64 --workers 3</span>
+            </div>
+
+            <h2>More detail</h2>
+            <div class="pill-row">
+                <a class="pill amber" href="https://github.com/rkv0id/biota" target="_blank">Full documentation on GitHub</a>
+                <a class="pill" href="https://github.com/rkv0id/biota/blob/main/README.md" target="_blank">README</a>
             </div>
         </div>
     </div>
+
+    <!-- === Contact === -->
+    <div class="tab-panel" id="panel-contact">
+        <div class="contact-card">
+            <div class="contact-name">Rami Kader</div>
+            <div class="contact-bio">Machine learning engineer. Interested in cellular automata, artificial life, evolutionary computing, and distributed systems.</div>
+            <div class="contact-links">
+                <a class="contact-link" href="https://github.com/rkv0id" target="_blank">
+                    <span class="contact-link-icon">gh</span>
+                    github.com/rkv0id
+                </a>
+                <a class="contact-link" href="https://www.linkedin.com/in/rami-kader/" target="_blank">
+                    <span class="contact-link-icon">in</span>
+                    linkedin.com/in/rami-kader
+                </a>
+                <a class="contact-link" href="mailto:ramy.kader.rk@gmail.com">
+                    <span class="contact-link-icon">@</span>
+                    ramy.kader.rk@gmail.com
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- v2.0.0 ecosystem panel - uncomment when ready
+    <div class="tab-panel" id="panel-ecosystem">
+        <div class="prose">
+            <h2>Ecosystem runs</h2>
+            <p>Coming in v2.0.0. Selected archive creatures spawned together on a shared large-grid Flow-Lenia simulation.</p>
+        </div>
+    </div>
+    -->
 
     <script>
     document.querySelectorAll('.tab-btn').forEach(function(btn) {
