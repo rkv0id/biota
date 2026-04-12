@@ -199,6 +199,7 @@
             color: #a1a1aa;
             margin-bottom: 20px;
             overflow-x: auto;
+            white-space: pre-wrap;
         }
         .code-block .comment { color: #3f3f46; }
         .code-block .cmd { color: #e4e4e7; }
@@ -474,12 +475,10 @@
             <p>biota is a self-contained CLI tool. You can run it on a laptop for quick iteration or across a Ray cluster for full-scale searches. The only hard dependencies are Python 3.12, PyTorch, and Ray.</p>
 
             <h2>Install</h2>
-            <div class="code-block">
-<span class="comment"># Clone and install</span>
+            <pre class="code-block"><span class="comment"># Clone and install</span>
 <span class="cmd">git clone https://github.com/rkv0id/biota</span>
 <span class="cmd">cd biota</span>
-<span class="cmd">uv sync</span>
-            </div>
+<span class="cmd">uv sync</span></pre>
 
             <h2>Quick start</h2>
             <div class="steps">
@@ -491,9 +490,7 @@
                     </div>
                 </div>
             </div>
-            <div class="code-block">
-<span class="cmd">uv run biota search --preset dev --budget 200</span>
-            </div>
+            <pre class="code-block"><span class="cmd">uv run biota search --preset dev --budget 200</span></pre>
 
             <div class="steps">
                 <div class="step">
@@ -504,23 +501,19 @@
                     </div>
                 </div>
             </div>
-            <div class="code-block">
-<span class="cmd">python scripts/build_index.py</span>
-<span class="cmd">open runs/index.html</span>
-            </div>
+            <pre class="code-block"><span class="cmd">python scripts/build_index.py</span>
+<span class="cmd">open runs/index.html</span></pre>
 
             <h2>GPU and cluster</h2>
             <p>On Apple Silicon pass <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">--device mps --batch-size 32</code> for a meaningful speedup. On a CUDA cluster, use <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">--batch-size 64 --workers N</code> where N is the number of nodes. The standard preset (192&times;192, 300 steps) at B=64 on an RTX 5060 Ti cluster runs 500 rollouts in about 97 seconds.</p>
-            <div class="code-block">
-<span class="comment"># Single GPU, no Ray</span>
+            <pre class="code-block"><span class="comment"># Single GPU, no Ray</span>
 <span class="cmd">uv run biota search --preset standard --budget 500 \</span>
 <span class="cmd">    --device cuda --batch-size 64</span>
 
 <span class="comment"># Multi-node Ray cluster</span>
 <span class="cmd">uv run biota search --ray-address head:6379 \</span>
 <span class="cmd">    --preset standard --budget 2000 \</span>
-<span class="cmd">    --device cuda --batch-size 64 --workers 3</span>
-            </div>
+<span class="cmd">    --device cuda --batch-size 64 --workers 3</span></pre>
 
             <h2>More detail</h2>
             <div class="pill-row">
