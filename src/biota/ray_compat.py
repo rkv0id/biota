@@ -32,7 +32,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from biota.search.result import CellCoord, ParamDict, RolloutResult
-from biota.search.rollout import RolloutConfig, rollout
+from biota.search.rollout import RolloutConfig, rollout_batch
 
 # === module-level state (singleton because Ray itself is a singleton) ===
 
@@ -47,36 +47,39 @@ _state: dict[str, Any] = {
 
 @dataclass
 class RolloutHandle:
-    """Opaque handle to an in-flight rollout. Treat as a black box."""
+    """Opaque handle to an in-flight batch. Treat as a black box.
 
-    _result: RolloutResult | None
-    _ray_ref: Any  # ray.ObjectRef[RolloutResult] in ray mode, None in no_ray mode
+    Resolves to a list[RolloutResult] - one result per rollout in the batch.
+    """
+
+    _result: list[RolloutResult] | None
+    _ray_ref: Any  # ray.ObjectRef[list[RolloutResult]] in ray mode, None otherwise
 
 
 def init(
-    num_workers: int | None = None,
     *,
     local_ray: bool = False,
     ray_address: str | None = None,
 ) -> None:
-    """Initialize the runtime. Must be called once before any submit_rollout.
+    """Initialize the runtime. Must be called once before any submit_batch.
 
     Three modes, selected by the flags:
 
-    - **default (no flags)**: no Ray. Rollouts run synchronously in the driver
+    - **default (no flags)**: no Ray. Batches run synchronously in the driver
       process. Zero Ray startup overhead, ideal for laptop dev iteration and
       for CI where parallelism comes from pytest itself.
 
     - **local_ray=True**: start a fresh Ray instance in the driver process.
-      num_workers caps the parallelism if set; if None, Ray uses its default
-      (typically detected CPU count).
+      Ray uses its default worker count (typically detected CPU count). To
+      control the number of workers, start Ray manually before calling
+      biota search with --local-ray.
 
     - **ray_address=<str>**: attach to an already-running Ray cluster at the
       given address. Value is passed verbatim to ray.init(address=...). Use
       "host:port" for a GCS-level connection from the same network, or
-      "ray://host:port" for Ray Client protocol. num_workers is ignored when
-      attaching because cluster resources were fixed at 'ray start' time;
-      passing num_cpus to a cluster-connecting ray.init() raises ValueError.
+      "ray://host:port" for Ray Client protocol. Cluster resources were fixed
+      at 'ray start' time; passing num_cpus to a cluster-connecting ray.init()
+      raises ValueError, so we never pass it.
 
     local_ray and ray_address are mutually exclusive. Passing both raises
     ValueError. Passing neither is the no-ray default.
@@ -103,30 +106,30 @@ def init(
     import ray
 
     if not ray.is_initialized():
-        init_kwargs = _build_ray_init_kwargs(num_workers=num_workers, ray_address=ray_address)
+        init_kwargs = _build_ray_init_kwargs(ray_address=ray_address)
         ray.init(**init_kwargs)
     _state["mode"] = "ray"
     _state["initialized"] = True
 
 
-def _build_ray_init_kwargs(num_workers: int | None, ray_address: str | None) -> dict[str, Any]:
+def _build_ray_init_kwargs(ray_address: str | None) -> dict[str, Any]:
     """Build the kwargs dict to pass to ray.init() based on our mode flags.
 
     Extracted as a pure function so it can be unit-tested without importing
-    ray or spinning up a cluster. The branching logic is small enough that
-    directly testing it is overkill, but we had two real production bugs in
-    this branching already, so
-    the tiny test surface is worth it.
+    ray or spinning up a cluster. We had two real production bugs in this
+    branching, so the small test surface is worth it.
 
     Rules:
-    - If ray_address is set, pass address=<value> and never num_cpus
-      (ray.init raises ValueError if both are given when attaching).
-    - If ray_address is None, pass num_cpus=num_workers for fresh local Ray.
+    - If ray_address is set, pass address=<value> only (ray.init raises
+      ValueError if num_cpus is also given when attaching to a cluster).
+    - If ray_address is None (fresh local Ray), pass no num_cpus and let
+      Ray detect the core count. Worker count is controlled at 'ray start'
+      time, not in the search CLI.
     - Always pass ignore_reinit_error=False so double-init is a loud error.
     """
     if ray_address is not None:
         return {"address": ray_address, "ignore_reinit_error": False}
-    return {"num_cpus": num_workers, "ignore_reinit_error": False}
+    return {"ignore_reinit_error": False}
 
 
 def shutdown() -> None:
@@ -149,50 +152,44 @@ def is_ray_active() -> bool:
     return _state["initialized"] and _state["mode"] == "ray"
 
 
-def submit_rollout(
-    params: ParamDict,
-    seed: int,
+def submit_batch(
+    params_list: list[ParamDict],
+    seeds: list[int],
     config: RolloutConfig,
     device: str = "cpu",
-    parent_cell: CellCoord | None = None,
-    gpus_per_rollout: float = 1.0,
+    parent_cells: list[CellCoord | None] | None = None,
 ) -> RolloutHandle:
-    """Submit one rollout for execution and return an opaque handle.
+    """Submit a batch of rollouts for execution and return an opaque handle.
 
-    In no_ray mode this runs the rollout synchronously and returns a handle
+    In no_ray mode this runs the batch synchronously and returns a handle
     that's already resolved. In ray mode this fires a Ray task and returns a
     handle wrapping the ObjectRef.
 
-    The same handle type works for both modes; wait_for_completed knows how
-    to drain it.
-
-    gpus_per_rollout controls Ray's GPU allocation per task and is ignored in
-    no_ray mode and on non-CUDA devices. Default 1.0 means one rollout per
-    GPU. Lower values (e.g. 0.33) enable GPU sharing across concurrent
-    rollouts via fractional num_gpus allocation. See
-    _num_gpus_for_device() for the full rationale.
+    The handle resolves to list[RolloutResult], one per element of params_list.
+    CUDA batches declare num_gpus=1 per task - the batch fills the GPU directly
+    via vectorized forward pass, so fractional GPU allocation is not needed.
     """
     _require_initialized()
 
     if _state["mode"] == "no_ray":
-        result = rollout(params, seed, config, device=device, parent_cell=parent_cell)
-        return RolloutHandle(_result=result, _ray_ref=None)
+        results = rollout_batch(
+            params_list, seeds, config, device=device, parent_cells=parent_cells
+        )
+        return RolloutHandle(_result=results, _ray_ref=None)
 
     # Ray mode
-    ref = _get_rollout_remote(device, gpus_per_rollout).remote(
-        params, seed, config, device, parent_cell
-    )
+    ref = _get_batch_remote(device).remote(params_list, seeds, config, device, parent_cells)
     return RolloutHandle(_result=None, _ray_ref=ref)
 
 
 def wait_for_completed(
     handles: list[RolloutHandle], min_completed: int = 1
-) -> tuple[list[RolloutResult], list[RolloutHandle]]:
+) -> tuple[list[list[RolloutResult]], list[RolloutHandle]]:
     """Block until at least min_completed handles have results, then return.
 
-    Returns (completed_results, still_pending_handles). The completed list
-    contains the actual RolloutResult objects; the still_pending list
-    contains handles to keep waiting on.
+    Returns (completed_batches, still_pending_handles). Each element of
+    completed_batches is a list[RolloutResult] from one completed batch
+    dispatch. The still_pending list contains handles to keep waiting on.
 
     In no_ray mode, every handle is already resolved, so this returns all of
     them in one call regardless of min_completed.
@@ -204,22 +201,20 @@ def wait_for_completed(
         raise ValueError("wait_for_completed needs at least one handle")
 
     if _state["mode"] == "no_ray":
-        results = [h._result for h in handles if h._result is not None]
-        return results, []
+        batches = [h._result for h in handles if h._result is not None]
+        return batches, []
 
-    # Ray mode: split handles into ones that are resolved (cached) and not.
-    # In practice, in ray mode every handle has a ref and no cached _result,
-    # so we just call ray.wait on the full list.
+    # Ray mode: call ray.wait on the full ref list, then collect completed batches.
     import ray
 
     refs = [h._ray_ref for h in handles]
     target = min(min_completed, len(refs))
     ready, not_ready = ray.wait(refs, num_returns=target)
 
-    completed_results: list[RolloutResult] = ray.get(ready)
+    completed_batches: list[list[RolloutResult]] = ray.get(ready)
     not_ready_set = set(id(r) for r in not_ready)
     still_pending = [h for h in handles if id(h._ray_ref) in not_ready_set]
-    return completed_results, still_pending
+    return completed_batches, still_pending
 
 
 # === internals ===
@@ -230,87 +225,58 @@ def _require_initialized() -> None:
         raise RuntimeError("ray_compat not initialized; call init() first")
 
 
-def _rollout_remote_impl(
-    params: ParamDict,
-    seed: int,
+def _batch_remote_impl(
+    params_list: list[ParamDict],
+    seeds: list[int],
     config: RolloutConfig,
     device: str,
-    parent_cell: CellCoord | None,
-) -> RolloutResult:
-    """The function body that becomes a Ray task. Lives outside the decorator
-    so it's importable for testing without needing Ray.
+    parent_cells: list[CellCoord | None] | None,
+) -> list[RolloutResult]:
+    """The function body that becomes a Ray batch task.
+
+    Lives outside the decorator so it's importable for testing without Ray.
+    Returns list[RolloutResult], one per element of params_list.
     """
-    return rollout(params, seed, config, device=device, parent_cell=parent_cell)
+    return rollout_batch(params_list, seeds, config, device=device, parent_cells=parent_cells)
 
 
-def _num_gpus_for_device(device: str, gpus_per_rollout: float = 1.0) -> float:
-    """Map a torch device string and a per-rollout GPU fraction to the Ray
-    num_gpus resource count.
+def _num_gpus_for_device(device: str) -> float:
+    """Ray num_gpus for a batch task on the given device.
 
-    CUDA devices need num_gpus > 0 so Ray schedules the task onto a GPU-bearing
-    worker and sets CUDA_VISIBLE_DEVICES correctly. The fractional value
-    enables GPU sharing: with gpus_per_rollout=0.33, Ray schedules ~3 rollouts
-    onto the same GPU concurrently (Ray's accounting is logical; actual
-    sharing happens via CUDA streams). Memory is not partitioned, so the
-    workload must fit multiple instances in VRAM - biota's Flow-Lenia state
-    is kilobytes per rollout so this is fine.
+    CUDA: 1.0 - the batch fills the whole GPU via the vectorized forward pass.
+    Fractional allocation (the old gpus_per_rollout approach) is superseded
+    by batch_size: the batch itself controls GPU utilisation, so each task
+    legitimately owns one GPU for its duration.
 
-    CPU and MPS always return 0.0 regardless of gpus_per_rollout.
+    CPU and MPS: 0.0. MPS is macOS-local and cannot be scheduled through
+    Ray's resource system; it works only when the Ray worker happens to be on
+    the same machine as the MPS device, which on macOS it always is.
 
     Pure function for testability.
     """
-    if not device.startswith("cuda"):
-        return 0.0
-    return gpus_per_rollout
+    return 1.0 if device.startswith("cuda") else 0.0
 
 
-def _rollout_remote_cache_key(device: str, gpus_per_rollout: float) -> tuple[str, float]:
-    """Cache key for the lazily-built Ray remote wrappers.
-
-    Different (device-class, num_gpus) pairs need different @ray.remote
-    decorations, so we key on both. CPU normalizes to a single key
-    regardless of gpus_per_rollout (since CPU tasks ignore num_gpus).
-    CUDA keys on the actual num_gpus value so changing gpus_per_rollout
-    between submits gets a fresh decorated remote.
-
-    Pure function for testability.
-    """
-    if not device.startswith("cuda"):
-        return ("cpu", 0.0)
-    return ("cuda", gpus_per_rollout)
+# Cached Ray remote wrappers, one per device class. Built lazily on first
+# access via _get_batch_remote() so `import ray` is deferred until needed.
+# In no_ray mode this cache is never populated.
+_batch_remote_cache: dict[str, Any] = {}
 
 
-# Cached Ray remote wrappers, one per (device-class, num_gpus) pair. Built
-# lazily on first access via _get_rollout_remote() so `import ray` is
-# deferred until actually needed. In no_ray mode this cache is never
-# populated.
-_rollout_remote_cache: dict[tuple[str, float], Any] = {}
-
-
-def _get_rollout_remote(device: str, gpus_per_rollout: float = 1.0) -> Any:
-    """Return the Ray-remote-decorated version of _rollout_remote_impl for the
-    given device class and GPU fraction, building it on first call. This is
-    the only thing that triggers `import ray` in normal use.
+def _get_batch_remote(device: str) -> Any:
+    """Return the Ray-remote-decorated version of _batch_remote_impl for the
+    given device class, building it on first call.
 
     Device handling:
-
-    - "cpu" -> ray.remote(num_gpus=0)(impl). CPU-only task, Ray keeps
-      CUDA_VISIBLE_DEVICES clear. gpus_per_rollout is ignored.
-    - "cuda" or "cuda:N" -> ray.remote(num_gpus=gpus_per_rollout)(impl).
-      Task requires the specified fraction of a GPU. With 1.0 (default),
-      one rollout per GPU. With 0.33, three rollouts share one GPU via
-      CUDA streams; Ray's accounting is logical and memory is not
-      partitioned.
-    - "mps" -> ray.remote(num_gpus=0)(impl). MPS is macOS-local; there's no
-      way to schedule MPS tasks through Ray's resource system. MPS + Ray is
-      effectively unsupported but we don't error out here; the rollout will
-      work if the Ray worker happens to be on the same machine as an MPS
-      device, which on macOS it always is.
+    - "cpu" or "mps": ray.remote(num_gpus=0). No GPU resource declared.
+    - "cuda" or "cuda:N": ray.remote(num_gpus=1). Task owns one GPU for the
+      duration of the batch; batch_size controls utilisation within that GPU.
     """
-    key = _rollout_remote_cache_key(device, gpus_per_rollout)
-    if key not in _rollout_remote_cache:
+    # Normalise to device class for the cache key
+    key = "cuda" if device.startswith("cuda") else device
+    if key not in _batch_remote_cache:
         import ray
 
-        num_gpus = _num_gpus_for_device(device, gpus_per_rollout)
-        _rollout_remote_cache[key] = ray.remote(num_gpus=num_gpus)(_rollout_remote_impl)
-    return _rollout_remote_cache[key]
+        num_gpus = _num_gpus_for_device(device)
+        _batch_remote_cache[key] = ray.remote(num_gpus=num_gpus)(_batch_remote_impl)
+    return _batch_remote_cache[key]

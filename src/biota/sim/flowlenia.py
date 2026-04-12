@@ -94,11 +94,66 @@ class FlowLenia:
         new_A2 = self._reintegration(A2, F_flow)
         return new_A2.unsqueeze(-1)
 
+    def step_batch(self, A: torch.Tensor) -> torch.Tensor:
+        """Vectorized step over a batch of states.
+
+        A: (B, H, W, 1) -> (B, H, W, 1)
+
+        Runs B Flow-Lenia simulations in one forward pass. All operations
+        broadcast over the leading batch dimension. Memory scales linearly
+        with B; at standard preset (192x192) each element is ~150KB so B=128
+        fits comfortably in 16GB VRAM.
+        """
+        B = A.shape[0]
+        A2 = A[:, :, :, 0]  # (B, H, W)
+
+        # Convolve each batch element with all K kernels.
+        # fA: (B, H, W) -> unsqueeze to (B, 1, H, W)
+        # _fK: (K, H, W) -> unsqueeze to (1, K, H, W)
+        # product: (B, K, H, W); ifft2 over last two dims
+        fA = torch.fft.fft2(A2)
+        U = torch.fft.ifft2(
+            self._fK.unsqueeze(0) * fA.unsqueeze(1), dim=(-2, -1)
+        ).real  # (B, K, H, W)
+
+        m = self.params.m.view(1, -1, 1, 1)
+        s = self.params.s.view(1, -1, 1, 1)
+        h = self.params.h.view(1, -1, 1, 1)
+        G = (torch.exp(-(((U - m) / s) ** 2) / 2.0) * 2.0 - 1.0) * h
+        U_sum = G.sum(dim=1)  # (B, H, W)
+
+        # Sobel over the batch: reshape to (B, 1, H, W) for F.conv2d
+        nabla_U = self._sobel_batch(U_sum)  # (B, 2, H, W)
+        nabla_A = self._sobel_batch(A2)  # (B, 2, H, W)
+
+        alpha = torch.clamp(A2**2, 0.0, 1.0)  # (B, H, W)
+
+        # Flow: (B, 2, H, W)
+        alpha4 = alpha.unsqueeze(1)
+        F_flow = nabla_U * (1.0 - alpha4) - nabla_A * alpha4
+
+        new_A2 = self._reintegration_batch(A2, F_flow, B)  # (B, H, W)
+        return new_A2.unsqueeze(-1)
+
     def rollout(self, A0: torch.Tensor, steps: int) -> torch.Tensor:
         A = A0
         for _ in range(steps):
             A = self.step(A)
         return A
+
+    def kernel_tensors(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Return the pre-built simulation tensors needed for batched execution.
+
+        Returns (fK, sobel_kx, sobel_ky, pos) where:
+          fK:       (K, H, W) complex - Fourier-space kernels for this param set
+          sobel_kx: (1, 1, 3, 3) - x-Sobel kernel (param-independent)
+          sobel_ky: (1, 1, 3, 3) - y-Sobel kernel (param-independent)
+          pos:      (2, H, W)    - position grid (param-independent)
+
+        Used by rollout_batch to extract per-element fK tensors and borrow the
+        shared param-independent tensors without private attribute access.
+        """
+        return self._fK, self._sobel_kx, self._sobel_ky, self._pos
 
     def rollout_with_mass(self, A0: torch.Tensor, steps: int) -> tuple[torch.Tensor, torch.Tensor]:
         masses = torch.empty(steps + 1, dtype=A0.dtype)
@@ -176,6 +231,21 @@ class FlowLenia:
         gy = F.conv2d(field_4d, self._sobel_ky, padding=1)[0, 0]
         return torch.stack([gy, gx], dim=0)
 
+    def _sobel_batch(self, field: torch.Tensor) -> torch.Tensor:
+        """Sobel gradients over a batch of 2D fields.
+
+        field: (B, H, W) -> (B, 2, H, W) stacked as [gy, gx].
+
+        F.conv2d treats the first dimension as the batch, so we reshape
+        to (B, 1, H, W), run both kernels, and stack the gradient channels.
+        """
+        B = field.shape[0]
+        field_4d = field.unsqueeze(1)  # (B, 1, H, W)
+        gx = F.conv2d(field_4d, self._sobel_kx, padding=1)[:, 0]  # (B, H, W)
+        gy = F.conv2d(field_4d, self._sobel_ky, padding=1)[:, 0]  # (B, H, W)
+        _ = B  # used implicitly via field_4d shape
+        return torch.stack([gy, gx], dim=1)  # (B, 2, H, W)
+
     def _reintegration(self, A: torch.Tensor, flow: torch.Tensor) -> torch.Tensor:
         """Pull-pattern reintegration tracking via (2*dd+1)^2 vectorized rolls.
 
@@ -212,4 +282,42 @@ class FlowLenia:
                 area = (sz_clipped[0] * sz_clipped[1]) / denom
                 new_A = new_A + Ar * area
 
+        return new_A
+
+    def _reintegration_batch(self, A: torch.Tensor, flow: torch.Tensor, B: int) -> torch.Tensor:
+        """Batch reintegration tracking.
+
+        A: (B, H, W), flow: (B, 2, H, W) -> (B, H, W)
+
+        Same pull-pattern logic as _reintegration but vectorized over the
+        leading batch dimension. _pos (2, H, W) is unsqueezed to (1, 2, H, W)
+        to broadcast against (B, 2, H, W). Roll operations shift the two
+        spatial dims (1, 2) for A and (2, 3) for mu.
+        """
+        cfg = self.config
+        dd = cfg.dd
+        sigma = cfg.sigma
+        ma = dd - sigma
+
+        pos = self._pos.unsqueeze(0)  # (1, 2, H, W) broadcasts over B
+
+        clipped_flow = torch.clamp(cfg.dt * flow, -ma, ma)  # (B, 2, H, W)
+        mu = pos + clipped_flow
+        mu = torch.clamp(mu, sigma, cfg.grid - sigma)  # (B, 2, H, W)
+
+        new_A = torch.zeros_like(A)
+        sigma_clip_max = min(1.0, 2.0 * sigma)
+        denom = 4.0 * sigma * sigma
+
+        for dx in range(-dd, dd + 1):
+            for dy in range(-dd, dd + 1):
+                Ar = torch.roll(A, shifts=(dx, dy), dims=(1, 2))  # (B, H, W)
+                mur = torch.roll(mu, shifts=(dx, dy), dims=(2, 3))  # (B, 2, H, W)
+                dpmu = torch.abs(pos - mur)  # (B, 2, H, W)
+                sz = 0.5 - dpmu + sigma
+                sz_clipped = torch.clamp(sz, 0.0, sigma_clip_max)
+                area = (sz_clipped[:, 0] * sz_clipped[:, 1]) / denom  # (B, H, W)
+                new_A = new_A + Ar * area
+
+        _ = B  # shape enforced by A; explicit parameter aids callers' type clarity
         return new_A

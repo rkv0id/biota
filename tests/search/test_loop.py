@@ -41,14 +41,15 @@ class SessionSearch(TypedDict):
 
 
 def _cheap_config(budget: int = 10, random_phase_size: int = 5, **kwargs: Any) -> SearchConfig:
+    defaults: dict[str, Any] = {"batch_size": 1, "workers": 1}
+    defaults.update(kwargs)
     return SearchConfig(
         rollout=RolloutConfig(sim=SimConfig(grid=32, kernels=10), steps=110),
         budget=budget,
         random_phase_size=random_phase_size,
-        max_concurrent=2,
         base_seed=42,
         checkpoint_every=3,
-        **kwargs,
+        **defaults,
     )
 
 
@@ -197,23 +198,21 @@ def test_random_phase_is_deterministic(tmp_path: Path) -> None:
 # === SearchConfig validation ===
 
 
-def test_searchconfig_rejects_zero_gpus_per_rollout() -> None:
-    """gpus_per_rollout must be strictly positive. Zero is meaningless
-    (Ray would never schedule the task) and indicates a CLI misuse."""
-    with pytest.raises(ValueError, match="gpus_per_rollout"):
-        _cheap_config(gpus_per_rollout=0.0)
+def test_searchconfig_rejects_zero_batch_size() -> None:
+    with pytest.raises(ValueError, match="batch_size"):
+        _cheap_config(batch_size=0)
 
 
-def test_searchconfig_rejects_negative_gpus_per_rollout() -> None:
-    with pytest.raises(ValueError, match="gpus_per_rollout"):
-        _cheap_config(gpus_per_rollout=-0.5)
+def test_searchconfig_rejects_zero_workers() -> None:
+    with pytest.raises(ValueError, match="workers"):
+        _cheap_config(workers=0)
 
 
-def test_searchconfig_accepts_fractional_gpus_per_rollout() -> None:
-    cfg = _cheap_config(gpus_per_rollout=0.33)
-    assert cfg.gpus_per_rollout == 0.33
-
-
-def test_searchconfig_default_gpus_per_rollout_is_one() -> None:
+def test_searchconfig_default_batch_size_is_one() -> None:
     cfg = _cheap_config()
-    assert cfg.gpus_per_rollout == 1.0
+    assert cfg.batch_size == 1
+
+
+def test_searchconfig_default_workers_is_one() -> None:
+    cfg = _cheap_config()
+    assert cfg.workers == 1

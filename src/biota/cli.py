@@ -144,7 +144,24 @@ def search_cmd(
     random_phase: int = typer.Option(
         200, "--random-phase", help="Random sampling rollouts before mutation."
     ),
-    max_concurrent: int = typer.Option(8, "--max-concurrent", help="Maximum in-flight rollouts."),
+    batch_size: int = typer.Option(
+        1,
+        "--batch-size",
+        help=(
+            "Rollouts evaluated simultaneously per dispatch. Default 1 matches "
+            "pre-v0.4.0 behaviour. On cuda/mps, values of 32-128 give meaningful "
+            "speedup. On cpu, leave at 1."
+        ),
+    ),
+    workers: int = typer.Option(
+        1,
+        "--workers",
+        help=(
+            "Concurrent batch dispatches in flight. Default 1 = synchronous "
+            "MAP-Elites (maximally fresh archive). Higher values trade archive "
+            "freshness for throughput on multi-node cluster setups."
+        ),
+    ),
     local_ray: bool = typer.Option(
         False,
         "--local-ray",
@@ -160,22 +177,7 @@ def search_cmd(
             "Mutually exclusive with --local-ray."
         ),
     ),
-    num_workers: int | None = typer.Option(
-        None,
-        "--num-workers",
-        help="Worker cap for --local-ray (ignored when attaching to a cluster).",
-    ),
     device: str = typer.Option("cpu", "--device", help="Torch device: cpu, mps, or cuda."),
-    gpus_per_rollout: float = typer.Option(
-        1.0,
-        "--gpus-per-rollout",
-        help=(
-            "Fraction of a GPU each rollout reserves via Ray's num_gpus accounting. "
-            "Default 1.0 (one rollout per GPU). Lower values like 0.33 enable GPU "
-            "sharing across concurrent rollouts via CUDA streams. Only meaningful "
-            "with --device cuda and Ray (--local-ray or --ray-address). Must be > 0."
-        ),
-    ),
     base_seed: int = typer.Option(0, "--base-seed", help="Seed for reproducibility."),
     checkpoint_every: int = typer.Option(
         100, "--checkpoint-every", help="Checkpoint cadence in completed rollouts."
@@ -202,12 +204,11 @@ def search_cmd(
         rollout=rollout_cfg,
         budget=budget,
         random_phase_size=random_phase,
-        max_concurrent=max_concurrent,
+        batch_size=batch_size,
+        workers=workers,
         local_ray=local_ray,
         ray_address=_normalize_ray_address(ray_address),
-        num_workers=num_workers,
         device=device,
-        gpus_per_rollout=gpus_per_rollout,
         base_seed=base_seed,
         checkpoint_every=checkpoint_every,
     )

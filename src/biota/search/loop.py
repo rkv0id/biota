@@ -42,7 +42,7 @@ from biota.ray_compat import (
     RolloutHandle,
     init,
     shutdown,
-    submit_rollout,
+    submit_batch,
     wait_for_completed,
 )
 from biota.search.archive import Archive, InsertionStatus
@@ -67,8 +67,20 @@ class SearchConfig:
     """Number of rollouts sampled uniformly from the prior before mutation
     kicks in. Seeds the archive with diversity."""
 
-    max_concurrent: int = 8
-    """Maximum number of in-flight rollouts at any time."""
+    batch_size: int = 1
+    """Rollouts evaluated simultaneously per dispatch. Default 1 matches the
+    pre-v0.4.0 behaviour. On cuda/mps, values of 32-128 give meaningful
+    speedup by filling the GPU with a single vectorized forward pass. On cpu,
+    leave at 1 - PyTorch already uses all threads internally for tensor ops
+    and adding Python-level batch dispatch competes for the same cores."""
+
+    workers: int = 1
+    """Concurrent batch dispatches in flight. Controls the archive-freshness
+    vs throughput tradeoff, not just utilisation. Default 1 = synchronous
+    MAP-Elites: each batch completes and updates the archive before the next
+    batch's parents are selected, giving maximally fresh parent selection.
+    Higher values trade freshness for throughput on multi-node cluster
+    setups. Effective concurrent rollouts = workers * batch_size."""
 
     local_ray: bool = False
     """If True, start a fresh local Ray instance in the driver process and run
@@ -81,22 +93,8 @@ class SearchConfig:
     local_ray. When neither local_ray nor ray_address is set, rollouts run
     synchronously in the driver (the no-Ray default)."""
 
-    num_workers: int | None = None
-    """Number of Ray workers (None = ray default). Only meaningful with
-    local_ray=True; ignored when attaching to an existing cluster (the
-    cluster's resources were fixed at 'ray start' time)."""
-
     device: str = "cpu"
     """Torch device for the rollouts: 'cpu', 'mps', or 'cuda'."""
-
-    gpus_per_rollout: float = 1.0
-    """Fraction of a GPU each rollout reserves via Ray's num_gpus accounting.
-    Only meaningful when device='cuda' and Ray is in use. Default 1.0 means
-    one rollout per GPU. Lower values (e.g. 0.33) enable GPU sharing across
-    concurrent rollouts via CUDA streams; Ray's accounting is logical and
-    memory is not partitioned, so the workload must fit multiple instances
-    in VRAM. Biota's Flow-Lenia state is kilobytes per rollout so this is
-    fine. Must be > 0."""
 
     checkpoint_every: int = 100
     """Rewrite the archive checkpoint after this many completed rollouts."""
@@ -112,8 +110,10 @@ class SearchConfig:
             raise ValueError(
                 "local_ray and ray_address are mutually exclusive; pass one or the other, not both"
             )
-        if self.gpus_per_rollout <= 0:
-            raise ValueError(f"gpus_per_rollout must be > 0, got {self.gpus_per_rollout}")
+        if self.batch_size < 1:
+            raise ValueError(f"batch_size must be >= 1, got {self.batch_size}")
+        if self.workers < 1:
+            raise ValueError(f"workers must be >= 1, got {self.workers}")
 
 
 # === events ===
@@ -209,7 +209,6 @@ def search(
     )
 
     init(
-        num_workers=config.num_workers,
         local_ray=config.local_ray,
         ray_address=config.ray_address,
     )
@@ -316,48 +315,69 @@ def _submit_phase(
     next_seed: int,
     stop_seed: int,
 ) -> tuple[int, list[RolloutHandle]]:
-    """Submit rollouts until next_seed reaches stop_seed, draining as needed.
+    """Submit batches until next_seed reaches stop_seed, draining as needed.
+
+    Accumulates batch_size candidates, dispatches one batch handle, then
+    checks whether workers handles are already in flight and drains if so.
+    Budget is tracked in rollout units; each dispatch covers batch_size
+    rollouts (last batch may be smaller if stop_seed - next_seed < batch_size).
 
     Returns the new (next_seed, in_flight) state.
     """
+    batch_size = state.config.batch_size
+
     while next_seed < stop_seed:
-        while len(in_flight) >= state.config.max_concurrent:
+        # Drain if we have reached the workers cap
+        while len(in_flight) >= state.config.workers:
             in_flight = _drain_some(state, in_flight)
 
-        params, parent_cell = sample_fn(state, next_seed)
-        handle = submit_rollout(
-            params=params,
-            seed=next_seed,
+        # Build a batch of up to batch_size candidates
+        this_batch_size = min(batch_size, stop_seed - next_seed)
+        params_list: list[ParamDict] = []
+        seeds: list[int] = []
+        parent_cells: list[CellCoord | None] = []
+        for i in range(this_batch_size):
+            params, parent_cell = sample_fn(state, next_seed + i)
+            params_list.append(params)
+            seeds.append(next_seed + i)
+            parent_cells.append(parent_cell)
+
+        handle = submit_batch(
+            params_list=params_list,
+            seeds=seeds,
             config=state.config.rollout,
             device=state.config.device,
-            parent_cell=parent_cell,
-            gpus_per_rollout=state.config.gpus_per_rollout,
+            parent_cells=parent_cells,
         )
         in_flight.append(handle)
-        next_seed += 1
+        next_seed += this_batch_size
 
     return next_seed, in_flight
 
 
 def _drain_some(state: _LoopState, in_flight: list[RolloutHandle]) -> list[RolloutHandle]:
-    """Wait for at least one in-flight rollout to complete, process all the
-    completed ones, and return the remaining handles.
+    """Wait for at least one in-flight batch to complete, process all results
+    from completed batches, and return the remaining handles.
+
+    Each completed handle resolves to a list[RolloutResult] (one per rollout
+    in that batch). All results are processed in arrival order.
     """
-    completed_results, still_pending = wait_for_completed(in_flight, min_completed=1)
-    for result in completed_results:
-        state.completed += 1
-        status = state.archive.try_insert(result)
-        _append_event_log(state, result, status)
-        _emit(
-            state,
-            RolloutCompleted(
-                result=result,
-                insertion_status=status,
-                completed_count=state.completed,
-            ),
-        )
-        if state.completed % state.config.checkpoint_every == 0:
-            _write_archive_checkpoint(state)
+    completed_batches, still_pending = wait_for_completed(in_flight, min_completed=1)
+    for batch in completed_batches:
+        for result in batch:
+            state.completed += 1
+            status = state.archive.try_insert(result)
+            _append_event_log(state, result, status)
+            _emit(
+                state,
+                RolloutCompleted(
+                    result=result,
+                    insertion_status=status,
+                    completed_count=state.completed,
+                ),
+            )
+            if state.completed % state.config.checkpoint_every == 0:
+                _write_archive_checkpoint(state)
     return still_pending
 
 
@@ -505,10 +525,10 @@ def _config_to_jsonable(config: SearchConfig) -> dict[str, Any]:
     for key in (
         "budget",
         "random_phase_size",
-        "max_concurrent",
+        "batch_size",
+        "workers",
         "local_ray",
         "ray_address",
-        "num_workers",
         "device",
         "checkpoint_every",
         "base_seed",

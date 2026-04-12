@@ -283,12 +283,348 @@ def rollout(
     )
 
 
+def _step_stats_batch(states: torch.Tensor) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Compute COM and bbox-fraction for a batch of states in one pass.
+
+    states: (B, H, W, 1) -> three (B,) float32 arrays: com_y, com_x, bbox_frac.
+
+    Transfers the whole batch to CPU once rather than one transfer per element.
+    The per-step transfer cost is the same order as the single-state version
+    but amortized over B.
+    """
+    arr = states[:, :, :, 0].detach().cpu().numpy().astype(np.float32)  # (B, H, W)
+    B, h, w = arr.shape
+    totals = arr.sum(axis=(1, 2))  # (B,)
+
+    com_y = np.zeros(B, dtype=np.float32)
+    com_x = np.zeros(B, dtype=np.float32)
+    bbox_frac = np.zeros(B, dtype=np.float32)
+
+    ys, xs = np.indices((h, w), dtype=np.float32)
+
+    for i in range(B):
+        total = float(totals[i])
+        if total <= 0.0:
+            continue
+        a = arr[i]
+        com_y[i] = float((ys * a).sum() / total)
+        com_x[i] = float((xs * a).sum() / total)
+
+        peak = float(a.max())
+        if peak <= 0.0:
+            continue
+        threshold = 0.1 * peak
+        mask = a > threshold
+        if not mask.any():
+            continue
+        rows = np.where(mask.any(axis=1))[0]
+        cols = np.where(mask.any(axis=0))[0]
+        bbox_area = (int(rows[-1]) - int(rows[0]) + 1) * (int(cols[-1]) - int(cols[0]) + 1)
+        bbox_frac[i] = bbox_area / (h * w)
+
+    return com_y, com_x, bbox_frac
+
+
+def _downsample_frame_batch(states: torch.Tensor, target: int) -> list[torch.Tensor]:
+    """Downsample a batch of states to target x target, one frame per element.
+
+    states: (B, H, W, 1) -> list of B (target, target) float32 tensors on the same device.
+    """
+    B = states.shape[0]
+    flat = states[:, :, :, 0].unsqueeze(1)  # (B, 1, H, W)
+    pooled = F.adaptive_avg_pool2d(flat, output_size=(target, target))  # (B, 1, T, T)
+    return [pooled[i, 0] for i in range(B)]
+
+
+def _build_batched_fk(
+    params_list: list[ParamDict], config: RolloutConfig, device: str
+) -> tuple[torch.Tensor, FlowLenia]:
+    """Build stacked FFT kernels for a batch of param sets.
+
+    Returns (fK_batch, ref_fl) where fK_batch is (B, K, H, W) complex and
+    ref_fl is a FlowLenia instance built from the first param set - used to
+    borrow the param-independent tensors (Sobel kernels, position grid).
+
+    Building B FlowLenia instances just to extract their _fK is slightly
+    wasteful, but the kernel build is a one-time cost before the sim loop and
+    the logic is already well-tested. Duplicating the kernel formula here
+    would be worse.
+    """
+    fk_list: list[torch.Tensor] = []
+    ref_fl: FlowLenia | None = None
+
+    for p in params_list:
+        tp = Params(
+            R=p["R"],
+            r=torch.tensor(p["r"], dtype=torch.float32, device=device),
+            m=torch.tensor(p["m"], dtype=torch.float32, device=device),
+            s=torch.tensor(p["s"], dtype=torch.float32, device=device),
+            h=torch.tensor(p["h"], dtype=torch.float32, device=device),
+            a=torch.tensor(p["a"], dtype=torch.float32, device=device),
+            b=torch.tensor(p["b"], dtype=torch.float32, device=device),
+            w=torch.tensor(p["w"], dtype=torch.float32, device=device),
+        )
+        fl = FlowLenia(config.sim, tp, device=device)
+        fK_single, _, _, _ = fl.kernel_tensors()
+        fk_list.append(fK_single)  # (K, H, W)
+        if ref_fl is None:
+            ref_fl = fl
+
+    assert ref_fl is not None
+    return torch.stack(fk_list, dim=0), ref_fl  # (B, K, H, W)
+
+
+def _batched_sim_step(
+    A: torch.Tensor,
+    fK: torch.Tensor,
+    m_batch: torch.Tensor,
+    s_batch: torch.Tensor,
+    h_batch: torch.Tensor,
+    sobel_kx: torch.Tensor,
+    sobel_ky: torch.Tensor,
+    pos: torch.Tensor,
+    config: SimConfig,
+) -> torch.Tensor:
+    """One Flow-Lenia step for B states with per-element params.
+
+    A:      (B, H, W, 1)
+    fK:     (B, K, H, W) complex
+    m/s/h:  (B, K) - per-element growth function params
+    sobel_kx, sobel_ky: (1, 1, 3, 3)
+    pos:    (2, H, W)
+
+    Returns (B, H, W, 1).
+    """
+    B = A.shape[0]
+    A2 = A[:, :, :, 0]  # (B, H, W)
+
+    fA = torch.fft.fft2(A2)
+    U = torch.fft.ifft2(fK * fA.unsqueeze(1), dim=(-2, -1)).real  # (B, K, H, W)
+
+    m = m_batch.view(B, -1, 1, 1)
+    s = s_batch.view(B, -1, 1, 1)
+    h = h_batch.view(B, -1, 1, 1)
+    G = (torch.exp(-(((U - m) / s) ** 2) / 2.0) * 2.0 - 1.0) * h
+    U_sum = G.sum(dim=1)  # (B, H, W)
+
+    # Sobel: treat B as the spatial batch for F.conv2d
+    U_4d = U_sum.unsqueeze(1)  # (B, 1, H, W)
+    gx_U = F.conv2d(U_4d, sobel_kx, padding=1)[:, 0]
+    gy_U = F.conv2d(U_4d, sobel_ky, padding=1)[:, 0]
+    nabla_U = torch.stack([gy_U, gx_U], dim=1)  # (B, 2, H, W)
+
+    A2_4d = A2.unsqueeze(1)
+    gx_A = F.conv2d(A2_4d, sobel_kx, padding=1)[:, 0]
+    gy_A = F.conv2d(A2_4d, sobel_ky, padding=1)[:, 0]
+    nabla_A = torch.stack([gy_A, gx_A], dim=1)  # (B, 2, H, W)
+
+    alpha = torch.clamp(A2**2, 0.0, 1.0).unsqueeze(1)  # (B, 1, H, W)
+    F_flow = nabla_U * (1.0 - alpha) - nabla_A * alpha  # (B, 2, H, W)
+
+    # Reintegration
+    dd = config.dd
+    sigma = config.sigma
+    ma = dd - sigma
+    pos_b = pos.unsqueeze(0)  # (1, 2, H, W)
+
+    clipped_flow = torch.clamp(config.dt * F_flow, -ma, ma)
+    mu = pos_b + clipped_flow
+    mu = torch.clamp(mu, sigma, config.grid - sigma)
+
+    new_A2 = torch.zeros_like(A2)
+    sigma_clip_max = min(1.0, 2.0 * sigma)
+    denom = 4.0 * sigma * sigma
+
+    for dx in range(-dd, dd + 1):
+        for dy in range(-dd, dd + 1):
+            Ar = torch.roll(A2, shifts=(dx, dy), dims=(1, 2))
+            mur = torch.roll(mu, shifts=(dx, dy), dims=(2, 3))
+            dpmu = torch.abs(pos_b - mur)
+            sz = 0.5 - dpmu + sigma
+            sz_clipped = torch.clamp(sz, 0.0, sigma_clip_max)
+            area = (sz_clipped[:, 0] * sz_clipped[:, 1]) / denom
+            new_A2 = new_A2 + Ar * area
+
+    return new_A2.unsqueeze(-1)
+
+
+def rollout_batch(
+    params_list: list[ParamDict],
+    seeds: list[int],
+    config: RolloutConfig,
+    device: str = "cpu",
+    parent_cells: list[CellCoord | None] | None = None,
+) -> list[RolloutResult]:
+    """Run B Flow-Lenia rollouts simultaneously as a single batched forward pass.
+
+    One PyTorch forward pass evaluates all B parameter sets in parallel over a
+    leading batch dimension. The sim loop runs in a single Python loop;
+    PyTorch handles the batch parallelism internally (GPU vectorization or
+    CPU thread-level parallelism).
+
+    params_list and seeds must have the same length B. parent_cells defaults
+    to [None] * B if not supplied.
+
+    Returns a list of B RolloutResult objects in the same order as params_list.
+    The interface mirrors rollout() - each result has quality/descriptors/
+    rejection_reason set correctly regardless of whether the sim produced a
+    valid creature.
+    """
+    B = len(params_list)
+    assert len(seeds) == B, (
+        f"params_list and seeds must be the same length, got {B} and {len(seeds)}"
+    )
+    if parent_cells is None:
+        parent_cells_nn: list[CellCoord | None] = [None] * B
+        parent_cells = parent_cells_nn
+
+    started_at = time.perf_counter()
+    created_at = time.time()
+
+    thumbnail_size = min(config.thumbnail_size, config.sim.grid)
+
+    # Frame capture indices shared across all elements
+    if config.thumbnail_frames > 0:
+        indices = np.linspace(0, config.steps, config.thumbnail_frames)
+        frame_indices = set(indices.round().astype(int).tolist())
+    else:
+        frame_indices = set()
+
+    # Build batched FFT kernels and borrow param-independent tensors from ref instance
+    fK, ref_fl = _build_batched_fk(params_list, config, device)  # (B, K, H, W)
+    _, sobel_kx, sobel_ky, pos = ref_fl.kernel_tensors()
+
+    # Stack per-element growth params: m, s, h all (B, K)
+    m_batch = torch.stack(
+        [torch.tensor(p["m"], dtype=torch.float32, device=device) for p in params_list]
+    )
+    s_batch = torch.stack(
+        [torch.tensor(p["s"], dtype=torch.float32, device=device) for p in params_list]
+    )
+    h_batch = torch.stack(
+        [torch.tensor(p["h"], dtype=torch.float32, device=device) for p in params_list]
+    )
+
+    # Build initial states - one per seed, stacked to (B, H, W, 1)
+    states = torch.stack(
+        [
+            _initial_state(
+                grid=config.sim.grid,
+                patch_fraction=config.patch_fraction,
+                seed=seeds[i],
+                device=device,
+            )
+            for i in range(B)
+        ]
+    )
+
+    initial_masses = [float(states[i].sum().item()) for i in range(B)]
+
+    # Per-element history buffers
+    history_len = config.steps + 1
+    com_y_hist = np.zeros((B, history_len), dtype=np.float32)
+    com_x_hist = np.zeros((B, history_len), dtype=np.float32)
+    bbox_hist = np.zeros((B, history_len), dtype=np.float32)
+    thumb_bufs: list[list[torch.Tensor]] = [[] for _ in range(B)]
+
+    # Run the sim loop
+    for step in range(history_len):
+        com_y, com_x, bbox = _step_stats_batch(states)
+        com_y_hist[:, step] = com_y
+        com_x_hist[:, step] = com_x
+        bbox_hist[:, step] = bbox
+
+        if step in frame_indices:
+            frames = _downsample_frame_batch(states, thumbnail_size)
+            for i in range(B):
+                thumb_bufs[i].append(frames[i])
+
+        if step < config.steps:
+            states = _batched_sim_step(
+                states,
+                fK,
+                m_batch,
+                s_batch,
+                h_batch,
+                sobel_kx,
+                sobel_ky,
+                pos,
+                config.sim,
+            )
+
+    final_masses = [float(states[i].sum().item()) for i in range(B)]
+
+    # Post-sim: per-element evaluation (all on CPU/numpy from here)
+    results: list[RolloutResult] = []
+    compute_seconds = time.perf_counter() - started_at
+
+    for i in range(B):
+        final_state_np = states[i, :, :, 0].detach().cpu().numpy().astype(np.float32)
+
+        if thumb_bufs[i]:
+            thumbnail = _quantize_thumbnail(torch.stack(thumb_bufs[i], dim=0))
+        else:
+            thumbnail = _empty_thumbnail(config.thumbnail_frames, thumbnail_size)
+
+        com_history = np.stack([com_y_hist[i], com_x_hist[i]], axis=1)  # (steps+1, 2)
+
+        if not np.isfinite(final_masses[i]) or not np.isfinite(com_history).all():
+            results.append(
+                RolloutResult(
+                    params=params_list[i],
+                    seed=seeds[i],
+                    descriptors=None,
+                    quality=None,
+                    rejection_reason="nan_state",
+                    thumbnail=thumbnail,
+                    parent_cell=parent_cells[i],
+                    created_at=created_at,
+                    compute_seconds=compute_seconds,
+                )
+            )
+            continue
+
+        tail = min(TRACE_TAIL_STEPS, history_len)
+        trace = RolloutTrace(
+            com_history=com_history[-tail:].astype(np.float32),
+            bbox_fraction_history=bbox_hist[i, -tail:].astype(np.float32),
+            final_state=final_state_np,
+            grid_size=config.sim.grid,
+            total_steps=config.steps,
+        )
+
+        eval_result = evaluate(
+            RolloutEvaluation(
+                initial_mass=initial_masses[i],
+                final_mass=final_masses[i],
+                trace=trace,
+            )
+        )
+
+        results.append(
+            RolloutResult(
+                params=params_list[i],
+                seed=seeds[i],
+                descriptors=eval_result.descriptors,
+                quality=eval_result.quality,
+                rejection_reason=eval_result.rejection_reason,
+                thumbnail=thumbnail,
+                parent_cell=parent_cells[i],
+                created_at=created_at,
+                compute_seconds=compute_seconds,
+            )
+        )
+
+    return results
+
+
 # Re-export for convenience
 __all__ = [
     "RolloutConfig",
     "dev_preset",
     "pretty_preset",
     "rollout",
+    "rollout_batch",
     "sample_random",
     "standard_preset",
 ]
