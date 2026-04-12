@@ -1,6 +1,6 @@
 <svg width="100%" viewBox="0 0 680 400" role="img" xmlns="http://www.w3.org/2000/svg">
   <title>biota search loop</title>
-  <desc>Data flow: the driver process owns the MAP-Elites archive and search loop. It dispatches rollouts to stateless Ray workers that simulate a Flow-Lenia creature, compute three behavioral descriptors, and score quality. Results return to the driver for archive placement.</desc>
+  <desc>Data flow: the driver process owns the MAP-Elites archive and search loop. It dispatches batches of B parameter sets to stateless Ray workers that simulate B Flow-Lenia creatures in a single vectorized forward pass, compute three behavioral descriptors, and score quality. B results return to the driver for archive placement.</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
       <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -49,14 +49,15 @@
 
   <!-- Workers panel -->
   <rect x="28" y="216" width="624" height="164" rx="8" fill="#141820" stroke="#2e3044" stroke-width="1"/>
-  <text class="tlabel" x="44" y="234">RAY WORKERS — stateless, local or cluster, CPU or GPU</text>
+  <text class="tlabel" x="44" y="234">RAY WORKERS — stateless, local or cluster, CPU or GPU — one task evaluates B rollouts</text>
 
   <!-- Worker boxes: 3 × 168px + 2 × 20px gap = 544, left offset = 28 + (624-544)/2 = 68 -->
   <rect x="68"  y="244" width="168" height="120" rx="6" fill="#141a26" stroke="#185fa5" stroke-width="0.5"/>
-  <text class="th" x="152" y="284" text-anchor="middle" dominant-baseline="central">Flow-Lenia rollout</text>
-  <text class="ts" x="152" y="306" text-anchor="middle" dominant-baseline="central">simulate 300 steps</text>
-  <text class="tsa" x="152" y="324" text-anchor="middle" dominant-baseline="central">PyTorch · CPU or GPU</text>
-  <text class="tsa" x="152" y="342" text-anchor="middle" dominant-baseline="central">mass-conserving CA</text>
+  <text class="th" x="152" y="278" text-anchor="middle" dominant-baseline="central">Flow-Lenia rollout</text>
+  <text class="ts" x="152" y="298" text-anchor="middle" dominant-baseline="central">B × 300 steps, one fwd pass</text>
+  <text class="tsa" x="152" y="316" text-anchor="middle" dominant-baseline="central">state (B, H, W) · PyTorch</text>
+  <text class="tsa" x="152" y="334" text-anchor="middle" dominant-baseline="central">CPU or GPU · mass-conserving</text>
+  <text class="tsa" x="152" y="350" text-anchor="middle" dominant-baseline="central">--batch-size B · --workers N</text>
 
   <rect x="256" y="244" width="168" height="120" rx="6" fill="#121e1c" stroke="#0f6e56" stroke-width="0.5"/>
   <text class="th" x="340" y="278" text-anchor="middle" dominant-baseline="central">descriptors</text>
@@ -76,8 +77,9 @@
 
   <!-- Dispatch arrow: search loop down into rollout worker -->
   <path d="M330 152 L330 206 L152 206 L152 242" fill="none" stroke="#185fa5" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+  <text class="tsa" x="248" y="202" text-anchor="middle">B params</text>
 
   <!-- Return arrow: quality worker up to result handler -->
   <path d="M528 242 L528 206 L534 206 L534 152" fill="none" stroke="#ba7517" stroke-width="1" marker-end="url(#arrow)"/>
-  <text class="tsa" x="578" y="202" text-anchor="start">result</text>
+  <text class="tsa" x="578" y="202" text-anchor="start">B results</text>
 </svg>
