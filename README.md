@@ -20,7 +20,7 @@ It runs locally, on a single GPU, or across a Ray cluster, and produces an archi
 
 biota searches Flow-Lenia's parameter space using [MAP-Elites](https://arxiv.org/abs/1504.04909). Rather than finding a single best creature, it fills a behavioral grid where each cell holds the highest-quality creature found with a particular phenotypic fingerprint. The result is an atlas: a structured catalog of qualitatively distinct life-forms that covers the behavioral space as broadly as possible.
 
-A 500-rollout standard-preset search on a 24-core cluster takes about 340 seconds and produces around 228 distinct archive cells at a 45% insertion rate.
+A 500-rollout standard-preset search on a 3-node RTX 5060 Ti cluster takes about 97 seconds and produces around 229 distinct archive cells at a 45% insertion rate (3.5x speedup over the pre-batching baseline at 91-92% GPU utilization).
 
 ## How it works
 
@@ -67,17 +67,21 @@ open runs/index.html
 
 ```bash
 # On the head node
-ray start --head --node-ip-address=<ip> --port=6379 --num-gpus=<n>
+ray start --head --node-ip-address=<ip> --port=6379 --num-gpus=1
 
 # On each worker node
-ray start --address=<ip>:6379 --num-gpus=<n>
+ray start --address=<ip>:6379 --num-gpus=1
 
-# Run from the head node (with biota installed into the runtime venv)
+# Install the wheel on every node before starting Ray
+just cluster-install
+source ~/.biota-runtime/bin/activate
+
+# Run from the head node
 biota search --ray-address <ip>:6379 --preset standard --budget 500 \
-    --device cuda --gpus-per-rollout 0.25 --max-concurrent 12
+    --device cuda --batch-size 64 --workers 3
 ```
 
-`--gpus-per-rollout 0.25` runs four rollouts per GPU simultaneously. On RTX 5060 Ti hardware, this gives 2.4x the throughput of exclusive-GPU mode with 77-79% sustained utilization.
+`--batch-size 64` runs 64 rollouts as a single vectorized forward pass per GPU. `--workers 3` keeps one batch in flight per node. On a 3-node RTX 5060 Ti cluster this sustains 91-92% GPU utilization.
 
 Three presets: `dev` (64x64 grid, 200 steps, fast iteration), `standard` (192x192, 300 steps, reference quality), `pretty` (384x384, 500 steps, maximum visual fidelity for publishing).
 
@@ -90,9 +94,9 @@ Three presets: `dev` (64x64 grid, 200 steps, fast iteration), `standard` (192x19
 | `--preset` | `standard` | `dev`, `standard`, or `pretty` |
 | `--budget` | `500` | Total rollouts |
 | `--random-phase` | `200` | Uniform random rollouts before mutation starts |
-| `--max-concurrent` | `8` | In-flight rollout cap |
+| `--batch-size` | `1` | Rollouts per dispatch (vectorized forward pass). 32-128 on cuda/mps |
+| `--workers` | `1` | Concurrent batch dispatches. 1 = synchronous MAP-Elites (freshest archive); higher values trade archive freshness for throughput |
 | `--device` | `cpu` | `cpu`, `mps`, or `cuda` |
-| `--gpus-per-rollout` | `1.0` | GPU fraction per rollout (set to `0.25` for 4 per GPU) |
 | `--local-ray` | off | Start a fresh local Ray instance |
 | `--ray-address` | none | Attach to an existing Ray cluster |
 | `--base-seed` | `0` | Reproducibility seed |
@@ -113,7 +117,7 @@ runs/20260408-175341-quiet-junco/
 ## Development
 
 ```bash
-just check       # ruff + pyright + pytest (142 tests)
+just check       # ruff + pyright + pytest (136 tests)
 just smoke-ray   # Ray-mode smoke test
 ```
 
@@ -124,7 +128,7 @@ The test suite does not require a GPU or a running Ray cluster. `just smoke-ray`
 - **v0.1.0** Flow-Lenia PyTorch port, mass conservation verified against JAX reference ✅
 - **v0.2.0** Driver, Ray runtime, search loop, multi-node GPU Ray ✅
 - **v0.3.0** Perf fixes, descriptor rework, visual pipeline, static index with per-run metrics ✅
-- **v0.4.0** Batched rollout engine, CLI redesign (`--batch-size`, `--workers`), cluster benchmark
+- **v0.4.0** Batched rollout engine, CLI redesign (`--batch-size`, `--workers`), 3.5x cluster speedup ✅
 - **v1.0.0** Lineage view + public atlas at `rkv0id.github.io/biota/`
 - **v2.0.0** Ecosystem simulation - spawn archive creatures together on a large grid and study what happens
 - **v3.0.0** Learned descriptors
