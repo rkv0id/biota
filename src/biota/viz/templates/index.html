@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>biota runs</title>
+    <title>biota</title>
     <style>
         *, *::before, *::after { box-sizing: border-box; }
         html, body {
@@ -23,9 +23,13 @@
                 #141820 0%, #0b0d10 45%, #08090b 100%
             );
             background-attachment: fixed;
-            padding: 64px 48px 96px 48px;
         }
-        .page-header { margin-bottom: 48px; }
+
+        /* === header === */
+        .page-header {
+            padding: 48px 48px 0 48px;
+            margin-bottom: 32px;
+        }
         .page-title {
             font-size: 32px;
             font-weight: 300;
@@ -41,7 +45,140 @@
         .page-meta {
             font-size: 12px;
             color: #71717a;
+            margin-bottom: 28px;
         }
+
+        /* === tabs === */
+        .tabs {
+            display: flex;
+            gap: 0;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+        .tab-btn {
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            color: #71717a;
+            font-family: inherit;
+            font-size: 12px;
+            font-weight: 500;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            padding: 10px 20px 9px 20px;
+            cursor: pointer;
+            margin-bottom: -1px;
+            transition: color 0.12s, border-color 0.12s;
+        }
+        .tab-btn:hover { color: #a1a1aa; }
+        .tab-btn.active {
+            color: #f4f4f5;
+            border-bottom-color: #fbbf77;
+        }
+
+        /* === tab panels === */
+        .tab-panel { display: none; padding: 40px 48px 80px 48px; }
+        .tab-panel.active { display: block; }
+
+        /* === about panel === */
+        .about-body {
+            max-width: 680px;
+        }
+        .about-body p {
+            color: #a1a1aa;
+            margin: 0 0 18px 0;
+            font-size: 14px;
+            line-height: 1.7;
+        }
+        .about-body h2 {
+            font-size: 13px;
+            font-weight: 600;
+            color: #e4e4e7;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin: 36px 0 14px 0;
+        }
+        .about-body h2:first-child { margin-top: 0; }
+        .about-stat-row {
+            display: flex;
+            gap: 32px;
+            flex-wrap: wrap;
+            margin-bottom: 24px;
+        }
+        .about-stat {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+        .about-stat-label {
+            font-size: 10px;
+            color: #52525b;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+        .about-stat-value {
+            font-size: 20px;
+            font-weight: 300;
+            color: #fbbf77;
+            font-variant-numeric: tabular-nums;
+        }
+        .about-stat-unit {
+            font-size: 11px;
+            color: #71717a;
+        }
+        .about-diagram {
+            margin: 28px 0;
+        }
+        .about-diagram img, .about-diagram svg {
+            max-width: 100%;
+            height: auto;
+            border-radius: 6px;
+        }
+        .descriptor-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .descriptor-card {
+            background: rgba(20, 22, 28, 0.6);
+            border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 8px;
+            padding: 14px 16px;
+        }
+        .descriptor-name {
+            font-size: 11px;
+            font-weight: 600;
+            color: #e4e4e7;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 6px;
+        }
+        .descriptor-desc {
+            font-size: 11px;
+            color: #71717a;
+            line-height: 1.5;
+        }
+        .about-links {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 6px;
+        }
+        .about-link {
+            font-size: 11px;
+            color: #63a0ff;
+            text-decoration: none;
+            padding: 4px 10px;
+            border: 1px solid rgba(99,160,255,0.2);
+            border-radius: 4px;
+            transition: border-color 0.12s, color 0.12s;
+        }
+        .about-link:hover {
+            color: #93c0ff;
+            border-color: rgba(99,160,255,0.4);
+        }
+
+        /* === runs panel === */
         .run-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -76,9 +213,7 @@
             background: #0b0d10;
             aspect-ratio: 1;
         }
-        .card-body {
-            padding: 14px 16px 16px 16px;
-        }
+        .card-body { padding: 14px 16px 16px 16px; }
         .card-id {
             font-size: 12px;
             color: #f4f4f5;
@@ -106,20 +241,28 @@
             color: #52525b;
             font-variant-numeric: tabular-nums;
         }
-        @media (max-width: 600px) {
-            body { padding: 32px 20px 64px 20px; }
+
+        @media (max-width: 700px) {
+            .page-header { padding: 32px 20px 0 20px; }
+            .tab-panel { padding: 28px 20px 64px 20px; }
             .page-title { font-size: 24px; }
+            .descriptor-grid { grid-template-columns: 1fr; }
         }
     </style>
 </head>
 <body>
     <header class="page-header">
         <h1 class="page-title">
-            <span class="title-prefix">biota</span>runs
+            <span class="title-prefix">biota</span>atlas
         </h1>
         <div class="page-meta">{{ n_runs }} run{{ 's' if n_runs != 1 else '' }}</div>
+        <nav class="tabs">
+            <button class="tab-btn active" data-tab="runs">Runs</button>
+            <button class="tab-btn" data-tab="about">About</button>
+        </nav>
     </header>
-    <main>
+
+    <div class="tab-panel active" id="panel-runs">
         <div class="run-grid">
             {% for card in cards %}
             <a class="run-card" href="{{ card.run_id }}/view.html">
@@ -144,6 +287,68 @@
             </a>
             {% endfor %}
         </div>
-    </main>
+    </div>
+
+    <div class="tab-panel" id="panel-about">
+        <div class="about-body">
+            <h2>What is this</h2>
+            <p>biota searches the parameter space of Flow-Lenia, a continuous cellular automaton where matter is conserved by construction. Rather than finding a single best creature, it fills a behavioral grid where each cell holds the most compact creature found with a particular phenotypic fingerprint. The result is a structured catalog of qualitatively distinct life-forms.</p>
+            <p>Each creature is a soliton: a stable, self-maintaining pattern that persists indefinitely given the right parameters. They move, rotate, and interact. Mass conservation is what makes them possible across a wide parameter range - without it, most settings produce explosion or collapse.</p>
+
+            <h2>The search</h2>
+            <p>MAP-Elites runs a loop: sample parameters, simulate a creature for 300 steps, measure its behavior, and insert it into the matching archive cell if it is better than whatever is already there. After thousands of rollouts the archive fills with creatures covering the behavioral space as broadly as possible.</p>
+            <p>Each run dispatches batches of simulations in parallel across a 3-node GPU cluster. One batch task evaluates B creatures as a single vectorized forward pass on one RTX 5060 Ti, returning B results. The driver owns the archive; workers are stateless.</p>
+
+            <div class="about-stat-row">
+                <div class="about-stat">
+                    <div class="about-stat-label">archive capacity</div>
+                    <div class="about-stat-value">16,384 <span class="about-stat-unit">cells</span></div>
+                </div>
+                <div class="about-stat">
+                    <div class="about-stat-label">grid</div>
+                    <div class="about-stat-value">32 &times; 32 &times; 16</div>
+                </div>
+                <div class="about-stat">
+                    <div class="about-stat-label">cluster throughput</div>
+                    <div class="about-stat-value">97 <span class="about-stat-unit">s / 500 rollouts</span></div>
+                </div>
+            </div>
+
+            <h2>Behavioral descriptors</h2>
+            <p>Three scalars, each measured empirically from the rollout rather than derived from the parameter values. Together they index the archive's three axes.</p>
+            <div class="descriptor-grid">
+                <div class="descriptor-card">
+                    <div class="descriptor-name">velocity</div>
+                    <div class="descriptor-desc">Mean center-of-mass displacement per step over the trailing 50 steps. Separates drifters from stationary creatures.</div>
+                </div>
+                <div class="descriptor-card">
+                    <div class="descriptor-name">gyradius</div>
+                    <div class="descriptor-desc">Mass-weighted RMS distance from the center of mass. Separates compact dots from spread-out rings and lattices.</div>
+                </div>
+                <div class="descriptor-card">
+                    <div class="descriptor-name">spectral entropy</div>
+                    <div class="descriptor-desc">Shannon entropy of the radially-averaged FFT spectrum of the final state. Separates smooth blobs from sharp-edged structured creatures.</div>
+                </div>
+            </div>
+
+            <h2>References</h2>
+            <div class="about-links">
+                <a class="about-link" href="https://arxiv.org/abs/2212.07906" target="_blank">Flow-Lenia (Plantec et al. 2022)</a>
+                <a class="about-link" href="https://arxiv.org/abs/1504.04909" target="_blank">MAP-Elites (Mouret &amp; Clune 2015)</a>
+                <a class="about-link" href="https://github.com/rkv0id/biota" target="_blank">github.com/rkv0id/biota</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.querySelectorAll('.tab-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+            document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
+            btn.classList.add('active');
+            document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
+        });
+    });
+    </script>
 </body>
 </html>

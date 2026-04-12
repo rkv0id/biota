@@ -83,6 +83,74 @@
             font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         }
 
+        /* Home link on the biota prefix */
+        .title-home {
+            text-decoration: none;
+            color: inherit;
+        }
+        .title-home:hover .title-prefix {
+            color: #71717a;
+        }
+
+        /* Lineage highlight rings, toggled by JS on hover */
+        .cell.lineage-parent {
+            box-shadow:
+                0 0 0 2px rgba(251, 191, 119, 0.8),
+                0 0 16px rgba(251, 191, 119, 0.3);
+            z-index: 3;
+        }
+        .cell.lineage-child {
+            box-shadow:
+                0 0 0 2px rgba(99, 160, 255, 0.7),
+                0 0 12px rgba(99, 160, 255, 0.2);
+            z-index: 3;
+        }
+
+        /* Children list in modal */
+        .modal-lineage-section {
+            padding: 20px 32px 24px 32px;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .modal-lineage-section h3 {
+            margin: 0 0 12px 0;
+            font-size: 10px;
+            color: #52525b;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            font-weight: 600;
+        }
+        .lineage-row {
+            display: flex;
+            align-items: baseline;
+            gap: 12px;
+            margin-bottom: 6px;
+            font-size: 11px;
+        }
+        .lineage-label {
+            color: #52525b;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            min-width: 52px;
+            flex-shrink: 0;
+        }
+        .lineage-coord {
+            color: #a1a1aa;
+            font-variant-numeric: tabular-nums;
+            cursor: pointer;
+            text-decoration: none;
+            transition: color 0.1s;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        }
+        .lineage-coord:hover { color: #fbbf77; }
+        .lineage-coord.is-child { color: #63a0ff; }
+        .lineage-coord.is-child:hover { color: #93c0ff; }
+        .lineage-children-wrap {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px 12px;
+        }
+        .lineage-none { color: #3f3f46; font-style: italic; }
+
         /* Magma swatch: gradient bar showing spectral entropy range */
         .swatch-wrap {
             display: flex;
@@ -556,6 +624,43 @@
             margin: 0;
             font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         }
+        .params-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        }
+        .params-table th {
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: #52525b;
+            font-weight: 600;
+            text-align: right;
+            padding: 0 8px 8px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .params-table th:first-child { text-align: left; }
+        .params-table td {
+            padding: 5px 8px 5px 0;
+            color: #a1a1aa;
+            text-align: right;
+            vertical-align: top;
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+            font-variant-numeric: tabular-nums;
+        }
+        .params-table td:first-child {
+            text-align: left;
+            color: #71717a;
+        }
+        .params-table tr:last-child td { border-bottom: none; }
+        .params-scalar {
+            font-size: 11px;
+            color: #a1a1aa;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            font-variant-numeric: tabular-nums;
+            margin-bottom: 10px;
+        }
         .modal-close {
             position: absolute;
             top: 16px;
@@ -612,7 +717,7 @@
 <body>
     <header class="page-header">
         <h1 class="page-title">
-            <span class="title-prefix">biota</span>{{ run_id }}
+            <a class="title-home" href="../index.html"><span class="title-prefix">biota</span></a>{{ run_id }}
         </h1>
         <div class="page-meta">
             <span class="meta-value">{{ n_cells }}</span> cells
@@ -693,7 +798,11 @@
             </div>
             <div class="modal-params-section">
                 <h3>parameters</h3>
-                <pre id="modal-params"></pre>
+                <div id="modal-params"></div>
+            </div>
+            <div class="modal-lineage-section">
+                <h3>lineage</h3>
+                <div id="modal-lineage"></div>
             </div>
         </div>
     </div>
@@ -702,41 +811,69 @@
 
     <script>
 const CARDS = {{ cards_json }};
-
-// Descriptor labels for display.  Position index -> short label.  The
-// archive's JSON field names are still (speed, size, structure) for
-// historical reasons; DESC_LABELS maps position to the current display
-// label without touching the data shape.
 const DESC_LABELS = ['velocity', 'gyradius', 'spectral'];
+
+// Build reverse map: key -> list of child keys, from CARDS at load time.
+// One O(n) pass; used for lineage highlighting and modal children list.
+const CHILDREN = {};
+Object.keys(CARDS).forEach(function(key) {
+    CHILDREN[key] = [];
+});
+Object.keys(CARDS).forEach(function(key) {
+    const p = CARDS[key].parent;
+    if (p === null) return;
+    const pk = p[0] + '_' + p[1] + '_' + p[2];
+    if (CHILDREN[pk]) CHILDREN[pk].push(key);
+});
 
 const tooltip = document.getElementById('tooltip');
 const modalBg = document.getElementById('modal-bg');
 const modalCloseBtn = modalBg.querySelector('.modal-close');
 
-function fmtCoord(c) {
-    return '(' + c[0] + ', ' + c[1] + ', ' + c[2] + ')';
-}
+function keyOf(coord) { return coord[0] + '_' + coord[1] + '_' + coord[2]; }
+function fmtCoord(c) { return '(' + c[0] + ', ' + c[1] + ', ' + c[2] + ')'; }
+function fmtQuality(q) { return q === null ? '-' : q.toFixed(4); }
 
-function fmtQuality(q) {
-    return q === null ? '-' : q.toFixed(4);
-}
-
-// Turn a descriptors object into an ordered array of (label, value) pairs.
 function descArray(d) {
     if (d === null) return [];
     const raw = [d.speed, d.size, d.structure];
-    return DESC_LABELS.map(function(label, i) {
-        return { label: label, value: raw[i] };
+    return DESC_LABELS.map(function(label, i) { return { label: label, value: raw[i] }; });
+}
+
+// === lineage highlight ===
+// On hover: amber ring on parent cell, blue rings on children.
+// Implemented as CSS classes on .cell elements - zero layout reflow, pure paint.
+
+let lineageActive = [];
+
+function applyLineage(card) {
+    clearLineage();
+    if (card.parent !== null) {
+        const pk = keyOf(card.parent);
+        const pel = document.querySelector('.cell[data-key="' + pk + '"]');
+        if (pel) { pel.classList.add('lineage-parent'); lineageActive.push(pel); }
+    }
+    const children = CHILDREN[keyOf(card.coord)] || [];
+    children.forEach(function(ck) {
+        const cel = document.querySelector('.cell[data-key="' + ck + '"]');
+        if (cel) { cel.classList.add('lineage-child'); lineageActive.push(cel); }
     });
 }
 
+function clearLineage() {
+    lineageActive.forEach(function(el) {
+        el.classList.remove('lineage-parent', 'lineage-child');
+    });
+    lineageActive = [];
+}
+
+// === tooltip ===
+
 function showTooltip(card, evt) {
     const descs = descArray(card.descriptors);
-    let descHtml = '';
-    if (descs.length === 0) {
-        descHtml = '<div class="tt-desc-row"><span class="tt-desc-label">no descriptors</span></div>';
-    } else {
-        descHtml = descs.map(function(d) {
+    let descHtml = descs.length === 0
+        ? '<div class="tt-desc-row"><span class="tt-desc-label">no descriptors</span></div>'
+        : descs.map(function(d) {
             const pct = Math.round(d.value * 100);
             return '<div class="tt-desc-row">'
                 + '<span class="tt-desc-label">' + d.label + '</span>'
@@ -744,7 +881,6 @@ function showTooltip(card, evt) {
                 + '<span class="tt-desc-value">' + d.value.toFixed(3) + '</span>'
                 + '</div>';
         }).join('');
-    }
     tooltip.innerHTML =
         '<div class="tt-coord">cell ' + fmtCoord(card.coord) + '</div>'
         + '<div class="tt-quality">q ' + fmtQuality(card.quality) + '</div>'
@@ -754,22 +890,49 @@ function showTooltip(card, evt) {
 }
 
 function moveTooltip(evt) {
-    let x = evt.clientX + 18;
-    let y = evt.clientY + 18;
-    const ttRect = tooltip.getBoundingClientRect();
-    if (x + ttRect.width > window.innerWidth - 12) {
-        x = evt.clientX - ttRect.width - 18;
-    }
-    if (y + ttRect.height > window.innerHeight - 12) {
-        y = evt.clientY - ttRect.height - 18;
-    }
+    let x = evt.clientX + 18, y = evt.clientY + 18;
+    const r = tooltip.getBoundingClientRect();
+    if (x + r.width  > window.innerWidth  - 12) x = evt.clientX - r.width  - 18;
+    if (y + r.height > window.innerHeight - 12) y = evt.clientY - r.height - 18;
     tooltip.style.left = x + 'px';
-    tooltip.style.top = y + 'px';
+    tooltip.style.top  = y + 'px';
 }
 
-function hideTooltip() {
-    tooltip.classList.remove('visible');
+function hideTooltip() { tooltip.classList.remove('visible'); }
+
+// === compact params table ===
+
+function fmt3(v) { return parseFloat(v.toFixed(3)).toString(); }
+
+function buildParamsTable(params) {
+    const K = params.r.length;
+    // Scalar row
+    let html = '<div class="params-scalar">R &nbsp;=&nbsp; ' + fmt3(params.R) + '</div>';
+    // Per-kernel table
+    html += '<table class="params-table"><thead><tr>'
+        + '<th>k</th><th>r</th><th>m</th><th>s</th><th>h</th>'
+        + '<th>a</th><th>b</th><th>w</th>'
+        + '</tr></thead><tbody>';
+    for (let k = 0; k < K; k++) {
+        const fmtVec = function(arr) {
+            return arr[k].map(fmt3).join(' ');
+        };
+        html += '<tr>'
+            + '<td>' + k + '</td>'
+            + '<td>' + fmt3(params.r[k]) + '</td>'
+            + '<td>' + fmt3(params.m[k]) + '</td>'
+            + '<td>' + fmt3(params.s[k]) + '</td>'
+            + '<td>' + fmt3(params.h[k]) + '</td>'
+            + '<td>' + fmtVec(params.a) + '</td>'
+            + '<td>' + fmtVec(params.b) + '</td>'
+            + '<td>' + fmtVec(params.w) + '</td>'
+            + '</tr>';
+    }
+    html += '</tbody></table>';
+    return html;
 }
+
+// === modal ===
 
 function openModal(card) {
     document.getElementById('modal-thumb-img').src = card.thumbnail;
@@ -777,7 +940,6 @@ function openModal(card) {
     document.getElementById('modal-subtitle').textContent =
         card.parent === null ? 'random phase' : 'mutated from ' + fmtCoord(card.parent);
     document.getElementById('modal-thumb-caption').textContent = 'seed ' + card.seed;
-
     document.getElementById('modal-quality').textContent = fmtQuality(card.quality);
     document.getElementById('modal-seed').textContent = card.seed;
     document.getElementById('modal-parent').textContent =
@@ -786,10 +948,9 @@ function openModal(card) {
 
     const descs = descArray(card.descriptors);
     const descBlock = document.getElementById('modal-desc-block');
-    if (descs.length === 0) {
-        descBlock.innerHTML = '<div class="modal-desc-row">no descriptors</div>';
-    } else {
-        descBlock.innerHTML = descs.map(function(d) {
+    descBlock.innerHTML = descs.length === 0
+        ? '<div class="modal-desc-row">no descriptors</div>'
+        : descs.map(function(d) {
             const pct = Math.round(d.value * 100);
             return '<div class="modal-desc-row">'
                 + '<span class="modal-desc-label">' + d.label + '</span>'
@@ -797,9 +958,38 @@ function openModal(card) {
                 + '<span class="modal-desc-value">' + d.value.toFixed(4) + '</span>'
                 + '</div>';
         }).join('');
-    }
 
-    document.getElementById('modal-params').textContent = JSON.stringify(card.params, null, 2);
+    document.getElementById('modal-params').innerHTML = buildParamsTable(card.params);
+
+    // Lineage section
+    const children = CHILDREN[keyOf(card.coord)] || [];
+    let linHtml = '';
+    if (card.parent !== null) {
+        linHtml += '<div class="lineage-row">'
+            + '<span class="lineage-label">parent</span>'
+            + '<span class="lineage-coord" data-goto="' + keyOf(card.parent) + '">'
+            + fmtCoord(card.parent) + '</span></div>';
+    } else {
+        linHtml += '<div class="lineage-row">'
+            + '<span class="lineage-label">parent</span>'
+            + '<span class="lineage-none">random phase</span></div>';
+    }
+    if (children.length > 0) {
+        linHtml += '<div class="lineage-row"><span class="lineage-label">children</span>'
+            + '<span class="lineage-children-wrap">'
+            + children.map(function(ck) {
+                const cc = CARDS[ck].coord;
+                return '<span class="lineage-coord is-child" data-goto="' + ck + '">'
+                    + fmtCoord(cc) + '</span>';
+            }).join('')
+            + '</span></div>';
+    } else {
+        linHtml += '<div class="lineage-row">'
+            + '<span class="lineage-label">children</span>'
+            + '<span class="lineage-none">none in archive</span></div>';
+    }
+    document.getElementById('modal-lineage').innerHTML = linHtml;
+
     modalBg.classList.add('visible');
     modalBg.setAttribute('aria-hidden', 'false');
     hideTooltip();
@@ -810,10 +1000,23 @@ function closeModal() {
     modalBg.setAttribute('aria-hidden', 'true');
 }
 
-// Quality filter slider
+// Navigate to a cell from the modal lineage links
+document.getElementById('modal-lineage').addEventListener('click', function(evt) {
+    const target = evt.target.closest('[data-goto]');
+    if (!target) return;
+    const key = target.dataset.goto;
+    const card = CARDS[key];
+    if (!card) return;
+    closeModal();
+    // Small delay so the modal fades before we open the next one
+    setTimeout(function() { openModal(card); }, 220);
+});
+
+// === quality filter ===
+
 const filterSlider = document.getElementById('quality-filter');
-const filterVal = document.getElementById('filter-val');
-const filterCount = document.getElementById('filter-count');
+const filterVal    = document.getElementById('filter-val');
+const filterCount  = document.getElementById('filter-count');
 
 function applyFilter() {
     const threshold = parseFloat(filterSlider.value);
@@ -822,8 +1025,7 @@ function applyFilter() {
     document.querySelectorAll('.cell').forEach(function(cell) {
         const card = CARDS[cell.dataset.key];
         if (!card) return;
-        const q = card.quality;
-        const show = q === null || q >= threshold;
+        const show = card.quality === null || card.quality >= threshold;
         cell.classList.toggle('hidden', !show);
         if (show) visible++;
     });
@@ -833,14 +1035,20 @@ function applyFilter() {
 filterSlider.addEventListener('input', applyFilter);
 applyFilter();
 
-// Per-cell interaction listeners
+// === per-cell listeners ===
+
 document.querySelectorAll('.cell').forEach(function(cell) {
     cell.addEventListener('mouseenter', function(evt) {
         const card = CARDS[cell.dataset.key];
-        if (card) showTooltip(card, evt);
+        if (!card) return;
+        showTooltip(card, evt);
+        applyLineage(card);
     });
     cell.addEventListener('mousemove', moveTooltip);
-    cell.addEventListener('mouseleave', hideTooltip);
+    cell.addEventListener('mouseleave', function() {
+        hideTooltip();
+        clearLineage();
+    });
     cell.addEventListener('click', function() {
         const card = CARDS[cell.dataset.key];
         if (card) openModal(card);
@@ -848,9 +1056,7 @@ document.querySelectorAll('.cell').forEach(function(cell) {
 });
 
 modalCloseBtn.addEventListener('click', closeModal);
-modalBg.addEventListener('click', function(evt) {
-    if (evt.target === modalBg) closeModal();
-});
+modalBg.addEventListener('click', function(evt) { if (evt.target === modalBg) closeModal(); });
 document.addEventListener('keydown', function(evt) {
     if (evt.key === 'Escape' && modalBg.classList.contains('visible')) closeModal();
 });
