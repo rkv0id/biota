@@ -51,16 +51,14 @@ def _save_frame_png(state: np.ndarray, path: Path) -> None:
 
         from biota.viz.colormap import apply_magma
 
-        # apply_magma expects (T, H, W) uint8 - fake a single-frame sequence
         peak = float(state.max())
         if peak > 0:
             normalized = (state / peak * 255).clip(0, 255).astype(np.uint8)
         else:
             normalized = np.zeros_like(state, dtype=np.uint8)
 
-        colored = apply_magma(normalized[np.newaxis])  # (1, H, W, 4) RGBA
-        frame_rgba = colored[0]  # (H, W, 4)
-        iio.imwrite(path, frame_rgba)
+        colored = apply_magma(normalized)  # (H, W, 3) RGB
+        iio.imwrite(path, colored)
     except Exception:
         pass  # Frame saving is best-effort; don't abort the run
 
