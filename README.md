@@ -1,16 +1,13 @@
-<img src="docs/logo-512.svg" width="48" align="left" alt="biota" style="margin-right:16px" />
-
-# biota
+<table><tr>
+<td><img src="docs/logo-512.svg" width="52" alt="biota" /></td>
+<td><h1>biota</h1></td>
+</tr></table>
 
 Distributed Flow-Lenia discovery platform. MAP-Elites search, behavioral archive, ecosystem simulation.
 
-<br clear="left"/>
+<a href="https://biota-atlas.pages.dev">biota-atlas.pages.dev</a> &nbsp;·&nbsp; <a href="https://github.com/rkv0id/biota">github.com/rkv0id/biota</a>
 
-<a href="https://biota-atlas.pages.dev">biota-atlas.pages.dev</a> &nbsp;·&nbsp; <a href="https://youtu.be/ZFrRKZXiH2Q">demo video</a> &nbsp;·&nbsp; Python 3.12 &nbsp;·&nbsp; PyTorch &nbsp;·&nbsp; Ray
-
-<a href="https://youtu.be/ZFrRKZXiH2Q">
-  <img src="docs/demo.gif" width="860" alt="biota archive demo" />
-</a>
+[![demo](docs/demo.gif)](https://youtu.be/ZFrRKZXiH2Q)
 
 biota runs MAP-Elites searches across a Ray cluster, dispatching batches of [Flow-Lenia](https://arxiv.org/abs/2212.07906) simulations as vectorized PyTorch forward passes to stateless GPU workers, producing a structured behavioral archive of distinct artificial life-forms. The full experimental loop: configure behavioral descriptors, search the parameter space, explore the archive, seed ecosystem simulations from selected creatures.
 
@@ -18,7 +15,7 @@ biota runs MAP-Elites searches across a Ray cluster, dispatching batches of [Flo
 
 ## How it works
 
-[Flow-Lenia](https://arxiv.org/abs/2212.07906) is a continuous cellular automaton where matter is conserved by construction. Mass conservation prevents the explode/collapse failure modes that dominate vanilla Lenia, producing stable solitons across a much wider range of parameters
+[Flow-Lenia](https://arxiv.org/abs/2212.07906) is a continuous cellular automaton where matter is conserved by construction. Mass conservation prevents the explode/collapse failure modes that dominate vanilla Lenia, producing stable solitons across a much wider range of parameters.
 
 [MAP-Elites](https://arxiv.org/abs/1504.04909) searches that parameter space for behavioral diversity rather than a single optimum. Instead of one best creature, it fills a grid where each cell holds the highest-quality creature with a particular phenotypic fingerprint: an atlas of qualitatively distinct life-forms.
 
@@ -95,7 +92,7 @@ biota search --ray-address <ip>:6379 \
     --descriptors oscillation,compactness,png_compressibility
 ```
 
-Three presets: `dev` (64×64, 200 steps), `standard` (192×192, 300 steps), `pretty` (384×384, 500 steps).
+Three presets: `dev` (64x64, 200 steps), `standard` (192x192, 300 steps), `pretty` (384x384, 500 steps).
 
 ## CLI reference
 
@@ -104,7 +101,7 @@ Three presets: `dev` (64×64, 200 steps), `standard` (192×192, 300 steps), `pre
 | `--preset` | `standard` | `dev`, `standard`, or `pretty` |
 | `--budget` | `500` | Total rollouts |
 | `--random-phase` | `200` | Uniform random rollouts before mutation |
-| `--batch-size` | `1` | Rollouts per dispatch. 32–128 on cuda/mps |
+| `--batch-size` | `1` | Rollouts per dispatch. 32-128 on cuda/mps |
 | `--workers` | `1` | Concurrent batch dispatches. 1 = synchronous MAP-Elites |
 | `--device` | `cpu` | `cpu`, `mps`, or `cuda` |
 | `--local-ray` | off | Start a fresh local Ray instance |
@@ -140,7 +137,7 @@ The test suite runs entirely in no-Ray mode. `just smoke-ray` exercises the Ray 
 - [x] v0.1.0 - Flow-Lenia PyTorch port, mass conservation verified against JAX reference
 - [x] v0.2.0 - Driver, Ray runtime, search loop, multi-node GPU verified
 - [x] v0.3.0 - Descriptor rework, visual pipeline, static index, per-run metrics
-- [x] v0.4.0 - Batched rollout engine, 3.5× cluster speedup
+- [x] v0.4.0 - Batched rollout engine, 3.5x cluster speedup
 - [x] v1.0.0 - Lineage view, atlas site, public launch at [biota-atlas.pages.dev](https://biota-atlas.pages.dev)
 - [x] v1.1.0 - 9 built-in descriptors, `--descriptors` CLI, per-axis archive filtering, custom descriptor API
 - [ ] v2.0.0 - Ecosystem simulation: spawn archive creatures on a shared grid
