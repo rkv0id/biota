@@ -39,17 +39,21 @@ driver (archive + loop)
 
 ## Behavioral descriptors
 
-The archive grid has three axes, each a scalar measured empirically from the rollout. The current built-in set:
+The archive grid has three axes, each a scalar measured empirically from the rollout. Nine built-in descriptors:
 
 | Descriptor | What it captures |
 |---|---|
-| **velocity** | Mean COM displacement per step over the trailing 50 steps |
-| **gyradius** | Mass-weighted RMS distance from the center of mass |
-| **spectral entropy** | Shannon entropy of the radially-averaged FFT spectrum of the final state |
+| `velocity` | Mean COM displacement per step over the trailing 50 steps |
+| `gyradius` | Mass-weighted RMS distance from the center of mass |
+| `spectral_entropy` | Shannon entropy of the radially-averaged FFT spectrum of the final state |
+| `oscillation` | Variance of bounding-box fraction over the trace tail (pulsing vs rigid) |
+| `compactness` | Mass inside bounding box / total mass at the final step |
+| `mass_asymmetry` | Directional bias of motion — straight movers vs orbiters |
+| `png_compressibility` | PNG compressed/uncompressed ratio of final state (smooth vs complex) |
+| `rotational_symmetry` | Angular variance of radial mass profile (rings vs asymmetric shapes) |
+| `persistence_score` | Max descriptor drift across the trace tail (stable vs changing) |
 
-The grid is **32 × 32 × 16**. Descriptors are configurable: choose any three from the built-in library, or supply your own via `--descriptor-module`. The archive viewer renders all three axes — two as the spatial grid, the third as an interactive slice slider with range filter.
-
-![archive grid](docs/archive-grid.svg)
+Choose any three with `--descriptors`. With 9 built-ins there are C(9,3) = 84 possible archive configurations. Supply your own via `--descriptor-module`. The archive viewer renders all three axes — two as the spatial grid, the third as an interactive slice slider.
 
 ## Quickstart
 
@@ -97,13 +101,15 @@ Three presets: `dev` (64×64, 200 steps), `standard` (192×192, 300 steps), `pre
 | `--preset` | `standard` | `dev`, `standard`, or `pretty` |
 | `--budget` | `500` | Total rollouts |
 | `--random-phase` | `200` | Uniform random rollouts before mutation |
-| `--batch-size` | `1` | Rollouts per dispatch. 32–128 on cuda/mps |
+| `--batch-size` | `1` | Rollouts per dispatch. 32-128 on cuda/mps |
 | `--workers` | `1` | Concurrent batch dispatches. 1 = synchronous MAP-Elites |
 | `--device` | `cpu` | `cpu`, `mps`, or `cuda` |
 | `--local-ray` | off | Start a fresh local Ray instance |
 | `--ray-address` | none | Attach to an existing Ray cluster |
 | `--base-seed` | `0` | Reproducibility seed |
 | `--checkpoint-every` | `100` | Checkpoint cadence in rollouts |
+| `--descriptors` | `velocity gyradius spectral_entropy` | Three descriptor names for the archive axes |
+| `--descriptor-module` | none | Path to a Python file defining custom `Descriptor` objects |
 
 `biota doctor` checks Python, torch, device availability, Ray, and module health.
 
@@ -135,17 +141,15 @@ biota is designed as a full research loop over Flow-Lenia's behavioral space:
 3. **Explore** the archive — filter by any descriptor axis, follow lineage, inspect parameters
 4. **Seed** ecosystem simulations from selected archive creatures
 
-| Version | Milestone | Status |
-|---|---|---|
-| v0.1.0 | Flow-Lenia PyTorch port, mass conservation verified against JAX reference | ✅ |
-| v0.2.0 | Driver, Ray runtime, search loop, multi-node GPU Ray verified | ✅ |
-| v0.3.0 | Descriptor rework, visual pipeline, static index, per-run metrics | ✅ |
-| v0.4.0 | Batched rollout engine (`--batch-size`, `--workers`), 3.5× cluster speedup | ✅ |
-| v1.0.0 | Lineage view, atlas site, public launch at [biota-atlas.pages.dev](https://biota-atlas.pages.dev) | ✅ |
-| v1.1.0 | Extended descriptor library (9 built-ins), descriptor selection CLI, per-axis archive filtering, custom descriptor API | 🔜 |
-| v2.0.0 | Ecosystem simulation — spawn selected archive creatures on a shared grid | 📋 |
-| v2.1.0 | Heterogeneous ecosystems with parameter localization | 📋 |
-| v3.0.0 | Learned descriptors (AURORA-style autoencoder) | 📋 |
+- [x] v0.1.0 - Flow-Lenia PyTorch port, mass conservation verified against JAX reference
+- [x] v0.2.0 - Driver, Ray runtime, search loop, multi-node GPU Ray verified
+- [x] v0.3.0 - Descriptor rework, visual pipeline, static index, per-run metrics
+- [x] v0.4.0 - Batched rollout engine (`--batch-size`, `--workers`), 3.5x cluster speedup
+- [x] v1.0.0 - Lineage view, atlas site, public launch at [biota-atlas.pages.dev](https://biota-atlas.pages.dev)
+- [x] v1.1.0 - Extended descriptor library (9 built-ins), descriptor selection CLI, per-axis archive filtering, custom descriptor API
+- [ ] v2.0.0 - Ecosystem simulation - spawn selected archive creatures on a shared grid
+- [ ] v2.1.0 - Heterogeneous ecosystems with parameter localization
+- [ ] v3.0.0 - Learned descriptors (AURORA-style autoencoder)
 
 ## References
 

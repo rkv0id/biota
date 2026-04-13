@@ -68,6 +68,16 @@ def _load_manifest(run_dir: Path) -> dict[str, Any]:
         return {}
 
 
+def _load_config(run_dir: Path) -> dict[str, Any]:
+    path = run_dir / "config.json"
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
 # SVG chart helpers - no matplotlib, strings produced directly.
 _SVG_W = 320
 _SVG_H = 160
@@ -507,6 +517,26 @@ def _build_card_context(
     if n_rollouts:
         n_inserted = sum(1 for e in events if e.get("insertion_status") in ("inserted", "replaced"))
         insertion_rate = f"{100 * n_inserted / n_rollouts:.1f}%"
+
+    cfg = _load_config(run_dir)
+    preset = cfg.get("rollout", {}).get("sim", {}).get("grid", "")
+    # Derive preset name from grid size - matches the three known presets
+    grid = cfg.get("rollout", {}).get("sim", {}).get("grid")
+    if grid == 96:
+        preset = "dev"
+    elif grid == 192:
+        preset = "standard"
+    elif grid == 384:
+        preset = "pretty"
+    elif grid is not None:
+        preset = f"{grid}px"
+    else:
+        preset = ""
+
+    budget = cfg.get("budget", "")
+    device = cfg.get("device", "")
+    descriptor_names: list[str] = cfg.get("descriptor_names", [])
+
     return {
         "run_id": run_dir.name,
         "n_cells": len(archive),
@@ -514,6 +544,10 @@ def _build_card_context(
         "n_rollouts": n_rollouts,
         "thumb_url": _first_thumbnail_data_url(archive),
         "insertion_rate": insertion_rate,
+        "preset": preset,
+        "budget": budget,
+        "device": device,
+        "descriptor_names": descriptor_names,
     }
 
 

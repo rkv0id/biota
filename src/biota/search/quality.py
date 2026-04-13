@@ -22,6 +22,7 @@ import numpy as np
 
 from biota.search.descriptors import (
     WINDOW,
+    Descriptor,
     RolloutTrace,
     compute_descriptors,
 )
@@ -74,20 +75,25 @@ def _localized(trace: RolloutTrace) -> bool:
 
 
 def _persistent(
-    trace: RolloutTrace, late_descriptors: Descriptors
+    trace: RolloutTrace,
+    late_descriptors: Descriptors,
+    active: tuple[Descriptor, Descriptor, Descriptor] | None = None,
 ) -> tuple[bool, Descriptors | None]:
     """Compare descriptors at two adjacent 50-step windows.
 
     Returns (is_persistent, early_descriptors). The early descriptors are
     returned for diagnostics and possible reuse, but the canonical descriptors
     used downstream are the late ones.
+
+    active is passed through to compute_descriptors so early and late are
+    computed on the same descriptor axes.
     """
     total = len(trace.com_history)
     if total < 2 * WINDOW:
         return False, None
 
     early_slice = trace.slice(total - 2 * WINDOW, total - WINDOW)
-    early = compute_descriptors(early_slice)
+    early = compute_descriptors(early_slice, active=active)
     if early is None:
         return False, None
 
@@ -124,12 +130,18 @@ def _compactness(trace: RolloutTrace) -> float:
     return float(np.clip(bbox_mass / total_mass, 0.0, 1.0))
 
 
-def evaluate(eval_input: RolloutEvaluation) -> EvaluationResult:
+def evaluate(
+    eval_input: RolloutEvaluation,
+    active_descriptors: tuple[Descriptor, Descriptor, Descriptor] | None = None,
+) -> EvaluationResult:
     """Run the filter-then-rank quality pipeline on a rollout.
 
     Order matters: cheap filters first, then descriptor computation, then
     persistent filter, then compactness. Each gate produces a specific
     rejection reason if it fails.
+
+    active_descriptors controls which three descriptors are computed for the
+    archive coordinates. When None, uses (velocity, gyradius, spectral_entropy).
     """
     if not _alive(eval_input.initial_mass, eval_input.final_mass):
         return EvaluationResult(descriptors=None, quality=None, rejection_reason="dead")
@@ -137,11 +149,11 @@ def evaluate(eval_input: RolloutEvaluation) -> EvaluationResult:
     if not _localized(eval_input.trace):
         return EvaluationResult(descriptors=None, quality=None, rejection_reason="exploded")
 
-    descriptors = compute_descriptors(eval_input.trace)
+    descriptors = compute_descriptors(eval_input.trace, active=active_descriptors)
     if descriptors is None:
         return EvaluationResult(descriptors=None, quality=None, rejection_reason="no_descriptors")
 
-    is_persistent, _ = _persistent(eval_input.trace, descriptors)
+    is_persistent, _ = _persistent(eval_input.trace, descriptors, active=active_descriptors)
     if not is_persistent:
         return EvaluationResult(descriptors=descriptors, quality=None, rejection_reason="unstable")
 

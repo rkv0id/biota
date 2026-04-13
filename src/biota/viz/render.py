@@ -36,6 +36,7 @@ import numpy as np
 from jinja2 import Environment, FileSystemLoader
 
 from biota.search.archive import Archive
+from biota.search.descriptors import REGISTRY
 from biota.search.result import RolloutResult
 from biota.viz.colormap import apply_magma
 
@@ -58,6 +59,31 @@ _ENV = Environment(
     autoescape=False,  # output is HTML we construct, not user input
     keep_trailing_newline=True,
 )
+
+
+def _descriptor_display(
+    names: tuple[str, str, str],
+) -> tuple[list[str], list[str], list[str]]:
+    """Resolve display metadata for the three active descriptor names.
+
+    Returns (full_names, short_names, direction_labels), each a list of
+    three strings. Falls back to the raw name for any descriptor not found
+    in the registry (handles custom descriptor names from old runs).
+    """
+    full: list[str] = []
+    short: list[str] = []
+    dirs: list[str] = []
+    for name in names:
+        if name in REGISTRY:
+            d = REGISTRY[name]
+            full.append(d.name)
+            short.append(d.short_name)
+            dirs.append(d.direction_label)
+        else:
+            full.append(name)
+            short.append(name)
+            dirs.append(name)
+    return full, short, dirs
 
 
 def _thumbnail_to_gif_bytes(thumbnail: np.ndarray) -> bytes:
@@ -181,6 +207,8 @@ def _build_body_inner(
     occupied: list[tuple[tuple[int, int, int], Any]],
     cards: dict[str, dict[str, Any]],
     archive: Archive,
+    d0_direction: str = "faster",
+    d1_direction: str = "larger",
 ) -> str:
     """Build the HTML fragment that goes inside <main>."""
     if not occupied:
@@ -240,13 +268,13 @@ def _build_body_inner(
     return (
         f'<div class="grid-with-axes">'
         f'<div class="axis-vel-label">'
-        f'<div class="axis-arrow">&#8595; faster</div>'
+        f'<div class="axis-arrow">&#8595; {d0_direction}</div>'
         f'<div class="axis-vel-ticks" style="{vel_label_style}">{vel_label_items}</div>'
         f"</div>"
         f'<div class="grid-column-wrap">'
         f'<div class="grid" style="{grid_style}">{cells_html}</div>'
         f'<div class="axis-gyr-ticks" style="{gyr_label_style}">{gyr_label_items}</div>'
-        f'<div class="axis-gyr-label">&#8594; larger (gyradius)</div>'
+        f'<div class="axis-gyr-label">&#8594; {d1_direction}</div>'
         f"</div>"
         f"</div>"
     )
@@ -292,7 +320,18 @@ def render_archive_page(
         for r, g, b in apply_magma(np.linspace(0, 255, 16, dtype=np.uint8).reshape(1, 16))[0]
     )
 
-    body_inner = _build_body_inner(occupied, cards, archive)
+    full_names, short_names, dir_labels = _descriptor_display(archive.descriptor_names)
+    d0_dir, d1_dir, d2_dir = dir_labels
+    d0_name, d1_name, d2_name = full_names
+    d0_short, d1_short, d2_short = short_names
+    footer_legend = (
+        f"rows {d0_name}  \u00b7  columns {d1_name}  \u00b7  {d2_name} collapsed into cell color"
+    )
+    desc_labels_json = json.dumps([d0_short, d1_short, d2_short])
+
+    body_inner = _build_body_inner(
+        occupied, cards, archive, d0_direction=d0_dir, d1_direction=d1_dir
+    )
     grid_desc = f"{archive.bins_speed} x {archive.bins_size} x {archive.bins_structure}"
 
     template = _ENV.get_template("archive.html")
@@ -310,4 +349,15 @@ def render_archive_page(
         cards_json=json.dumps(cards),
         stats_html=stats_html,
         stats_css=stats_css,
+        desc_labels_json=desc_labels_json,
+        d0_name=d0_name,
+        d1_name=d1_name,
+        d2_name=d2_name,
+        d0_short=d0_short,
+        d1_short=d1_short,
+        d2_short=d2_short,
+        d0_dir=d0_dir,
+        d1_dir=d1_dir,
+        d2_dir=d2_dir,
+        footer_legend=footer_legend,
     )

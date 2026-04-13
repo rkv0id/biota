@@ -359,6 +359,22 @@
             color: #52525b;
             font-variant-numeric: tabular-nums;
         }
+        .card-config {
+            font-size: 10px;
+            color: #52525b;
+            margin-top: 4px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0 6px;
+        }
+        .card-cfg-item::before { content: ''; }
+        .card-cfg-item + .card-cfg-item::before { content: '· '; color: #3f3f46; }
+        .card-descriptors {
+            font-size: 10px;
+            color: #3f3f46;
+            margin-top: 3px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        }
 
         @media (max-width: 700px) {
             .page-header { padding: 32px 20px 0 20px; }
@@ -462,6 +478,16 @@
                         {% endif %}
                     </div>
                     <div class="card-rollouts">{{ card.n_rollouts }} rollouts</div>
+                    {% if card.preset or card.budget or card.device %}
+                    <div class="card-config">
+                        {% if card.preset %}<span class="card-cfg-item">{{ card.preset }}</span>{% endif %}
+                        {% if card.budget %}<span class="card-cfg-item">{{ card.budget }} budget</span>{% endif %}
+                        {% if card.device %}<span class="card-cfg-item">{{ card.device }}</span>{% endif %}
+                    </div>
+                    {% endif %}
+                    {% if card.descriptor_names %}
+                    <div class="card-descriptors">{{ card.descriptor_names | join(' · ') }}</div>
+                    {% endif %}
                 </div>
             </a>
             {% endfor %}

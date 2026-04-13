@@ -18,13 +18,18 @@ during the loop and quantized once at the end.
 """
 
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 
-from biota.search.descriptors import RolloutTrace
+from biota.search.descriptors import (
+    DEFAULT_DESCRIPTORS,
+    Descriptor,
+    RolloutTrace,
+    resolve_descriptors,
+)
 from biota.search.params import sample_random
 from biota.search.quality import RolloutEvaluation, evaluate
 from biota.search.result import CellCoord, ParamDict, RolloutResult
@@ -58,6 +63,12 @@ class RolloutConfig:
 
     thumbnail_frames: int = THUMBNAIL_FRAMES
     thumbnail_size: int = THUMBNAIL_SIZE
+
+    active_descriptors: tuple[Descriptor, Descriptor, Descriptor] = field(
+        default_factory=lambda: resolve_descriptors(DEFAULT_DESCRIPTORS)
+    )
+    """The three active descriptor objects used to compute archive coordinates.
+    Defaults to (velocity, gyradius, spectral_entropy) when not supplied."""
 
 
 def dev_preset() -> RolloutConfig:
@@ -260,7 +271,8 @@ def rollout(
             initial_mass=initial_mass,
             final_mass=final_mass,
             trace=trace,
-        )
+        ),
+        active_descriptors=config.active_descriptors,
     )
 
     # 9. Build the thumbnail (with fallback if frame capture missed)
@@ -598,7 +610,8 @@ def rollout_batch(
                 initial_mass=initial_masses[i],
                 final_mass=final_masses[i],
                 trace=trace,
-            )
+            ),
+            active_descriptors=config.active_descriptors,
         )
 
         results.append(

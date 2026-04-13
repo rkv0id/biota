@@ -1,50 +1,32 @@
 """Behavior descriptors for Flow-Lenia rollouts.
 
-Three scalar reductions, all normalized to [0, 1]:
+Descriptors are normalized scalar reductions over a RolloutTrace, each
+returning a float in [0, 1]. They define the behavioral axes of the MAP-Elites
+archive. The search always uses exactly three active descriptors.
 
-- velocity:        mean COM step delta over the last WINDOW steps,
-                   normalized against an empirical 0.02 cells/step bound
-                   (calibrated against the biota parameter prior, which
-                   produces creatures roughly 50x slower than the
-                   Leniabreeder population)
-- gyradius:        mass-weighted RMS distance from center of mass at the
-                   final step, normalized by grid_size / 4 (Chan's `rm`)
-- spectral_entropy: Shannon entropy of the radially-averaged FFT magnitude
-                   spectrum of the final state, normalized to [0, 1]
+Built-in descriptor library (9 total):
 
-The rollout worker tracks COM and bbox-fraction during the sim, plus the
-final state, bundles them into a RolloutTrace, and passes that to
-compute_descriptors.
+  velocity             mean COM displacement/step over trailing WINDOW steps
+  gyradius             mass-weighted RMS distance from COM at final step
+  spectral_entropy     Shannon entropy of radially-averaged FFT spectrum
+  oscillation          variance of bbox fraction over trace tail
+  compactness          mass inside bbox / total mass at final step
+  mass_asymmetry       |mean COM_x drift - mean COM_y drift| / sum
+  png_compressibility  PNG compressed / uncompressed size of final state
+  rotational_symmetry  angular variance of radial mass profile at final step
+  persistence_score    max drift of the three core descriptors across trace tail
 
-These descriptors replace the M1 (speed, size, structure) triple, which
-was demonstrated to be degenerate. They also replace an interim attempt that used
-Chan's growth-centroid distance (dgm) for the third axis - the dgm
-descriptor turned out to be structurally degenerate for the radially
-symmetric solitons biota's parameter prior produces, since the growth-
-field COM and mass COM mathematically coincide for any radially symmetric
-creature.
+Custom descriptors can be loaded from a user Python file via --descriptor-module;
+see cli.py. The file must define a list named DESCRIPTORS containing Descriptor
+objects. Loaded descriptors are merged into the registry at startup.
 
-Spectral entropy captures spatial frequency content directly: a smooth
-disk has all energy concentrated in low-frequency bins (low entropy),
-a dotted lattice has energy spread across high frequencies (high
-entropy), a bullseye has periodic mid-frequency content. This is what
-the M1 Shannon-entropy structure descriptor was trying to do but did
-not achieve, because Shannon entropy on a 16x16 mass histogram does
-not encode spatial arrangement.
-
-Note: gyradius and spectral_entropy are computed at the final step
-regardless of the trace slice. Only velocity is window-dependent. The
-persistent filter in quality.py compares early-vs-late descriptor
-drift; under this design, two of the three descriptors are window-
-invariant by construction, so the persistent filter effectively becomes
-a velocity-stability check. That is acceptable: a creature whose shape
-is stable but whose velocity is changing is genuinely non-persistent.
-
-If the rollout died (zero mass at the final step), compute_descriptors
-returns None and the rollout will be flagged as 'dead' by the alive
-filter downstream.
+A Descriptor's compute function must return float in [0, 1]. Out-of-range
+values are silently clipped during archive cell assignment. Validate your
+normalizers against real rollout data before running a full search.
 """
 
+import zlib
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
@@ -98,14 +80,35 @@ the full [0, 1] range and uses all 16 bins.
 Calibrated against the iteration-2 cluster run (run id eager-bramble,
 166 cells) which observed a minimum spectral entropy of 0.59 across the
 discovered population. The 0.55 floor is set slightly below the minimum
-with margin for slightly less-structured outliers.
+with margin for slightly less-structured outliers."""
 
-This is an empirical fudge factor, not a theoretical bound. If a future
-change to the parameter prior or the survival filters produces creatures
-with spectral entropy below 0.55, those would clip to 0 here and the
-floor should be re-lowered. If they produce creatures all above 0.85,
-the floor should be raised. Re-calibrate against fresh data, not against
-intuition about what range "should" be useful."""
+
+# === Descriptor dataclass ===
+
+
+@dataclass(frozen=True)
+class Descriptor:
+    """A behavioral descriptor: metadata plus a pure compute function.
+
+    The compute function receives a RolloutTrace and must return a float
+    in [0, 1]. Values outside this range are clipped at archive cell
+    assignment; they do not raise an error but will silently produce
+    degenerate archive coverage.
+
+    Attributes:
+        name:            Full display name used in the UI ("spectral entropy").
+        short_name:      Compact label for axis ticks ("spec.ent.").
+        direction_label: What increasing values mean ("higher entropy").
+        compute:         Pure function (RolloutTrace) -> float in [0, 1].
+    """
+
+    name: str
+    short_name: str
+    direction_label: str
+    compute: Callable[["RolloutTrace"], float]
+
+
+# === RolloutTrace ===
 
 
 @dataclass(frozen=True)
@@ -154,6 +157,9 @@ class RolloutTrace:
         )
 
 
+# === built-in compute functions ===
+
+
 def compute_velocity(trace: RolloutTrace) -> float:
     """Mean COM step-delta over the last WINDOW steps, normalized to [0, 1].
 
@@ -179,18 +185,7 @@ def compute_gyradius(trace: RolloutTrace) -> float:
     box-based size measure used in M1, gyradius does not depend on a binary
     mass threshold and varies smoothly with the mass distribution.
 
-    Computation:
-
-        com = (sum(mass * x) / total_mass, sum(mass * y) / total_mass)
-        gyradius = sqrt(sum(mass * |xy - com|^2) / total_mass)
-
-    Normalized by grid_size / GYRADIUS_NORMALIZER_DIVISOR (default
-    grid_size / 4). A creature whose mass-weighted RMS distance equals a
-    quarter of the grid edge maps to 1.0; in practice creatures stay well
-    below that.
-
-    Returns 0.0 if the final state has no mass (the alive filter will catch
-    this case downstream).
+    Returns 0.0 if the final state has no mass.
     """
     state = trace.final_state
     total_mass = float(state.sum())
@@ -218,51 +213,11 @@ def compute_spectral_entropy(trace: RolloutTrace) -> float:
     """Shannon entropy of the radially-averaged FFT magnitude spectrum, in [0, 1].
 
     Captures spatial frequency content of the final-step mass distribution.
-    The descriptor's actual discrimination dimension is "smoothness vs
-    sharpness" rather than literal frequency content. A smooth Gaussian
-    has energy concentrated in a few low-radial-wavenumber bins (raw
-    entropy ~0.3) and clips to 0 after the empirical floor remap. A
-    sharp-edged disk produces broad spectral content via Gibbs ringing
-    at the edge (raw entropy ~0.92, post-remap ~0.82). A bullseye with
-    periodic rings is similar (~0.91 raw, ~0.80 post-remap). A dotted
-    lattice concentrates energy at specific harmonics (~0.60 raw,
-    ~0.12 post-remap).
+    Smooth blobs cluster near zero; sharp-edged structured creatures spread
+    into the upper range. See SPECTRAL_ENTROPY_FLOOR for the empirical remap
+    that prevents population crowding in the top few bins.
 
-    Computation:
-
-        F = fft2(state)
-        magnitude = |F|
-        zero out the DC component (total mass, dominates and carries no
-            spatial information)
-        radially average into SPECTRAL_RADIAL_BINS bins by 2D wavenumber
-            sqrt(kx^2 + ky^2)
-        normalize the radial profile to a probability distribution
-        entropy = -sum(p * log(p)) for nonzero p
-        raw = entropy / log(SPECTRAL_RADIAL_BINS)
-        # empirical remap so biota's [0.55, 0.95] population uses [0, 1]
-        return clip((raw - SPECTRAL_ENTROPY_FLOOR) / (1 - FLOOR), 0, 1)
-
-    Why radial average instead of full 2D entropy: radial averaging is
-    rotation-invariant, which is the right symmetry for biota's
-    population (most creatures are roughly radially symmetric solitons).
-    Two creatures that differ only by rotation should have the same
-    spectral entropy.
-
-    Why exclude DC: the DC component is the total mass, which Flow-Lenia
-    conserves. Including it would dominate the magnitude spectrum across
-    all creatures and dampen the entropy signal.
-
-    Why the empirical floor remap: see SPECTRAL_ENTROPY_FLOOR docstring.
-    Briefly: biota's discovered population concentrates in raw values
-    [0.55, 0.95] because all discovered creatures are sharp-edged
-    structured solitons. Without the remap, ~80% of cells crowd into the
-    top 4 of 16 archive structure bins. With the remap, the same
-    population spreads across all 16 bins.
-
-    Returns 0.0 for empty or constant final states, and for any creature
-    whose raw spectral entropy is below SPECTRAL_ENTROPY_FLOOR (which in
-    practice means the synthetic test patterns the descriptor is
-    calibrated against, not real biota creatures).
+    Returns 0.0 for empty or constant final states.
     """
     state = trace.final_state
     if float(state.sum()) <= 0.0:
@@ -270,7 +225,6 @@ def compute_spectral_entropy(trace: RolloutTrace) -> float:
 
     h, w = state.shape
 
-    # 2D FFT, magnitude, zero DC
     spectrum = np.fft.fft2(state.astype(np.float64))
     magnitude = np.abs(spectrum)
     magnitude[0, 0] = 0.0
@@ -278,17 +232,11 @@ def compute_spectral_entropy(trace: RolloutTrace) -> float:
     if float(magnitude.sum()) <= 0.0:
         return 0.0
 
-    # Build the radial wavenumber map. fft2 returns frequencies in the
-    # standard layout: 0, 1, ..., N/2, -N/2+1, ..., -1. Convert to centered
-    # frequency indices via fftfreq * N (in cycles-per-grid units).
-    ky = np.fft.fftfreq(h) * h  # (h,)
-    kx = np.fft.fftfreq(w) * w  # (w,)
+    ky = np.fft.fftfreq(h) * h
+    kx = np.fft.fftfreq(w) * w
     ky_grid, kx_grid = np.meshgrid(ky, kx, indexing="ij")
     radius = np.sqrt(ky_grid * ky_grid + kx_grid * kx_grid)
 
-    # Radial bins span [0, max possible radius]. Maximum radius for an HxW
-    # grid is sqrt((h/2)^2 + (w/2)^2). We bin uniformly into
-    # SPECTRAL_RADIAL_BINS bins.
     r_max = float(np.sqrt((h / 2.0) ** 2 + (w / 2.0) ** 2))
     if r_max <= 0.0:
         return 0.0
@@ -298,7 +246,6 @@ def compute_spectral_entropy(trace: RolloutTrace) -> float:
         SPECTRAL_RADIAL_BINS - 1,
     )
 
-    # Sum magnitude into the radial bins
     radial_profile = np.bincount(
         bin_indices.ravel(),
         weights=magnitude.ravel(),
@@ -316,25 +263,292 @@ def compute_spectral_entropy(trace: RolloutTrace) -> float:
     if max_entropy <= 0.0:
         return 0.0
 
-    # Raw value is in [0, 1] but biota's discovered population concentrates
-    # in [SPECTRAL_ENTROPY_FLOOR, 1]. Remap that band to [0, 1] so the
-    # archive's structure axis uses its full bin range. See the
-    # SPECTRAL_ENTROPY_FLOOR docstring for the calibration story.
     raw = entropy / max_entropy
     remapped = (raw - SPECTRAL_ENTROPY_FLOOR) / (1.0 - SPECTRAL_ENTROPY_FLOOR)
     return float(np.clip(remapped, 0.0, 1.0))
 
 
-def compute_descriptors(trace: RolloutTrace) -> Descriptors | None:
-    """Compute the three normalized descriptors from a rollout trace.
+def compute_oscillation(trace: RolloutTrace) -> float:
+    """Variance of bbox fraction over the trace tail, normalized to [0, 1].
 
-    Returns None if the rollout is dead (zero mass at the final step), in
-    which case the alive filter downstream will reject it with reason 'dead'.
+    Pulsing/breathing creatures have a bbox fraction that oscillates as
+    they expand and contract. Rigid translating creatures have near-zero
+    variance. The normalizer (0.05) is empirical: a bbox fraction swinging
+    between 0.1 and 0.3 has variance ~0.01; rigid creatures ~0.0001.
+    Normalize by 0.05 so strongly oscillating creatures saturate at 1.0.
+    """
+    fractions = trace.bbox_fraction_history[-WINDOW:]
+    if len(fractions) < 2:
+        return 0.0
+    variance = float(np.var(fractions))
+    return float(np.clip(variance / 0.05, 0.0, 1.0))
+
+
+def compute_compactness(trace: RolloutTrace) -> float:
+    """Fraction of total mass inside the final-step bounding box, in [0, 1].
+
+    Uses a 10%-of-peak threshold to define the bbox, same as quality.py.
+    Compact creatures with all mass inside a tight bbox score near 1.0.
+    Diffuse creatures with mass scattered as background score near 0.0.
+
+    This is the same compactness used as the quality metric in quality.py,
+    promoted here to a behavioral axis so it can serve as a descriptor
+    dimension separate from quality.
+    """
+    state = trace.final_state
+    total_mass = float(state.sum())
+    if total_mass <= 0.0:
+        return 0.0
+
+    peak = float(state.max())
+    if peak <= 0.0:
+        return 0.0
+
+    threshold = 0.1 * peak
+    mask = state > threshold
+    if not mask.any():
+        return 0.0
+
+    rows = np.where(mask.any(axis=1))[0]
+    cols = np.where(mask.any(axis=0))[0]
+    y_min, y_max = int(rows[0]), int(rows[-1]) + 1
+    x_min, x_max = int(cols[0]), int(cols[-1]) + 1
+
+    bbox_mass = float(state[y_min:y_max, x_min:x_max].sum())
+    return float(np.clip(bbox_mass / total_mass, 0.0, 1.0))
+
+
+def compute_mass_asymmetry(trace: RolloutTrace) -> float:
+    """Directional bias of motion: |mean_x_drift - mean_y_drift| / sum.
+
+    Straight-line movers have nearly all drift along one axis -> high
+    asymmetry. Orbiters or creatures with circular motion have balanced
+    x and y drift -> low asymmetry. Returns 0 if there is no net motion.
+
+    Normalized to [0, 1] by construction: the numerator is bounded by
+    the denominator when it is nonzero.
+    """
+    coms = trace.com_history[-WINDOW:]
+    if len(coms) < 2:
+        return 0.0
+    deltas = np.diff(coms, axis=0)
+    mean_x = float(np.abs(deltas[:, 1]).mean())
+    mean_y = float(np.abs(deltas[:, 0]).mean())
+    total = mean_x + mean_y
+    if total <= 0.0:
+        return 0.0
+    return float(np.clip(abs(mean_x - mean_y) / total, 0.0, 1.0))
+
+
+def compute_png_compressibility(trace: RolloutTrace) -> float:
+    """PNG compressed size / raw uncompressed size of the final state image.
+
+    Standard ALife complexity metric (Adachi et al. 2024, Michel et al. 2025).
+    Smooth/boring states compress well -> low ratio. Noisy random states are
+    nearly incompressible -> high ratio. Structured creatures with repetition
+    and symmetry land in the middle.
+
+    Implementation: quantize the float32 final state to uint8, then
+    zlib-compress (PNG's compressor). Raw size is H*W bytes.
+    """
+    state = trace.final_state
+    if float(state.sum()) <= 0.0:
+        return 0.0
+    peak = float(state.max())
+    if peak <= 0.0:
+        return 0.0
+    quantized = (state / peak * 255).clip(0, 255).astype(np.uint8)
+    raw_bytes = quantized.tobytes()
+    compressed = zlib.compress(raw_bytes, level=6)
+    return float(np.clip(len(compressed) / len(raw_bytes), 0.0, 1.0))
+
+
+def compute_rotational_symmetry(trace: RolloutTrace) -> float:
+    """Angular variance of the radial mass profile at the final step, in [0, 1].
+
+    Low value -> mass distributed uniformly around the COM (rings, dots,
+    radially symmetric solitons). High value -> mass concentrated in
+    particular angular directions (L-shapes, dumbbells, asymmetric gliders).
+
+    Computed by binning mass into 16 angular sectors around the COM, then
+    taking the variance of the resulting distribution normalized against
+    the maximum achievable variance (all mass in one sector).
+    """
+    state = trace.final_state
+    total_mass = float(state.sum())
+    if total_mass <= 0.0:
+        return 0.0
+
+    h, w = state.shape
+    y_coords, x_coords = np.indices((h, w), dtype=np.float32)
+    com_y = float((state * y_coords).sum() / total_mass)
+    com_x = float((state * x_coords).sum() / total_mass)
+
+    dy = y_coords - com_y
+    dx = x_coords - com_x
+
+    n_bins = 16
+    angles = (np.arctan2(dy, dx) + np.pi) / (2.0 * np.pi)  # [0, 1)
+    bin_indices = np.minimum(np.floor(angles * n_bins).astype(np.int64), n_bins - 1)
+    radial_mass = np.bincount(bin_indices.ravel(), weights=state.ravel(), minlength=n_bins)
+
+    total = float(radial_mass.sum())
+    if total <= 0.0:
+        return 0.0
+
+    p = radial_mass / total
+    variance = float(np.var(p))
+    # Maximum variance: all mass in one bin -> p = [1, 0, ..., 0].
+    # var([1, 0,...,0]) = mean_p * (1 - mean_p) where mean_p = 1/n_bins.
+    mean_p = 1.0 / n_bins
+    max_variance = mean_p * (1.0 - mean_p)
+    if max_variance <= 0.0:
+        return 0.0
+    return float(np.clip(variance / max_variance, 0.0, 1.0))
+
+
+def compute_persistence_score(trace: RolloutTrace) -> float:
+    """Temporal stability of core descriptor values over the trace tail, in [0, 1].
+
+    Continuous version of the binary persistent filter in quality.py. Computes
+    velocity, gyradius, and spectral_entropy over two adjacent WINDOW-step
+    slices and returns the maximum normalized drift, scaled against the
+    PERSISTENT_DESCRIPTOR_DRIFT threshold (0.2).
+
+    Low score -> creature is behaviorally consistent over time (stable).
+    High score -> descriptors drift significantly (creature is changing).
+
+    Always uses velocity/gyradius/spectral_entropy regardless of which three
+    descriptors are active for the current search, so the measure stays
+    anchored to the same observables as the quality filter.
+    """
+    total = len(trace.com_history)
+    if total < 2 * WINDOW:
+        return 0.0
+
+    late_slice = trace.slice(total - WINDOW, total)
+    early_slice = trace.slice(total - 2 * WINDOW, total - WINDOW)
+
+    late = (
+        compute_velocity(late_slice),
+        compute_gyradius(late_slice),
+        compute_spectral_entropy(late_slice),
+    )
+    early = (
+        compute_velocity(early_slice),
+        compute_gyradius(early_slice),
+        compute_spectral_entropy(early_slice),
+    )
+
+    drift_threshold = 0.2  # matches PERSISTENT_DESCRIPTOR_DRIFT in quality.py
+    max_drift = max(abs(a - b) for a, b in zip(late, early, strict=True))
+    return float(np.clip(max_drift / drift_threshold, 0.0, 1.0))
+
+
+# === registry ===
+
+
+REGISTRY: dict[str, Descriptor] = {
+    "velocity": Descriptor(
+        name="velocity",
+        short_name="vel.",
+        direction_label="faster",
+        compute=compute_velocity,
+    ),
+    "gyradius": Descriptor(
+        name="gyradius",
+        short_name="gyr.",
+        direction_label="larger",
+        compute=compute_gyradius,
+    ),
+    "spectral_entropy": Descriptor(
+        name="spectral entropy",
+        short_name="spec.ent.",
+        direction_label="higher entropy",
+        compute=compute_spectral_entropy,
+    ),
+    "oscillation": Descriptor(
+        name="oscillation",
+        short_name="osc.",
+        direction_label="more pulsing",
+        compute=compute_oscillation,
+    ),
+    "compactness": Descriptor(
+        name="compactness",
+        short_name="comp.",
+        direction_label="more compact",
+        compute=compute_compactness,
+    ),
+    "mass_asymmetry": Descriptor(
+        name="mass asymmetry",
+        short_name="asym.",
+        direction_label="more asymmetric",
+        compute=compute_mass_asymmetry,
+    ),
+    "png_compressibility": Descriptor(
+        name="PNG compressibility",
+        short_name="compress.",
+        direction_label="less compressible",
+        compute=compute_png_compressibility,
+    ),
+    "rotational_symmetry": Descriptor(
+        name="rotational symmetry",
+        short_name="rot.sym.",
+        direction_label="more asymmetric",
+        compute=compute_rotational_symmetry,
+    ),
+    "persistence_score": Descriptor(
+        name="persistence score",
+        short_name="persist.",
+        direction_label="less stable",
+        compute=compute_persistence_score,
+    ),
+}
+
+DEFAULT_DESCRIPTORS: tuple[str, str, str] = ("velocity", "gyradius", "spectral_entropy")
+"""The three descriptors active when --descriptors is not passed."""
+
+
+def resolve_descriptors(names: tuple[str, str, str]) -> tuple[Descriptor, Descriptor, Descriptor]:
+    """Look up three descriptor names in the registry.
+
+    Raises ValueError with a clear message if any name is unknown.
+    """
+    result: list[Descriptor] = []
+    for name in names:
+        if name not in REGISTRY:
+            known = ", ".join(sorted(REGISTRY))
+            raise ValueError(f"unknown descriptor {name!r}. known: {known}")
+        result.append(REGISTRY[name])
+    return result[0], result[1], result[2]
+
+
+# === compute API ===
+
+
+def compute_descriptors(
+    trace: RolloutTrace,
+    active: tuple[Descriptor, Descriptor, Descriptor] | None = None,
+) -> Descriptors | None:
+    """Compute three normalized descriptors from a rollout trace.
+
+    Returns None if the rollout is dead (zero mass at the final step).
+
+    When active is None, uses the default three (velocity, gyradius,
+    spectral_entropy). This backward-compatible default is used by
+    quality.py's persistent filter, which always compares the same three
+    core observables regardless of the search's active descriptor axes.
     """
     if float(trace.final_state.sum()) <= 0.0:
         return None
+    if active is None:
+        return (
+            compute_velocity(trace),
+            compute_gyradius(trace),
+            compute_spectral_entropy(trace),
+        )
     return (
-        compute_velocity(trace),
-        compute_gyradius(trace),
-        compute_spectral_entropy(trace),
+        active[0].compute(trace),
+        active[1].compute(trace),
+        active[2].compute(trace),
     )

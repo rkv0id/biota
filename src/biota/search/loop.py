@@ -33,6 +33,7 @@ import random
 import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
+from dataclasses import replace as dc_replace
 from pathlib import Path
 from typing import Any
 
@@ -46,6 +47,7 @@ from biota.ray_compat import (
     wait_for_completed,
 )
 from biota.search.archive import Archive, InsertionStatus
+from biota.search.descriptors import DEFAULT_DESCRIPTORS, resolve_descriptors
 from biota.search.params import mutate, sample_random
 from biota.search.result import CellCoord, ParamDict, RolloutResult
 from biota.search.rollout import RolloutConfig
@@ -104,6 +106,12 @@ class SearchConfig:
     produces the same sequence of sampled params (the mutation phase is
     nondeterministic in parallel mode because parent picking depends on
     completion order)."""
+
+    descriptor_names: tuple[str, str, str] = DEFAULT_DESCRIPTORS
+    """Names of the three active behavioral descriptors. Must all exist in
+    biota.search.descriptors.REGISTRY (or in a custom module loaded via
+    --descriptor-module). Controls both the archive axes and the rollout
+    descriptor computation."""
 
     def __post_init__(self) -> None:
         if self.local_ray and self.ray_address is not None:
@@ -183,12 +191,17 @@ def search(
     a fresh one if None).
     """
     if archive is None:
-        archive = Archive()
+        archive = Archive(descriptor_names=config.descriptor_names)
     if run_id is None:
         run_id = _make_run_id()
 
     run_dir = Path(runs_root) / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
+    # Inject active descriptors into the rollout config so workers compute
+    # the right three axes.
+    active = resolve_descriptors(config.descriptor_names)
+    rollout_with_descriptors = dc_replace(config.rollout, active_descriptors=active)
+    config = dc_replace(config, rollout=rollout_with_descriptors)
     state = _LoopState(
         config=config,
         archive=archive,
@@ -518,10 +531,22 @@ def _append_event_log(state: _LoopState, result: RolloutResult, status: Insertio
 def _config_to_jsonable(config: SearchConfig) -> dict[str, Any]:
     """Flatten SearchConfig (which contains nested RolloutConfig and SimConfig)
     into a JSON-serializable dict.
+
+    active_descriptors is excluded from the rollout sub-dict because it contains
+    non-serializable Callable fields. descriptor_names on SearchConfig is the
+    canonical JSON representation; the Descriptor objects are always re-derivable
+    from the names at load time.
     """
-    out: dict[str, Any] = {}
-    rollout_dict = asdict(config.rollout)
-    out["rollout"] = rollout_dict
+    r = config.rollout
+    out: dict[str, Any] = {
+        "rollout": {
+            "sim": asdict(r.sim),
+            "steps": r.steps,
+            "patch_fraction": r.patch_fraction,
+            "thumbnail_frames": r.thumbnail_frames,
+            "thumbnail_size": r.thumbnail_size,
+        },
+    }
     for key in (
         "budget",
         "random_phase_size",
@@ -532,6 +557,7 @@ def _config_to_jsonable(config: SearchConfig) -> dict[str, Any]:
         "device",
         "checkpoint_every",
         "base_seed",
+        "descriptor_names",
     ):
         out[key] = getattr(config, key)
     return out

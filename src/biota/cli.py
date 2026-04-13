@@ -14,6 +14,8 @@ The CLI is thin: it parses flags into a SearchConfig and calls
 biota.search.loop.search. All real logic lives in the search layer.
 """
 
+import importlib
+import importlib.util
 import platform
 import sys
 from dataclasses import replace
@@ -22,6 +24,7 @@ from pathlib import Path
 import typer
 
 from biota.search.archive import InsertionStatus
+from biota.search.descriptors import DEFAULT_DESCRIPTORS, REGISTRY, Descriptor
 from biota.search.loop import (
     CheckpointWritten,
     RolloutCompleted,
@@ -117,6 +120,67 @@ def _print_event(event: SearchEvent, budget: int) -> None:
 RAY_DEFAULT_PORT = 6379
 
 
+def load_descriptor_module(path: Path) -> None:
+    """Load a user-supplied Python file and merge its DESCRIPTORS into REGISTRY.
+
+    The file must define a module-level list named DESCRIPTORS. Every element
+    must be a Descriptor instance with a callable compute field. Fails loudly
+    on any violation rather than silently producing bad archives.
+    """
+    spec = importlib.util.spec_from_file_location("_biota_custom_descriptors", path)
+    if spec is None or spec.loader is None:
+        raise typer.BadParameter(
+            f"cannot load descriptor module: {path}", param_hint="--descriptor-module"
+        )
+    mod = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    except Exception as exc:
+        raise typer.BadParameter(
+            f"error executing descriptor module {path}: {exc}", param_hint="--descriptor-module"
+        ) from exc
+
+    if not hasattr(mod, "DESCRIPTORS"):
+        raise typer.BadParameter(
+            f"{path} must define a list named DESCRIPTORS", param_hint="--descriptor-module"
+        )
+    descriptors = mod.DESCRIPTORS
+    if not isinstance(descriptors, list):
+        raise typer.BadParameter(
+            f"{path}: DESCRIPTORS must be a list, got {type(descriptors).__name__}",
+            param_hint="--descriptor-module",
+        )
+    for i, d in enumerate(descriptors):
+        if not isinstance(d, Descriptor):
+            raise typer.BadParameter(
+                f"{path}: DESCRIPTORS[{i}] is {type(d).__name__}, expected Descriptor",
+                param_hint="--descriptor-module",
+            )
+        if not callable(d.compute):
+            raise typer.BadParameter(
+                f"{path}: DESCRIPTORS[{i}] ({d.name!r}) has non-callable compute field",
+                param_hint="--descriptor-module",
+            )
+        REGISTRY[d.name] = d
+
+
+def _resolve_descriptor_names(names: list[str]) -> tuple[str, str, str]:
+    """Validate that exactly three names are given and all exist in REGISTRY."""
+    if len(names) != 3:
+        raise typer.BadParameter(
+            f"--descriptors requires exactly 3 names, got {len(names)}",
+            param_hint="--descriptors",
+        )
+    for name in names:
+        if name not in REGISTRY:
+            known = ", ".join(sorted(REGISTRY))
+            raise typer.BadParameter(
+                f"unknown descriptor {name!r}. known: {known}",
+                param_hint="--descriptors",
+            )
+    return names[0], names[1], names[2]
+
+
 def _normalize_ray_address(value: str | None) -> str | None:
     """Add the default port to a host-only ray_address if no port is given.
 
@@ -191,6 +255,24 @@ def search_cmd(
     steps: int | None = typer.Option(
         None, "--steps", help="Override preset step count (for experimentation)."
     ),
+    descriptors: list[str] = typer.Option(
+        list(DEFAULT_DESCRIPTORS),
+        "--descriptors",
+        help=(
+            "Three descriptor names for the archive axes, space- or flag-separated. "
+            "Example: --descriptors velocity gyradius oscillation. "
+            "Must all exist in the built-in registry or --descriptor-module."
+        ),
+    ),
+    descriptor_module: Path | None = typer.Option(
+        None,
+        "--descriptor-module",
+        help=(
+            "Path to a Python file defining custom Descriptor objects. "
+            "The file must define a list named DESCRIPTORS. "
+            "Custom descriptors are merged into the registry before --descriptors is resolved."
+        ),
+    ),
 ) -> None:
     """Run a MAP-Elites search over Flow-Lenia parameters."""
     if local_ray and ray_address is not None:
@@ -198,6 +280,11 @@ def search_cmd(
             "--local-ray and --ray-address are mutually exclusive; pass one or the other",
             param_hint="--local-ray / --ray-address",
         )
+
+    if descriptor_module is not None:
+        load_descriptor_module(descriptor_module)
+
+    descriptor_names = _resolve_descriptor_names(descriptors)
 
     rollout_cfg = _override_sim(_resolve_preset(preset), grid=grid, steps=steps)
     config = SearchConfig(
@@ -211,6 +298,7 @@ def search_cmd(
         device=device,
         base_seed=base_seed,
         checkpoint_every=checkpoint_every,
+        descriptor_names=descriptor_names,
     )
 
     def on_event(event: SearchEvent) -> None:

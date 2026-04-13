@@ -729,15 +729,36 @@
             <span class="meta-value">{{ total_cells }}</span> capacity
         </div>
         <div class="swatch-wrap">
-            <span>spectral entropy</span>
+            <span>{{ d2_name }}</span>
             <div class="swatch"></div>
-            <span>high</span>
+            <span>high {{ d2_dir }}</span>
         </div>
         <div class="filter-row">
             <label for="quality-filter">min quality</label>
             <input type="range" id="quality-filter" min="0" max="1" step="0.01" value="0" />
             <span id="filter-val">0.00</span>
             <span id="filter-count"></span>
+        </div>
+        <div class="filter-row">
+            <label for="d0-min">{{ d0_short }} min</label>
+            <input type="range" id="d0-min" min="0" max="1" step="0.01" value="0" />
+            <label for="d0-max">max</label>
+            <input type="range" id="d0-max" min="0" max="1" step="0.01" value="1" />
+            <span id="d0-range-val">0.00 - 1.00</span>
+        </div>
+        <div class="filter-row">
+            <label for="d1-min">{{ d1_short }} min</label>
+            <input type="range" id="d1-min" min="0" max="1" step="0.01" value="0" />
+            <label for="d1-max">max</label>
+            <input type="range" id="d1-max" min="0" max="1" step="0.01" value="1" />
+            <span id="d1-range-val">0.00 - 1.00</span>
+        </div>
+        <div class="filter-row">
+            <label for="d2-center">{{ d2_short }}</label>
+            <input type="range" id="d2-center" min="0" max="1" step="0.01" value="0.5" />
+            <label for="d2-band">band</label>
+            <input type="range" id="d2-band" min="0.02" max="1" step="0.01" value="1" />
+            <span id="d2-range-val">all</span>
         </div>
         <div class="page-path">{{ run_dir }}</div>
     </header>
@@ -747,10 +768,7 @@
     </main>
 
     <footer class="page-footer">
-        <div class="axis-legend">
-            rows velocity &nbsp;&middot;&nbsp; columns gyradius &nbsp;&middot;&nbsp;
-            structure (spectral entropy) collapsed into cell position
-        </div>
+        <div class="axis-legend">{{ footer_legend }}</div>
         <div>
             Hover any cell for descriptor values. Click any cell to open the
             full detail view with parameters and lineage. Escape or click
@@ -811,7 +829,7 @@
 
     <script>
 const CARDS = {{ cards_json }};
-const DESC_LABELS = ['velocity', 'gyradius', 'spectral'];
+const DESC_LABELS = {{ desc_labels_json }};
 
 // Build reverse map: key -> list of child keys, from CARDS at load time.
 // One O(n) pass; used for lineage highlighting and modal children list.
@@ -1012,27 +1030,66 @@ document.getElementById('modal-lineage').addEventListener('click', function(evt)
     setTimeout(function() { openModal(card); }, 220);
 });
 
-// === quality filter ===
+// === filters (quality + three per-axis descriptor range sliders) ===
+// All four filters compound: a cell is visible only if it passes all active
+// filters. Cells are hidden not removed, so descriptor-space distances are
+// preserved visually.
 
 const filterSlider = document.getElementById('quality-filter');
 const filterVal    = document.getElementById('filter-val');
 const filterCount  = document.getElementById('filter-count');
+const d0Min = document.getElementById('d0-min');
+const d0Max = document.getElementById('d0-max');
+const d0RangeVal = document.getElementById('d0-range-val');
+const d1Min = document.getElementById('d1-min');
+const d1Max = document.getElementById('d1-max');
+const d1RangeVal = document.getElementById('d1-range-val');
+const d2Center = document.getElementById('d2-center');
+const d2Band   = document.getElementById('d2-band');
+const d2RangeVal = document.getElementById('d2-range-val');
 
 function applyFilter() {
-    const threshold = parseFloat(filterSlider.value);
-    filterVal.textContent = threshold.toFixed(2);
+    const qualThresh = parseFloat(filterSlider.value);
+    filterVal.textContent = qualThresh.toFixed(2);
+
+    let d0lo = parseFloat(d0Min.value);
+    let d0hi = parseFloat(d0Max.value);
+    if (d0lo > d0hi) { const t = d0lo; d0lo = d0hi; d0hi = t; }
+    d0RangeVal.textContent = d0lo.toFixed(2) + ' - ' + d0hi.toFixed(2);
+
+    let d1lo = parseFloat(d1Min.value);
+    let d1hi = parseFloat(d1Max.value);
+    if (d1lo > d1hi) { const t = d1lo; d1lo = d1hi; d1hi = t; }
+    d1RangeVal.textContent = d1lo.toFixed(2) + ' - ' + d1hi.toFixed(2);
+
+    const d2c = parseFloat(d2Center.value);
+    const d2b = parseFloat(d2Band.value);
+    const d2lo = Math.max(0, d2c - d2b / 2);
+    const d2hi = Math.min(1, d2c + d2b / 2);
+    d2RangeVal.textContent = d2b >= 1.0
+        ? 'all'
+        : d2lo.toFixed(2) + ' - ' + d2hi.toFixed(2);
+
     let visible = 0;
     document.querySelectorAll('.cell').forEach(function(cell) {
         const card = CARDS[cell.dataset.key];
         if (!card) return;
-        const show = card.quality === null || card.quality >= threshold;
+        const d = card.descriptors;
+        const show = (
+            (card.quality === null || card.quality >= qualThresh) &&
+            (d === null || (d.speed   >= d0lo && d.speed   <= d0hi)) &&
+            (d === null || (d.size    >= d1lo && d.size    <= d1hi)) &&
+            (d === null || (d.structure >= d2lo && d.structure <= d2hi))
+        );
         cell.classList.toggle('hidden', !show);
         if (show) visible++;
     });
     filterCount.textContent = '(' + visible + ' shown)';
 }
 
-filterSlider.addEventListener('input', applyFilter);
+[filterSlider, d0Min, d0Max, d1Min, d1Max, d2Center, d2Band].forEach(function(el) {
+    el.addEventListener('input', applyFilter);
+});
 applyFilter();
 
 // === per-cell listeners ===

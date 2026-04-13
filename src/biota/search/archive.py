@@ -1,4 +1,4 @@
-"""3D MAP-Elites archive over (speed, size, structure).
+"""3D MAP-Elites archive over three behavioral descriptor axes.
 
 Sparse dict of CellCoord -> RolloutResult, with try_insert handling the
 filter/quality/similarity gating in one place.
@@ -23,6 +23,8 @@ from biota.search.result import CellCoord, Descriptors, RolloutResult
 DEFAULT_BINS_SPEED = 32
 DEFAULT_BINS_SIZE = 32
 DEFAULT_BINS_STRUCTURE = 16
+
+DEFAULT_DESCRIPTOR_NAMES: tuple[str, str, str] = ("velocity", "gyradius", "spectral_entropy")
 # Lowered from 0.05 to 0.025 in A3 (2026-04-09) after the A2 baseline measured
 # 58% rej:sim at the old value with the standard preset. The previous threshold
 # was rejecting most candidates as too-similar to existing neighbors and capping
@@ -72,12 +74,16 @@ def bin_descriptors(
 
 
 class Archive:
-    """3D MAP-Elites archive over (speed, size, structure).
+    """3D MAP-Elites archive over three behavioral descriptor axes.
 
     Stores at most one RolloutResult per cell. Insertion enforces three
     things: filter rejections never enter, occupied-cell collisions resolve
     by quality, and empty-cell insertions are gated by similarity to nearby
     occupied cells.
+
+    descriptor_names records which three descriptors were active when this
+    archive was created. The renderer reads this to display correct axis
+    labels without any external config.
     """
 
     def __init__(
@@ -87,12 +93,14 @@ class Archive:
         bins_structure: int = DEFAULT_BINS_STRUCTURE,
         similarity_epsilon: float = DEFAULT_SIMILARITY_EPSILON,
         quality_override_factor: float = DEFAULT_QUALITY_OVERRIDE_FACTOR,
+        descriptor_names: tuple[str, str, str] = DEFAULT_DESCRIPTOR_NAMES,
     ) -> None:
         self.bins_speed = bins_speed
         self.bins_size = bins_size
         self.bins_structure = bins_structure
         self.similarity_epsilon = similarity_epsilon
         self.quality_override_factor = quality_override_factor
+        self.descriptor_names = descriptor_names
         self._cells: dict[CellCoord, RolloutResult] = {}
 
     def __len__(self) -> int:
