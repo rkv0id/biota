@@ -394,12 +394,10 @@
         <div class="page-tagline">quality-diversity search over Flow-Lenia creatures</div>
         <nav class="tabs">
             <button class="tab-btn active" data-tab="about">About</button>
-            <button class="tab-btn" data-tab="runs">Runs</button>
+            <button class="tab-btn" data-tab="runs">Archive runs</button>
+            <button class="tab-btn" data-tab="ecosystem">Ecosystem runs</button>
             <button class="tab-btn" data-tab="reproduce">Reproduce</button>
             <button class="tab-btn" data-tab="contact">Contact</button>
-            <!-- v2.0.0: ecosystem tab
-            <button class="tab-btn" data-tab="ecosystem">Ecosystem</button>
-            -->
         </nav>
     </header>
 
@@ -480,7 +478,7 @@
         </div>
     </div>
 
-    <!-- === Runs === -->
+    <!-- === Archive runs === -->
     <div class="tab-panel" id="panel-runs">
         <div class="runs-meta">{{ n_runs }} run{{ 's' if n_runs != 1 else '' }}</div>
         <div class="run-grid">
@@ -609,14 +607,17 @@
         </div>
     </div>
 
-    <!-- v2.0.0 ecosystem panel - uncomment when ready
+    <!-- === Ecosystem runs === -->
     <div class="tab-panel" id="panel-ecosystem">
         <div class="prose">
             <h2>Ecosystem runs</h2>
-            <p>Coming in v2.0.0. Selected archive creatures spawned together on a shared large-grid Flow-Lenia simulation.</p>
+            <p>Coming in v2.0.0. Spawn creatures from selected archive cells together on a large shared grid and observe what happens: do they interact, ignore each other, or destabilize? The behavioral descriptor space lets you make deliberate choices about which creatures to seed together.</p>
+            <p>Homogeneous first (v2.0.0): one archive cell, multiple copies, global parameters. Then heterogeneous (v2.1.0): creatures from descriptor-space-distant cells, parameter localization.</p>
+            <div class="pill-row">
+                <a class="pill amber" href="https://github.com/rkv0id/biota" target="_blank">track progress on GitHub</a>
+            </div>
         </div>
     </div>
-    -->
 
     <script>
     document.querySelectorAll('.tab-btn').forEach(function(btn) {
