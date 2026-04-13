@@ -383,6 +383,18 @@
             .page-title { font-size: 24px; }
             .descriptor-grid { grid-template-columns: 1fr; }
             .contact-card { padding: 20px; }
+            .tabs { flex-wrap: wrap; gap: 0; }
+            .run-grid { grid-template-columns: 1fr 1fr; }
+        }
+
+        @media (max-width: 480px) {
+            .page-header { padding: 20px 16px 0 16px; }
+            .tab-panel { padding: 20px 16px 48px 16px; }
+            .page-title { font-size: 20px; }
+            .page-tagline { font-size: 13px; }
+            .run-grid { grid-template-columns: 1fr; }
+            .tab-btn { font-size: 11px; padding: 10px 12px; }
+            pre.code-block { font-size: 11px; overflow-x: auto; }
         }
     </style>
 </head>
