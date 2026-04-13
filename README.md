@@ -1,36 +1,20 @@
-<p align="center">
-  <img src="docs/logo-512.svg" width="120" alt="biota" />
-</p>
+<img src="docs/logo-512.svg" width="72" align="left" alt="biota" style="margin-right:16px" />
 
-<h1 align="center">biota</h1>
+# biota
 
-<p align="center">
-  Quality-diversity search over Flow-Lenia creatures
-</p>
+Distributed ALife research platform — MAP-Elites over Flow-Lenia, from parameter search to ecosystem simulation
 
-<p align="center">
-  <a href="https://biota-atlas.pages.dev">biota-atlas.pages.dev</a>
-  &nbsp;&middot;&nbsp;
-  <a href="https://youtu.be/ZFrRKZXiH2Q">demo video</a>
-  &nbsp;&middot;&nbsp;
-  Python 3.12 &nbsp;&middot;&nbsp; PyTorch &nbsp;&middot;&nbsp; Ray
-</p>
+<br clear="left"/>
 
----
+<a href="https://biota-atlas.pages.dev">biota-atlas.pages.dev</a> &nbsp;·&nbsp; <a href="https://youtu.be/ZFrRKZXiH2Q">demo video</a> &nbsp;·&nbsp; Python 3.12 &nbsp;·&nbsp; PyTorch &nbsp;·&nbsp; Ray
 
-<p align="center">
-  <a href="https://youtu.be/ZFrRKZXiH2Q">
-    <img src="docs/demo.gif" width="860" alt="biota archive demo" />
-  </a>
-</p>
+<a href="https://youtu.be/ZFrRKZXiH2Q">
+  <img src="docs/demo.gif" width="860" alt="biota archive demo" />
+</a>
 
----
-
-biota runs MAP-Elites searches across a Ray cluster — dispatching batches of [Flow-Lenia](https://arxiv.org/abs/2212.07906) simulations as vectorized PyTorch forward passes to stateless GPU workers — and produces a structured behavioral archive of distinct artificial life-forms.
+biota runs MAP-Elites searches across a Ray cluster — dispatching batches of [Flow-Lenia](https://arxiv.org/abs/2212.07906) simulations as vectorized PyTorch forward passes to stateless GPU workers — and produces a structured behavioral archive of distinct artificial life-forms. The full experimental loop: configure behavioral descriptors, search the parameter space, explore the archive, seed ecosystem simulations from selected creatures.
 
 **500 rollouts. 3 nodes. 97 seconds. 229 archive cells.**
-
-The full experimental loop: configure behavioral descriptors, search the parameter space, explore the archive, seed ecosystem simulations from selected creatures.
 
 ## How it works
 
@@ -49,7 +33,7 @@ driver (archive + loop)
     └── insert results → update archive → next batch
 ```
 
-`--workers N` controls how many batches are in flight simultaneously. `--workers 1` is synchronous MAP-Elites — maximally fresh archive, each batch sees the latest state before generating candidates. Higher values trade freshness for throughput on multi-node setups.
+`--workers N` controls how many batches are in flight simultaneously. `--workers 1` is synchronous MAP-Elites — maximally fresh archive. Higher values trade freshness for throughput on multi-node setups.
 
 ## Behavioral descriptors
 
