@@ -1,5 +1,9 @@
 # biota
 
+<p align="center">
+  <img src="docs/logo-512.svg" width="96" alt="biota logo" />
+</p>
+
 **biota** is a distributed quality-diversity research platform for Flow-Lenia cellular automata. It runs MAP-Elites searches across a Ray cluster — dispatching batches of Flow-Lenia simulations as vectorized PyTorch forward passes to stateless GPU workers — and produces a structured behavioral archive of distinct artificial life-forms. The platform is designed as a full experimental loop: configure behavioral descriptors, search the parameter space, explore the resulting archive, then seed ecosystem simulations from selected creatures.
 
 <p align="center">

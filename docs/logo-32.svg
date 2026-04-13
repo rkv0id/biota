@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="5" fill="#0d0221"/>
+  <!-- 4x4 grid: cell=5px, gap=1px, total=4*5+3*1=23, offset=(32-23)/2=4.5 -->
+  <rect x="4"  y="4"  width="5" height="5" rx="1" fill="#3b0f70"/>
+  <rect x="10" y="4"  width="5" height="5" rx="1" fill="#3b0f70" opacity="0.5"/>
+  <rect x="16" y="4"  width="5" height="5" rx="1" fill="#0d0221" opacity="0.4"/>
+  <rect x="22" y="4"  width="5" height="5" rx="1" fill="#0d0221" opacity="0.2"/>
+
+  <rect x="4"  y="10" width="5" height="5" rx="1" fill="#8c2981"/>
+  <rect x="10" y="10" width="5" height="5" rx="1" fill="#de4968"/>
+  <rect x="16" y="10" width="5" height="5" rx="1" fill="#8c2981"/>
+  <rect x="22" y="10" width="5" height="5" rx="1" fill="#3b0f70"/>
+
+  <rect x="4"  y="16" width="5" height="5" rx="1" fill="#de4968"/>
+  <rect x="10" y="16" width="5" height="5" rx="1" fill="#fe9f6d"/>
+  <rect x="16" y="16" width="5" height="5" rx="1" fill="#fece91"/>
+  <rect x="22" y="16" width="5" height="5" rx="1" fill="#de4968"/>
+
+  <rect x="4"  y="22" width="5" height="5" rx="1" fill="#8c2981" opacity="0.6"/>
+  <rect x="10" y="22" width="5" height="5" rx="1" fill="#de4968"/>
+  <rect x="16" y="22" width="5" height="5" rx="1" fill="#fe9f6d"/>
+  <rect x="22" y="22" width="5" height="5" rx="1" fill="#fece91"/>
+</svg>
