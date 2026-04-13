@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+  <!-- Background -->
+  <rect width="1280" height="640" fill="#0d0221"/>
+
+  <!-- Subtle grid texture in background -->
+  <rect width="1280" height="640" fill="none" stroke="#ffffff" stroke-width="0.3" opacity="0.03"/>
+
+  <!-- Logo grid - left side, centered vertically, 5x5 cells -->
+  <!-- cell=72px gap=14px total=5*72+4*14=416, x offset=80, y offset=(640-416)/2=112 -->
+
+  <!-- row 0 -->
+  <rect x="80"  y="112" width="72" height="72" rx="10" fill="#0d0221" opacity="0.5"/>
+  <rect x="166" y="112" width="72" height="72" rx="10" fill="#3b0f70" opacity="0.6"/>
+  <rect x="252" y="112" width="72" height="72" rx="10" fill="#3b0f70"/>
+  <rect x="338" y="112" width="72" height="72" rx="10" fill="#0d0221" opacity="0.35"/>
+  <rect x="424" y="112" width="72" height="72" rx="10" fill="#0d0221" opacity="0.2"/>
+
+  <!-- row 1 -->
+  <rect x="80"  y="198" width="72" height="72" rx="10" fill="#3b0f70"/>
+  <rect x="166" y="198" width="72" height="72" rx="10" fill="#8c2981"/>
+  <rect x="252" y="198" width="72" height="72" rx="10" fill="#8c2981"/>
+  <rect x="338" y="198" width="72" height="72" rx="10" fill="#3b0f70" opacity="0.7"/>
+  <rect x="424" y="198" width="72" height="72" rx="10" fill="#0d0221" opacity="0.35"/>
+
+  <!-- row 2 - peak -->
+  <rect x="80"  y="284" width="72" height="72" rx="10" fill="#8c2981"/>
+  <rect x="166" y="284" width="72" height="72" rx="10" fill="#de4968"/>
+  <rect x="252" y="284" width="72" height="72" rx="10" fill="#fe9f6d"/>
+  <rect x="338" y="284" width="72" height="72" rx="10" fill="#de4968"/>
+  <rect x="424" y="284" width="72" height="72" rx="10" fill="#8c2981"/>
+
+  <!-- row 3 -->
+  <rect x="80"  y="370" width="72" height="72" rx="10" fill="#3b0f70" opacity="0.7"/>
+  <rect x="166" y="370" width="72" height="72" rx="10" fill="#8c2981"/>
+  <rect x="252" y="370" width="72" height="72" rx="10" fill="#de4968"/>
+  <rect x="338" y="370" width="72" height="72" rx="10" fill="#fece91"/>
+  <rect x="424" y="370" width="72" height="72" rx="10" fill="#fe9f6d"/>
+
+  <!-- row 4 -->
+  <rect x="80"  y="456" width="72" height="72" rx="10" fill="#0d0221" opacity="0.35"/>
+  <rect x="166" y="456" width="72" height="72" rx="10" fill="#3b0f70" opacity="0.6"/>
+  <rect x="252" y="456" width="72" height="72" rx="10" fill="#8c2981" opacity="0.8"/>
+  <rect x="338" y="456" width="72" height="72" rx="10" fill="#de4968"/>
+  <rect x="424" y="456" width="72" height="72" rx="10" fill="#fe9f6d"/>
+
+  <!-- Vertical divider -->
+  <line x1="576" y1="80" x2="576" y2="560" stroke="#ffffff" stroke-width="1" opacity="0.08"/>
+
+  <!-- Right side: text content -->
+  <!-- biota wordmark -->
+  <text x="648" y="248"
+    font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace"
+    font-size="120"
+    font-weight="700"
+    fill="#ffffff"
+    opacity="0.95"
+    letter-spacing="-4">biota</text>
+
+  <!-- Tagline -->
+  <text x="652" y="310"
+    font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+    font-size="28"
+    font-weight="400"
+    fill="#a78bfa"
+    opacity="0.9">Quality-diversity search over Flow-Lenia</text>
+
+  <!-- Divider line -->
+  <line x1="652" y1="348" x2="1180" y2="348" stroke="#ffffff" stroke-width="1" opacity="0.1"/>
+
+  <!-- Stats row -->
+  <text x="652" y="400"
+    font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+    font-size="22"
+    fill="#fe9f6d"
+    font-weight="600">500 rollouts · 3 nodes · 97 seconds</text>
+
+  <!-- Feature pills -->
+  <!-- MAP-Elites pill -->
+  <rect x="652" y="430" width="152" height="36" rx="18" fill="#3b0f70" opacity="0.8"/>
+  <text x="728" y="454"
+    font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+    font-size="16" fill="#c4b5fd" text-anchor="middle">MAP-Elites</text>
+
+  <!-- Flow-Lenia pill -->
+  <rect x="816" y="430" width="152" height="36" rx="18" fill="#3b0f70" opacity="0.8"/>
+  <text x="892" y="454"
+    font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+    font-size="16" fill="#c4b5fd" text-anchor="middle">Flow-Lenia</text>
+
+  <!-- Ray pill -->
+  <rect x="980" y="430" width="100" height="36" rx="18" fill="#3b0f70" opacity="0.8"/>
+  <text x="1030" y="454"
+    font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+    font-size="16" fill="#c4b5fd" text-anchor="middle">Ray</text>
+
+  <!-- URL -->
+  <text x="652" y="530"
+    font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace"
+    font-size="20"
+    fill="#ffffff"
+    opacity="0.3">biota-atlas.pages.dev</text>
+</svg>
