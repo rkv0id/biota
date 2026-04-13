@@ -1,11 +1,10 @@
-<table><tr>
-<td><img src="docs/logo-512.svg" width="52" alt="biota" /></td>
-<td><h1>biota</h1></td>
-</tr></table>
+<img src="docs/logo-512.svg" width="48" align="left" alt="biota" />&nbsp;&nbsp;
+
+# biota &nbsp; <a href="https://biota-atlas.pages.dev"><sub><sub>biota-atlas.pages.dev</sub></sub></a>
 
 Distributed Flow-Lenia discovery platform. MAP-Elites search, behavioral archive, ecosystem simulation.
 
-<a href="https://biota-atlas.pages.dev">biota-atlas.pages.dev</a> &nbsp;·&nbsp; <a href="https://github.com/rkv0id/biota">github.com/rkv0id/biota</a>
+<br clear="left"/>
 
 [![demo](docs/demo.gif)](https://youtu.be/ZFrRKZXiH2Q)
 
