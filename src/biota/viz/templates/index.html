@@ -26,9 +26,17 @@
             background-attachment: fixed;
         }
 
+        /* === centered container === */
+        .page-wrap {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 0 48px;
+            width: 100%;
+        }
+
         /* === header === */
         .page-header {
-            padding: 48px 48px 0 48px;
+            padding: 48px 0 0 0;
             margin-bottom: 32px;
         }
         .page-title {
@@ -55,7 +63,12 @@
             display: flex;
             gap: 0;
             border-bottom: 1px solid rgba(255,255,255,0.06);
+            overflow-x: auto;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+            white-space: nowrap;
         }
+        .tabs::-webkit-scrollbar { display: none; }
         .tab-btn {
             background: none;
             border: none;
@@ -78,12 +91,12 @@
         }
 
         /* === tab panels === */
-        .tab-panel { display: none; padding: 44px 48px 80px 48px; }
+        .tab-panel { display: none; padding: 44px 0 80px 0; }
         .tab-panel.active { display: block; }
 
         /* === shared prose styles === */
         .prose {
-            max-width: 660px;
+            max-width: none;
         }
         .prose p {
             color: #a1a1aa;
@@ -378,18 +391,19 @@
         }
 
         @media (max-width: 700px) {
-            .page-header { padding: 32px 20px 0 20px; }
-            .tab-panel { padding: 28px 20px 64px 20px; }
+            .page-header { padding: 32px 0 0 0; }
+            .tab-panel { padding: 28px 0 64px 0; }
+            .page-wrap { padding: 0 20px; }
             .page-title { font-size: 24px; }
             .descriptor-grid { grid-template-columns: 1fr; }
             .contact-card { padding: 20px; }
-            .tabs { flex-wrap: wrap; gap: 0; }
             .run-grid { grid-template-columns: 1fr 1fr; }
         }
 
         @media (max-width: 480px) {
-            .page-header { padding: 20px 16px 0 16px; }
-            .tab-panel { padding: 20px 16px 48px 16px; }
+            .page-header { padding: 20px 0 0 0; }
+            .tab-panel { padding: 20px 0 48px 0; }
+            .page-wrap { padding: 0 16px; }
             .page-title { font-size: 20px; }
             .page-tagline { font-size: 13px; }
             .run-grid { grid-template-columns: 1fr; }
@@ -400,6 +414,7 @@
 </head>
 <body>
     <header class="page-header">
+    <div class="page-wrap">
         <h1 class="page-title">
             <span class="title-prefix">biota</span>atlas
         </h1>
@@ -411,10 +426,12 @@
             <button class="tab-btn" data-tab="reproduce">Reproduce</button>
             <button class="tab-btn" data-tab="contact">Contact</button>
         </nav>
+    </div>
     </header>
 
     <!-- === About === -->
     <div class="tab-panel active" id="panel-about">
+    <div class="page-wrap">
         <div class="prose">
             <h2>What is biota</h2>
             <p>biota searches the parameter space of <a class="pill amber" href="https://arxiv.org/abs/2212.07906" target="_blank" style="display:inline;padding:2px 6px;border-radius:3px;font-size:inherit;">Flow-Lenia</a> - a continuous cellular automaton where matter is conserved by construction. Rather than finding a single best creature, it fills a behavioral grid where each cell holds the most compact creature with a particular phenotypic fingerprint. The result is a structured catalog of qualitatively distinct life-forms.</p>
@@ -489,9 +506,11 @@
             </div>
         </div>
     </div>
+    </div>
 
     <!-- === Archive runs === -->
     <div class="tab-panel" id="panel-runs">
+    <div class="page-wrap">
         <div class="runs-meta">{{ n_runs }} run{{ 's' if n_runs != 1 else '' }}</div>
         <div class="run-grid">
             {% for card in cards %}
@@ -528,9 +547,25 @@
             {% endfor %}
         </div>
     </div>
+    </div>
+
+    <!-- === Ecosystem runs === -->
+    <div class="tab-panel" id="panel-ecosystem">
+    <div class="page-wrap">
+        <div class="prose">
+            <h2>Ecosystem runs</h2>
+            <p>Coming in v2.0.0. Spawn creatures from selected archive cells together on a large shared grid and observe what happens: do they interact, ignore each other, or destabilize? The behavioral descriptor space lets you make deliberate choices about which creatures to seed together.</p>
+            <p>Homogeneous first (v2.0.0): one archive cell, multiple copies, global parameters. Then heterogeneous (v2.1.0): creatures from descriptor-space-distant cells, parameter localization.</p>
+            <div class="pill-row">
+                <a class="pill amber" href="https://github.com/rkv0id/biota" target="_blank">track progress on GitHub</a>
+            </div>
+        </div>
+    </div>
+    </div>
 
     <!-- === Reproduce === -->
     <div class="tab-panel" id="panel-reproduce">
+    <div class="page-wrap">
         <div class="prose">
             <h2>Run your own atlas</h2>
             <p>biota is a self-contained CLI tool. You can run it on a laptop for quick iteration or across a Ray cluster for full-scale searches. The only hard dependencies are Python 3.12, PyTorch, and Ray.</p>
@@ -596,39 +631,13 @@
             </div>
         </div>
     </div>
+    </div>
 
     <!-- === Contact === -->
     <div class="tab-panel" id="panel-contact">
-        <div class="contact-card">
-            <div class="contact-name">Rami Kader</div>
-            <div class="contact-bio">Machine learning engineer. Interested in cellular automata, artificial life, evolutionary computing, and distributed systems.</div>
-            <div class="contact-links">
-                <a class="contact-link" href="https://github.com/rkv0id" target="_blank">
-                    <span class="contact-link-icon">gh</span>
-                    github.com/rkv0id
-                </a>
-                <a class="contact-link" href="https://www.linkedin.com/in/rami-kader/" target="_blank">
-                    <span class="contact-link-icon">in</span>
-                    linkedin.com/in/rami-kader
-                </a>
-                <a class="contact-link" href="mailto:ramy.kader.rk@gmail.com">
-                    <span class="contact-link-icon">@</span>
-                    ramy.kader.rk@gmail.com
-                </a>
-            </div>
-        </div>
-    </div>
+    <div class="page-wrap">
 
-    <!-- === Ecosystem runs === -->
-    <div class="tab-panel" id="panel-ecosystem">
-        <div class="prose">
-            <h2>Ecosystem runs</h2>
-            <p>Coming in v2.0.0. Spawn creatures from selected archive cells together on a large shared grid and observe what happens: do they interact, ignore each other, or destabilize? The behavioral descriptor space lets you make deliberate choices about which creatures to seed together.</p>
-            <p>Homogeneous first (v2.0.0): one archive cell, multiple copies, global parameters. Then heterogeneous (v2.1.0): creatures from descriptor-space-distant cells, parameter localization.</p>
-            <div class="pill-row">
-                <a class="pill amber" href="https://github.com/rkv0id/biota" target="_blank">track progress on GitHub</a>
-            </div>
-        </div>
+    </div>
     </div>
 
     <script>
