@@ -4,7 +4,7 @@
 
 Distributed Flow-Lenia discovery platform. MAP-Elites search, behavioral archive, ecosystem simulation.
 
-[![demo](docs/demo.gif)](https://youtu.be/ZFrRKZXiH2Q)
+[![demo](docs/demo.gif)](https://youtu.be/LdY0mSIYzy8)
 
 biota runs MAP-Elites searches across a Ray cluster, dispatching batches of [Flow-Lenia](https://arxiv.org/abs/2212.07906) simulations as vectorized PyTorch forward passes to stateless GPU workers, producing a structured behavioral archive of distinct artificial life-forms. The full experimental loop: configure behavioral descriptors, search the parameter space, explore the archive, seed ecosystem simulations from selected creatures.
 
