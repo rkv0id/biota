@@ -1,8 +1,8 @@
-<img src="docs/logo-512.svg" width="72" align="left" alt="biota" style="margin-right:16px" />
+<img src="docs/logo-512.svg" width="48" align="left" alt="biota" style="margin-right:16px" />
 
 # biota
 
-Distributed ALife research platform — MAP-Elites over Flow-Lenia, from parameter search to ecosystem simulation
+Distributed Flow-Lenia discovery platform. MAP-Elites search, behavioral archive, ecosystem simulation.
 
 <br clear="left"/>
 
@@ -12,17 +12,17 @@ Distributed ALife research platform — MAP-Elites over Flow-Lenia, from paramet
   <img src="docs/demo.gif" width="860" alt="biota archive demo" />
 </a>
 
-biota runs MAP-Elites searches across a Ray cluster — dispatching batches of [Flow-Lenia](https://arxiv.org/abs/2212.07906) simulations as vectorized PyTorch forward passes to stateless GPU workers — and produces a structured behavioral archive of distinct artificial life-forms. The full experimental loop: configure behavioral descriptors, search the parameter space, explore the archive, seed ecosystem simulations from selected creatures.
+biota runs MAP-Elites searches across a Ray cluster, dispatching batches of [Flow-Lenia](https://arxiv.org/abs/2212.07906) simulations as vectorized PyTorch forward passes to stateless GPU workers, producing a structured behavioral archive of distinct artificial life-forms. The full experimental loop: configure behavioral descriptors, search the parameter space, explore the archive, seed ecosystem simulations from selected creatures.
 
-**500 rollouts. 3 nodes. 97 seconds. 229 archive cells.**
+**500 rollouts · 3 nodes · 97 seconds · 229 archive cells**
 
 ## How it works
 
-[Flow-Lenia](https://arxiv.org/abs/2212.07906) is a continuous cellular automaton where matter is conserved by construction. Mass conservation prevents the explode/collapse failure modes that dominate vanilla Lenia, producing stable solitons across a much wider range of parameters.
+[Flow-Lenia](https://arxiv.org/abs/2212.07906) is a continuous cellular automaton where matter is conserved by construction. Mass conservation prevents the explode/collapse failure modes that dominate vanilla Lenia, producing stable solitons across a much wider range of parameters
 
-[MAP-Elites](https://arxiv.org/abs/1504.04909) searches that parameter space for behavioral diversity rather than a single optimum. Instead of one best creature, it fills a grid where each cell holds the highest-quality creature with a particular phenotypic fingerprint — an atlas of qualitatively distinct life-forms.
+[MAP-Elites](https://arxiv.org/abs/1504.04909) searches that parameter space for behavioral diversity rather than a single optimum. Instead of one best creature, it fills a grid where each cell holds the highest-quality creature with a particular phenotypic fingerprint: an atlas of qualitatively distinct life-forms.
 
-The driver owns the archive and the search loop. Each Ray task evaluates B creatures as a single `(B, H, W)` vectorized forward pass — one task fills one GPU. Workers are stateless; nothing persistent lives on the cluster between tasks.
+The driver owns the archive and the search loop. Each Ray task evaluates B creatures as a single `(B, H, W)` vectorized forward pass. One task fills one GPU. Workers are stateless; nothing persistent lives on the cluster between tasks.
 
 ```
 driver (archive + loop)
@@ -33,7 +33,7 @@ driver (archive + loop)
     └── insert results → update archive → next batch
 ```
 
-`--workers N` controls how many batches are in flight simultaneously. `--workers 1` is synchronous MAP-Elites — maximally fresh archive. Higher values trade freshness for throughput on multi-node setups.
+`--workers N` controls how many batches are in flight simultaneously. `--workers 1` is synchronous MAP-Elites (maximally fresh archive). Higher values trade freshness for throughput on multi-node setups.
 
 ## Behavioral descriptors
 
@@ -46,12 +46,12 @@ The archive grid has three axes, each a scalar measured empirically from the rol
 | `spectral_entropy` | Shannon entropy of the radially-averaged FFT spectrum |
 | `oscillation` | Variance of bounding-box fraction over the trace tail |
 | `compactness` | Mass inside bounding box / total mass at the final step |
-| `mass_asymmetry` | Directional bias of motion — straight movers vs orbiters |
+| `mass_asymmetry` | Directional bias of motion: straight movers vs orbiters |
 | `png_compressibility` | PNG compressed/uncompressed ratio of the final state |
 | `rotational_symmetry` | Angular variance of radial mass profile |
 | `persistence_score` | Max descriptor drift across the trace tail |
 
-With 9 built-ins there are C(9,3) = 84 possible archive configurations. Supply your own via `--descriptor-module`. The archive viewer renders all three axes — two as the spatial grid, the third as an interactive slice slider.
+With 9 built-ins there are C(9,3) = 84 possible archive configurations. Supply your own via `--descriptor-module`. The archive viewer renders all three axes: two as the spatial grid, the third as an interactive slice slider.
 
 ## Quickstart
 
@@ -137,15 +137,15 @@ The test suite runs entirely in no-Ray mode. `just smoke-ray` exercises the Ray 
 
 ## Roadmap
 
-- [x] v0.1.0 — Flow-Lenia PyTorch port, mass conservation verified against JAX reference
-- [x] v0.2.0 — Driver, Ray runtime, search loop, multi-node GPU verified
-- [x] v0.3.0 — Descriptor rework, visual pipeline, static index, per-run metrics
-- [x] v0.4.0 — Batched rollout engine, 3.5× cluster speedup
-- [x] v1.0.0 — Lineage view, atlas site, public launch at [biota-atlas.pages.dev](https://biota-atlas.pages.dev)
-- [x] v1.1.0 — 9 built-in descriptors, `--descriptors` CLI, per-axis archive filtering, custom descriptor API
-- [ ] v2.0.0 — Ecosystem simulation — spawn archive creatures on a shared grid
-- [ ] v2.1.0 — Heterogeneous ecosystems with parameter localization
-- [ ] v3.0.0 — Learned descriptors (AURORA-style autoencoder)
+- [x] v0.1.0 - Flow-Lenia PyTorch port, mass conservation verified against JAX reference
+- [x] v0.2.0 - Driver, Ray runtime, search loop, multi-node GPU verified
+- [x] v0.3.0 - Descriptor rework, visual pipeline, static index, per-run metrics
+- [x] v0.4.0 - Batched rollout engine, 3.5× cluster speedup
+- [x] v1.0.0 - Lineage view, atlas site, public launch at [biota-atlas.pages.dev](https://biota-atlas.pages.dev)
+- [x] v1.1.0 - 9 built-in descriptors, `--descriptors` CLI, per-axis archive filtering, custom descriptor API
+- [ ] v2.0.0 - Ecosystem simulation: spawn archive creatures on a shared grid
+- [ ] v2.1.0 - Heterogeneous ecosystems with parameter localization
+- [ ] v3.0.0 - Learned descriptors (AURORA-style autoencoder)
 
 ## References
 
