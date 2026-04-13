@@ -1,10 +1,8 @@
-<img src="docs/logo-512.svg" width="48" align="left" alt="biota" />&nbsp;&nbsp;
+<h1>
+  <img src="docs/logo-512.svg" width="48" alt="" valign="middle" />&nbsp;biota
+</h1>
 
-# biota &nbsp; <a href="https://biota-atlas.pages.dev"><sub><sub>biota-atlas.pages.dev</sub></sub></a>
-
-Distributed Flow-Lenia discovery platform. MAP-Elites search, behavioral archive, ecosystem simulation.
-
-<br clear="left"/>
+Distributed Flow-Lenia discovery platform. MAP-Elites search, behavioral archive, ecosystem simulation. Explore the live atlas at **[biota-atlas.pages.dev](https://biota-atlas.pages.dev)**.
 
 [![demo](docs/demo.gif)](https://youtu.be/ZFrRKZXiH2Q)
 
