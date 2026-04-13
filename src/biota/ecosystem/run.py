@@ -51,7 +51,12 @@ def _save_frame_png(state: np.ndarray, path: Path) -> None:
 
         from biota.viz.colormap import apply_magma
 
-        peak = float(state.max())
+        # Use 99th percentile as the normalization ceiling so the creature
+        # body maps to the full magma range rather than just the dark end.
+        # On a large ecosystem grid the vast majority of pixels are near-zero,
+        # so normalizing by max() compresses all creature structure into the
+        # bottom few entries of the colormap.
+        peak = float(np.percentile(state, 99.9))
         if peak > 0:
             normalized = (state / peak * 255).clip(0, 255).astype(np.uint8)
         else:
