@@ -192,3 +192,137 @@ def test_search_grid_steps_override_applies(tmp_path: Path) -> None:
     config = json.loads((run_dir / "config.json").read_text())
     assert config["rollout"]["sim"]["grid"] == 32
     assert config["rollout"]["steps"] == 110
+
+
+# === ecosystem --help ===
+
+
+def test_ecosystem_help_lists_all_flags() -> None:
+    result = runner.invoke(app, ["ecosystem", "--help"])
+    assert result.exit_code == 0
+    output = _strip_ansi(result.stdout)
+    for flag in (
+        "--run",
+        "--cell",
+        "--n",
+        "--grid",
+        "--steps",
+        "--snapshot-every",
+        "--device",
+        "--archive-dir",
+        "--output-dir",
+        "--patch",
+        "--min-dist",
+        "--seed",
+    ):
+        assert flag in output, f"missing flag {flag} in ecosystem --help output"
+
+
+# === ecosystem error cases ===
+
+
+def test_ecosystem_bad_cell_format_errors_cleanly() -> None:
+    result = runner.invoke(
+        app,
+        ["ecosystem", "--run", "some-run", "--cell", "not,a,valid,coord"],
+    )
+    assert result.exit_code != 0
+    assert "cell" in _strip_ansi(result.output).lower()
+
+
+def test_ecosystem_bad_cell_non_integer_errors_cleanly() -> None:
+    result = runner.invoke(
+        app,
+        ["ecosystem", "--run", "some-run", "--cell", "1,2,x"],
+    )
+    assert result.exit_code != 0
+
+
+def test_ecosystem_missing_run_dir_errors_cleanly(tmp_path: Path) -> None:
+    result = runner.invoke(
+        app,
+        [
+            "ecosystem",
+            "--run",
+            "nonexistent-run",
+            "--cell",
+            "1,2,3",
+            "--archive-dir",
+            str(tmp_path),
+        ],
+    )
+    assert result.exit_code != 0
+    output = _strip_ansi(result.output).lower()
+    assert "not found" in output or "run" in output
+
+
+def test_ecosystem_end_to_end(tmp_path: Path) -> None:
+    """Full ecosystem run from a search-produced archive."""
+    import pickle
+
+    import numpy as np
+
+    from biota.search.archive import Archive
+    from biota.search.result import RolloutResult
+
+    # Build a minimal archive with one occupied cell
+    archive_dir = tmp_path / "archive-runs" / "test-run"
+    archive_dir.mkdir(parents=True)
+    archive = Archive(descriptor_names=("velocity", "gyradius", "spectral_entropy"))
+    k = 3
+    creature = RolloutResult(
+        params={
+            "R": 8.0,
+            "r": [0.5] * k,
+            "m": [0.15] * k,
+            "s": [0.015] * k,
+            "h": [0.5] * k,
+            "a": [[0.5, 0.5, 0.5]] * k,
+            "b": [[0.5, 0.5, 0.5]] * k,
+            "w": [[0.5, 0.5, 0.5]] * k,
+        },
+        seed=0,
+        descriptors=(0.3, 0.5, 0.6),
+        quality=0.8,
+        rejection_reason=None,
+        thumbnail=np.zeros((16, 32, 32), dtype=np.uint8),
+        parent_cell=None,
+        created_at=0.0,
+        compute_seconds=1.0,
+    )
+    archive._cells[(5, 8, 3)] = creature  # type: ignore[reportPrivateUsage]
+    with open(archive_dir / "archive.pkl", "wb") as f:
+        pickle.dump(archive, f)
+
+    ecosystem_dir = tmp_path / "ecosystem-runs"
+    result = runner.invoke(
+        app,
+        [
+            "ecosystem",
+            "--run",
+            "test-run",
+            "--cell",
+            "5,8,3",
+            "--n",
+            "2",
+            "--grid",
+            "64",
+            "--steps",
+            "5",
+            "--snapshot-every",
+            "5",
+            "--archive-dir",
+            str(tmp_path / "archive-runs"),
+            "--output-dir",
+            str(ecosystem_dir),
+        ],
+    )
+    assert result.exit_code == 0, f"ecosystem CLI failed: {result.output}"
+    assert "output=" in result.stdout
+    # Verify output directory was created with expected files
+    eco_runs = list(ecosystem_dir.iterdir())
+    assert len(eco_runs) == 1
+    run_dir = eco_runs[0]
+    assert (run_dir / "summary.json").exists()
+    assert (run_dir / "config.json").exists()
+    assert (run_dir / "trajectory.npy").exists()

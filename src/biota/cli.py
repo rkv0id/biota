@@ -311,6 +311,107 @@ def search_cmd(
     print(f"archive_size={len(archive)}")
 
 
+# === ecosystem command ===
+
+
+@app.command()
+def ecosystem(
+    run: str = typer.Option(
+        ..., "--run", help="Source archive run id (directory name under --archive-dir)."
+    ),
+    cell: str = typer.Option(
+        ...,
+        "--cell",
+        help="Archive cell coordinate as y,x,z (e.g. 10,15,8).",
+    ),
+    n: int = typer.Option(4, "--n", help="Number of creature copies to spawn."),
+    grid: int = typer.Option(512, "--grid", help="Ecosystem grid side length in pixels."),
+    steps: int = typer.Option(500, "--steps", help="Number of simulation steps."),
+    snapshot_every: int = typer.Option(
+        50, "--snapshot-every", help="Capture a state snapshot every N steps."
+    ),
+    device: str = typer.Option("cpu", "--device", help="Torch device: cpu, mps, or cuda."),
+    archive_dir: Path = typer.Option(
+        Path("archive-runs"),
+        "--archive-dir",
+        help="Directory containing archive run subdirectories.",
+    ),
+    output_dir: Path = typer.Option(
+        Path("ecosystem-runs"),
+        "--output-dir",
+        help="Root directory for ecosystem run output.",
+    ),
+    patch: int = typer.Option(
+        16, "--patch", help="Side length of the initial random patch per creature."
+    ),
+    min_dist: int = typer.Option(
+        80,
+        "--min-dist",
+        help=(
+            "Minimum pixel distance between spawn centers (Poisson disk sampling). "
+            "Should be at least 2x the creature's typical radius. "
+            "Default 80 works well for standard preset creatures on a 512px grid."
+        ),
+    ),
+    seed: int = typer.Option(0, "--seed", help="Base RNG seed for spawn positions and patches."),
+) -> None:
+    """Run a homogeneous ecosystem simulation from a single archive creature."""
+    import pickle
+
+    from biota.ecosystem.result import EcosystemConfig, SpawnConfig
+    from biota.ecosystem.run import run_ecosystem
+    from biota.search.archive import Archive
+
+    # Parse cell coordinate
+    try:
+        parts = [int(x.strip()) for x in cell.split(",")]
+        if len(parts) != 3:
+            raise ValueError
+        coords: tuple[int, int, int] = (parts[0], parts[1], parts[2])
+    except ValueError:
+        raise typer.BadParameter(
+            f"--cell must be three comma-separated integers, e.g. 10,15,8. Got: {cell!r}",
+            param_hint="--cell",
+        ) from None
+
+    # Load archive
+    run_dir = archive_dir / run
+    if not run_dir.exists():
+        raise typer.BadParameter(f"run directory not found: {run_dir}", param_hint="--run")
+
+    pkl_path = run_dir / "archive.pkl"
+    if not pkl_path.exists():
+        raise typer.BadParameter(f"no archive.pkl in {run_dir}", param_hint="--run")
+
+    with open(pkl_path, "rb") as f:
+        archive = pickle.load(f)
+
+    if not isinstance(archive, Archive):
+        raise typer.Exit(code=1)
+
+    if coords not in archive:
+        raise typer.BadParameter(
+            f"cell {coords} not in archive. Use build_index.py to inspect occupied cells.",
+            param_hint="--cell",
+        )
+
+    creature = archive[coords]
+
+    spawn = SpawnConfig(n=n, min_dist=min_dist, patch=patch, seed=seed)
+    config = EcosystemConfig(
+        source_run_id=run,
+        source_coords=coords,
+        grid=grid,
+        steps=steps,
+        snapshot_every=snapshot_every,
+        spawn=spawn,
+        device=device,
+    )
+
+    result = run_ecosystem(config, creature, output_root=output_dir)
+    print(f"output={result.run_dir}")
+
+
 # === doctor command ===
 
 
