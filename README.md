@@ -8,8 +8,6 @@ Distributed Flow-Lenia discovery platform. MAP-Elites search, behavioral archive
 
 biota runs MAP-Elites searches across a Ray cluster, dispatching batches of [Flow-Lenia](https://arxiv.org/abs/2212.07906) simulations as vectorized PyTorch forward passes to stateless GPU workers, producing a structured behavioral archive of distinct artificial life-forms. The full experimental loop: configure behavioral descriptors, search the parameter space, explore the archive, seed ecosystem simulations from selected creatures.
 
-**500 rollouts · 3 nodes · 97 seconds · 229 archive cells**
-
 ## How it works
 
 [Flow-Lenia](https://arxiv.org/abs/2212.07906) is a continuous cellular automaton where matter is conserved by construction. Mass conservation prevents the explode/collapse failure modes that dominate vanilla Lenia, producing stable solitons across a much wider range of parameters.
