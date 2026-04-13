@@ -169,29 +169,50 @@
         }
 
         /* Quality filter slider */
-        .filter-row {
-            display: flex;
+        /* Filter panel: four rows aligned on a shared grid.
+           Columns: [label] [slider-a] [label-b] [slider-b] [readout]
+           Quality row spans the middle two columns with one wider slider. */
+        .filter-panel {
+            display: grid;
+            grid-template-columns: 80px 1fr 40px 1fr 72px;
             align-items: center;
-            gap: 12px;
+            gap: 6px 10px;
             margin-top: 12px;
             font-size: 11px;
             color: #71717a;
         }
-        .filter-row label {
+        .filter-panel label {
             text-transform: uppercase;
             letter-spacing: 0.05em;
+            white-space: nowrap;
         }
-        .filter-row input[type=range] {
+        .filter-panel .filter-readout {
+            color: #fbbf77;
+            font-variant-numeric: tabular-nums;
+            text-align: right;
+            white-space: nowrap;
+        }
+        .filter-panel .filter-count {
+            grid-column: 5;
+            color: #52525b;
+            font-variant-numeric: tabular-nums;
+            text-align: right;
+        }
+        /* Quality slider spans columns 2-4 */
+        .filter-panel .quality-slider {
+            grid-column: 2 / 5;
+        }
+        .filter-panel input[type=range] {
             -webkit-appearance: none;
             appearance: none;
-            width: 140px;
+            width: 100%;
             height: 3px;
             background: rgba(255,255,255,0.12);
             border-radius: 2px;
             outline: none;
             cursor: pointer;
         }
-        .filter-row input[type=range]::-webkit-slider-thumb {
+        .filter-panel input[type=range]::-webkit-slider-thumb {
             -webkit-appearance: none;
             appearance: none;
             width: 12px;
@@ -200,7 +221,7 @@
             background: #fbbf77;
             cursor: pointer;
         }
-        .filter-row input[type=range]::-moz-range-thumb {
+        .filter-panel input[type=range]::-moz-range-thumb {
             width: 12px;
             height: 12px;
             border-radius: 50%;
@@ -208,15 +229,8 @@
             border: none;
             cursor: pointer;
         }
-        #filter-val {
-            color: #fbbf77;
-            font-variant-numeric: tabular-nums;
-            min-width: 36px;
-        }
-        #filter-count {
-            color: #52525b;
-            font-variant-numeric: tabular-nums;
-        }
+        /* Dim the d2 sliders until band is narrow, to signal slice mode */
+        #d2-band:not([data-slicing]) ~ * { opacity: 1; }
 
         /* === main scroll area === */
         main {
@@ -733,32 +747,29 @@
             <div class="swatch"></div>
             <span>high {{ d2_dir }}</span>
         </div>
-        <div class="filter-row">
-            <label for="quality-filter">min quality</label>
-            <input type="range" id="quality-filter" min="0" max="1" step="0.01" value="0" />
-            <span id="filter-val">0.00</span>
-            <span id="filter-count"></span>
-        </div>
-        <div class="filter-row">
-            <label for="d0-min">{{ d0_short }} min</label>
+        <div class="filter-panel">
+            <label for="quality-filter">quality</label>
+            <input type="range" id="quality-filter" class="quality-slider" min="0" max="1" step="0.01" value="0" />
+            <span id="filter-val" class="filter-readout">0.00</span>
+            <span id="filter-count" class="filter-count"></span>
+
+            <label for="d0-min">{{ d0_short }}</label>
             <input type="range" id="d0-min" min="0" max="1" step="0.01" value="0" />
             <label for="d0-max">max</label>
             <input type="range" id="d0-max" min="0" max="1" step="0.01" value="1" />
-            <span id="d0-range-val">0.00 - 1.00</span>
-        </div>
-        <div class="filter-row">
-            <label for="d1-min">{{ d1_short }} min</label>
+            <span id="d0-range-val" class="filter-readout">0 - 1</span>
+
+            <label for="d1-min">{{ d1_short }}</label>
             <input type="range" id="d1-min" min="0" max="1" step="0.01" value="0" />
             <label for="d1-max">max</label>
             <input type="range" id="d1-max" min="0" max="1" step="0.01" value="1" />
-            <span id="d1-range-val">0.00 - 1.00</span>
-        </div>
-        <div class="filter-row">
+            <span id="d1-range-val" class="filter-readout">0 - 1</span>
+
             <label for="d2-center">{{ d2_short }}</label>
-            <input type="range" id="d2-center" min="0" max="1" step="0.01" value="0.5" />
-            <label for="d2-band">band</label>
+            <input type="range" id="d2-center" min="0" max="1" step="0.005" value="0.5" />
+            <label for="d2-band">slice</label>
             <input type="range" id="d2-band" min="0.02" max="1" step="0.01" value="1" />
-            <span id="d2-range-val">all</span>
+            <span id="d2-range-val" class="filter-readout">all</span>
         </div>
         <div class="page-path">{{ run_dir }}</div>
     </header>
@@ -1048,27 +1059,32 @@ const d2Center = document.getElementById('d2-center');
 const d2Band   = document.getElementById('d2-band');
 const d2RangeVal = document.getElementById('d2-range-val');
 
+function fmt(v) { return v.toFixed(2).replace(/^0\./, '.'); }
+
 function applyFilter() {
     const qualThresh = parseFloat(filterSlider.value);
-    filterVal.textContent = qualThresh.toFixed(2);
+    filterVal.textContent = qualThresh > 0 ? fmt(qualThresh) : '0';
 
     let d0lo = parseFloat(d0Min.value);
     let d0hi = parseFloat(d0Max.value);
     if (d0lo > d0hi) { const t = d0lo; d0lo = d0hi; d0hi = t; }
-    d0RangeVal.textContent = d0lo.toFixed(2) + ' - ' + d0hi.toFixed(2);
+    const d0all = d0lo <= 0.001 && d0hi >= 0.999;
+    d0RangeVal.textContent = d0all ? 'all' : fmt(d0lo) + ' - ' + fmt(d0hi);
 
     let d1lo = parseFloat(d1Min.value);
     let d1hi = parseFloat(d1Max.value);
     if (d1lo > d1hi) { const t = d1lo; d1lo = d1hi; d1hi = t; }
-    d1RangeVal.textContent = d1lo.toFixed(2) + ' - ' + d1hi.toFixed(2);
+    const d1all = d1lo <= 0.001 && d1hi >= 0.999;
+    d1RangeVal.textContent = d1all ? 'all' : fmt(d1lo) + ' - ' + fmt(d1hi);
 
     const d2c = parseFloat(d2Center.value);
     const d2b = parseFloat(d2Band.value);
     const d2lo = Math.max(0, d2c - d2b / 2);
     const d2hi = Math.min(1, d2c + d2b / 2);
-    d2RangeVal.textContent = d2b >= 1.0
-        ? 'all'
-        : d2lo.toFixed(2) + ' - ' + d2hi.toFixed(2);
+    const d2slicing = d2b < 0.99;
+    d2RangeVal.textContent = d2slicing ? fmt(d2lo) + ' - ' + fmt(d2hi) : 'all';
+    // Visually dim the center slider when band is full (slice mode inactive)
+    d2Center.style.opacity = d2slicing ? '1' : '0.35';
 
     let visible = 0;
     document.querySelectorAll('.cell').forEach(function(cell) {
@@ -1077,14 +1093,14 @@ function applyFilter() {
         const d = card.descriptors;
         const show = (
             (card.quality === null || card.quality >= qualThresh) &&
-            (d === null || (d.speed   >= d0lo && d.speed   <= d0hi)) &&
-            (d === null || (d.size    >= d1lo && d.size    <= d1hi)) &&
-            (d === null || (d.structure >= d2lo && d.structure <= d2hi))
+            (d === null || d0all || (d.speed     >= d0lo && d.speed     <= d0hi)) &&
+            (d === null || d1all || (d.size      >= d1lo && d.size      <= d1hi)) &&
+            (d === null || !d2slicing || (d.structure >= d2lo && d.structure <= d2hi))
         );
         cell.classList.toggle('hidden', !show);
         if (show) visible++;
     });
-    filterCount.textContent = '(' + visible + ' shown)';
+    filterCount.textContent = visible + ' shown';
 }
 
 [filterSlider, d0Min, d0Max, d1Min, d1Max, d2Center, d2Band].forEach(function(el) {

@@ -429,11 +429,11 @@
             </div>
 
             <h2>Behavioral descriptors</h2>
-            <p>Three scalars measured from each rollout index the archive's three axes. All are empirically calibrated against real cluster runs, not derived from parameter values.</p>
+            <p>Three scalars measured from each rollout index the archive's three axes. The active set is chosen per run — any three from the built-in library of nine. All are normalized to [0, 1] and empirically calibrated against real cluster runs.</p>
             <div class="descriptor-grid">
                 <div class="descriptor-card">
                     <div class="descriptor-name">velocity</div>
-                    <div class="descriptor-desc">Mean center-of-mass displacement per step over the trailing 50 steps. Separates drifters from stationary creatures.</div>
+                    <div class="descriptor-desc">Mean COM displacement per step over the trailing 50 steps. Separates drifters from stationary creatures.</div>
                 </div>
                 <div class="descriptor-card">
                     <div class="descriptor-name">gyradius</div>
@@ -442,6 +442,30 @@
                 <div class="descriptor-card">
                     <div class="descriptor-name">spectral entropy</div>
                     <div class="descriptor-desc">Shannon entropy of the radially-averaged FFT spectrum. Separates smooth blobs from sharp-edged structured creatures.</div>
+                </div>
+                <div class="descriptor-card">
+                    <div class="descriptor-name">oscillation</div>
+                    <div class="descriptor-desc">Variance of bounding-box area over the trace tail. Separates pulsing, breathing creatures from rigid translators.</div>
+                </div>
+                <div class="descriptor-card">
+                    <div class="descriptor-name">compactness</div>
+                    <div class="descriptor-desc">Fraction of total mass inside the bounding box. Separates tight, well-defined creatures from diffuse scattered ones.</div>
+                </div>
+                <div class="descriptor-card">
+                    <div class="descriptor-name">mass asymmetry</div>
+                    <div class="descriptor-desc">Directional bias of COM motion. Separates straight-line movers from orbiters and creatures with circular trajectories.</div>
+                </div>
+                <div class="descriptor-card">
+                    <div class="descriptor-name">PNG compressibility</div>
+                    <div class="descriptor-desc">Compressed-to-raw size ratio of the final state. Low = smooth and boring, high = noisy, middle = structured and interesting.</div>
+                </div>
+                <div class="descriptor-card">
+                    <div class="descriptor-name">rotational symmetry</div>
+                    <div class="descriptor-desc">Angular variance of mass around the center of mass. Low = rings and disks, high = dumbbells, L-shapes, asymmetric gliders.</div>
+                </div>
+                <div class="descriptor-card">
+                    <div class="descriptor-name">persistence score</div>
+                    <div class="descriptor-desc">Maximum descriptor drift across the trace tail. Low = behaviorally stable over time, high = the creature is still changing.</div>
                 </div>
             </div>
 
@@ -532,14 +556,27 @@
 
             <h2>GPU and cluster</h2>
             <p>On Apple Silicon pass <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">--device mps --batch-size 32</code> for a meaningful speedup. On a CUDA cluster, use <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">--batch-size 64 --workers N</code> where N is the number of nodes. The standard preset (192&times;192, 300 steps) at B=64 on an RTX 5060 Ti cluster runs 500 rollouts in about 97 seconds.</p>
-            <pre class="code-block"><span class="comment"># Single GPU, no Ray</span>
+            <pre class="code-block"><span class="comment"># Apple Silicon</span>
+<span class="cmd">uv run biota search --preset standard --budget 500 \</span>
+<span class="cmd">    --device mps --batch-size 32</span>
+
+<span class="comment"># Single CUDA GPU, no Ray</span>
 <span class="cmd">uv run biota search --preset standard --budget 500 \</span>
 <span class="cmd">    --device cuda --batch-size 64</span>
 
-<span class="comment"># Multi-node Ray cluster</span>
+<span class="comment"># Multi-node Ray cluster, custom descriptor axes</span>
 <span class="cmd">uv run biota search --ray-address head:6379 \</span>
 <span class="cmd">    --preset standard --budget 2000 \</span>
-<span class="cmd">    --device cuda --batch-size 64 --workers 3</span></pre>
+<span class="cmd">    --device cuda --batch-size 64 --workers 3 \</span>
+<span class="cmd">    --descriptors oscillation,compactness,png_compressibility</span></pre>
+
+            <h2>Choosing descriptors</h2>
+            <p>Pass <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">--descriptors</code> with three comma-separated names to control which behavioral axes the archive uses. With 9 built-ins there are 84 possible configurations. You can also supply your own via <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">--descriptor-module path/to/file.py</code> — the file must define a list named <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">DESCRIPTORS</code> containing <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">Descriptor</code> objects.</p>
+            <pre class="code-block"><span class="comment"># Default axes</span>
+<span class="cmd">uv run biota search --descriptors velocity,gyradius,spectral_entropy</span>
+
+<span class="comment"># Shape and complexity axes</span>
+<span class="cmd">uv run biota search --descriptors oscillation,compactness,png_compressibility</span></pre>
 
             <h2>More detail</h2>
             <div class="pill-row">
