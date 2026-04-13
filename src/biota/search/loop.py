@@ -175,7 +175,7 @@ EventCallback = Callable[[SearchEvent], None]
 
 def search(
     config: SearchConfig,
-    runs_root: Path | str = "runs",
+    runs_root: Path | str = "archive-runs",
     on_event: EventCallback | None = None,
     archive: Archive | None = None,
     run_id: str | None = None,

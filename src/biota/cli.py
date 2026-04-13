@@ -247,8 +247,8 @@ def search_cmd(
     checkpoint_every: int = typer.Option(
         100, "--checkpoint-every", help="Checkpoint cadence in completed rollouts."
     ),
-    runs_root: Path = typer.Option(
-        Path("runs"), "--runs-root", help="Root directory for run subdirectories."
+    output_dir: Path = typer.Option(
+        Path("archive-runs"), "--output-dir", help="Root directory for run subdirectories."
     ),
     grid: int | None = typer.Option(
         None, "--grid", help="Override preset grid size (for experimentation)."
@@ -305,7 +305,7 @@ def search_cmd(
     def on_event(event: SearchEvent) -> None:
         _print_event(event, budget=budget)
 
-    archive = search(config=config, runs_root=runs_root, on_event=on_event)
+    archive = search(config=config, runs_root=output_dir, on_event=on_event)
 
     # Final summary to stdout, one line, scriptable
     print(f"archive_size={len(archive)}")

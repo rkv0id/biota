@@ -12,7 +12,7 @@ no matplotlib, no runtime dependency beyond stdlib and numpy.
 Usage:
 
     python scripts/build_index.py
-    python scripts/build_index.py --runs-root /path/to/runs
+    python scripts/build_index.py --output-dir /path/to/archive-runs
     python scripts/build_index.py --run showcase-1-baseline   # single run
     python scripts/build_index.py --no-regen   # index only, skip html regen
 """
@@ -32,7 +32,7 @@ from biota.search.archive import Archive
 from biota.viz.render import render_archive_page
 
 ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_RUNS_ROOT = ROOT / "runs"
+DEFAULT_RUNS_ROOT = ROOT / "archive-runs"
 
 _TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "src" / "biota" / "viz" / "templates"
 _ENV = Environment(
@@ -603,7 +603,7 @@ def _discover_runs(runs_root: Path) -> list[Path]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--runs-root",
+        "--output-dir",
         type=Path,
         default=DEFAULT_RUNS_ROOT,
         help="Directory containing run subdirectories.",
@@ -641,17 +641,17 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    if not args.runs_root.exists():
-        print(f"error: runs directory not found: {args.runs_root}", file=sys.stderr)
+    if not args.output_dir.exists():
+        print(f"error: runs directory not found: {args.output_dir}", file=sys.stderr)
         sys.exit(1)
 
     if args.run:
-        run_dirs = [args.runs_root / args.run]
+        run_dirs = [args.output_dir / args.run]
         if not run_dirs[0].exists():
             print(f"error: run not found: {run_dirs[0]}", file=sys.stderr)
             sys.exit(1)
     else:
-        run_dirs = _discover_runs(args.runs_root)
+        run_dirs = _discover_runs(args.output_dir)
 
     if not run_dirs:
         print("no runs with archive.pkl found", file=sys.stderr)
@@ -693,7 +693,7 @@ def main() -> None:
         card_contexts.append(_build_card_context(run_dir, archive, events))
 
     index_html = _build_index_html(card_contexts)
-    index_out = args.runs_root / "index.html"
+    index_out = args.output_dir / "index.html"
     index_out.write_text(index_html)
     size_kb = index_out.stat().st_size / 1024
     print(f"index: {index_out} ({size_kb:.0f} KB, {len(card_contexts)} runs)")

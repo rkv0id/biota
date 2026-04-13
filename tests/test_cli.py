@@ -80,7 +80,7 @@ def test_search_help_lists_all_flags() -> None:
         "--device",
         "--base-seed",
         "--checkpoint-every",
-        "--runs-root",
+        "--output-dir",
         "--grid",
         "--steps",
     ):
@@ -130,7 +130,7 @@ def test_search_runs_to_completion(tmp_path: Path) -> None:
             "32",
             "--steps",
             "110",
-            "--runs-root",
+            "--output-dir",
             str(tmp_path),
         ],
     )
@@ -154,7 +154,7 @@ def test_search_creates_run_dir(tmp_path: Path) -> None:
             "32",
             "--steps",
             "110",
-            "--runs-root",
+            "--output-dir",
             str(tmp_path),
         ],
     )
@@ -184,7 +184,7 @@ def test_search_grid_steps_override_applies(tmp_path: Path) -> None:
             "32",
             "--steps",
             "110",
-            "--runs-root",
+            "--output-dir",
             str(tmp_path),
         ],
     )
