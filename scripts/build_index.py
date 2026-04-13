@@ -556,6 +556,41 @@ def _build_index_html(cards: list[dict[str, Any]]) -> str:
     return template.render(n_runs=len(cards), cards=cards)
 
 
+def _needs_rebuild(run_dir: Path, publish: bool) -> bool:
+    """Return True if view.html needs to be regenerated.
+
+    Skips rebuild when view.html exists and is newer than both archive.pkl
+    and the index template (so template changes still trigger a rebuild).
+    In publish mode, also checks that the thumbs/ directory exists - if GIFs
+    were never written the view.html references broken paths.
+    """
+    view = run_dir / "view.html"
+    if not view.exists():
+        return True
+
+    view_mtime = view.stat().st_mtime
+
+    # Rebuild if archive was updated after the last render
+    archive_pkl = run_dir / "archive.pkl"
+    if archive_pkl.stat().st_mtime > view_mtime:
+        return True
+
+    # Rebuild if the archive template itself changed
+    template_path = (
+        Path(__file__).resolve().parent.parent
+        / "src"
+        / "biota"
+        / "viz"
+        / "templates"
+        / "archive.html"
+    )
+    if template_path.exists() and template_path.stat().st_mtime > view_mtime:
+        return True
+
+    # In publish mode, rebuild if thumbs directory is missing
+    return publish and not (run_dir / "thumbs").exists()
+
+
 def _discover_runs(runs_root: Path) -> list[Path]:
     """Return run dirs that have an archive.pkl, sorted newest-first."""
     if not runs_root.exists():
@@ -595,6 +630,15 @@ def main() -> None:
             "works offline, suitable for local viewing)."
         ),
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help=(
+            "Rebuild all view.html files even if they are up to date. "
+            "By default, runs are skipped when view.html is newer than "
+            "archive.pkl and the archive template."
+        ),
+    )
     args = parser.parse_args()
 
     if not args.runs_root.exists():
@@ -622,15 +666,19 @@ def main() -> None:
             continue
 
         if not args.no_regen:
-            try:
-                html = _render_run(run_dir, archive, publish=args.publish)
-                out = run_dir / "view.html"
-                out.write_text(html)
-                size_kb = out.stat().st_size / 1024
-                print(f"  {run_dir.name}: {len(archive)} cells, {size_kb:.0f} KB")
-            except Exception as exc:
-                print(f"  {run_dir.name}: FAILED - {exc}", file=sys.stderr)
-                continue
+            if not args.force and not _needs_rebuild(run_dir, publish=args.publish):
+                size_kb = (run_dir / "view.html").stat().st_size / 1024
+                print(f"  {run_dir.name}: up to date ({len(archive)} cells, {size_kb:.0f} KB)")
+            else:
+                try:
+                    html = _render_run(run_dir, archive, publish=args.publish)
+                    out = run_dir / "view.html"
+                    out.write_text(html)
+                    size_kb = out.stat().st_size / 1024
+                    print(f"  {run_dir.name}: {len(archive)} cells, {size_kb:.0f} KB")
+                except Exception as exc:
+                    print(f"  {run_dir.name}: FAILED - {exc}", file=sys.stderr)
+                    continue
 
         good_runs.append((run_dir, archive))
 
