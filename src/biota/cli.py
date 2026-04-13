@@ -164,11 +164,12 @@ def load_descriptor_module(path: Path) -> None:
         REGISTRY[d.name] = d
 
 
-def _resolve_descriptor_names(names: list[str]) -> tuple[str, str, str]:
-    """Validate that exactly three names are given and all exist in REGISTRY."""
+def _resolve_descriptor_names(names_str: str) -> tuple[str, str, str]:
+    """Parse and validate three descriptor names from a comma-separated string."""
+    names = [n.strip() for n in names_str.replace(",", " ").split() if n.strip()]
     if len(names) != 3:
         raise typer.BadParameter(
-            f"--descriptors requires exactly 3 names, got {len(names)}",
+            f"--descriptors requires exactly 3 names, got {len(names)}: {names_str!r}",
             param_hint="--descriptors",
         )
     for name in names:
@@ -255,12 +256,12 @@ def search_cmd(
     steps: int | None = typer.Option(
         None, "--steps", help="Override preset step count (for experimentation)."
     ),
-    descriptors: list[str] = typer.Option(
-        list(DEFAULT_DESCRIPTORS),
+    descriptors: str = typer.Option(
+        ",".join(DEFAULT_DESCRIPTORS),
         "--descriptors",
         help=(
-            "Three descriptor names for the archive axes, space- or flag-separated. "
-            "Example: --descriptors velocity gyradius oscillation. "
+            "Three descriptor names for the archive axes, comma-separated. "
+            "Example: --descriptors velocity,gyradius,oscillation. "
             "Must all exist in the built-in registry or --descriptor-module."
         ),
     ),

@@ -108,7 +108,7 @@ Three presets: `dev` (64×64, 200 steps), `standard` (192×192, 300 steps), `pre
 | `--ray-address` | none | Attach to an existing Ray cluster |
 | `--base-seed` | `0` | Reproducibility seed |
 | `--checkpoint-every` | `100` | Checkpoint cadence in rollouts |
-| `--descriptors` | `velocity gyradius spectral_entropy` | Three descriptor names for the archive axes |
+| `--descriptors` | `velocity,gyradius,spectral_entropy` | Three descriptor names for the archive axes, comma-separated |
 | `--descriptor-module` | none | Path to a Python file defining custom `Descriptor` objects |
 
 `biota doctor` checks Python, torch, device availability, Ray, and module health.
