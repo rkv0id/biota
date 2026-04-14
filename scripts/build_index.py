@@ -694,6 +694,7 @@ def _render_ecosystem_run(run_dir: Path, publish: bool = False) -> str:
     peak_mass_fmt = f"{peak_mass:.1f}"
     mass_turnover_pct = f"{mass_turnover * 100:.3f}"
     source_coords_str = f"({', '.join(str(c) for c in source_coords)})"
+    source_coords_hash = "-".join(str(c) for c in source_coords)
 
     # Build mass chart paths
     mass_area_path, mass_line_path = _mass_svg_paths(mass_history)
@@ -752,6 +753,7 @@ def _render_ecosystem_run(run_dir: Path, publish: bool = False) -> str:
         run_id=run_id,
         source_run_id=source_run_id,
         source_coords=source_coords_str,
+        source_coords_hash=source_coords_hash,
         grid=f"{grid_h}x{grid_w}",
         steps=steps,
         border=border,

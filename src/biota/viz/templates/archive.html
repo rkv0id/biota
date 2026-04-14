@@ -1199,6 +1199,19 @@ modalBg.addEventListener('click', function(evt) { if (evt.target === modalBg) cl
 document.addEventListener('keydown', function(evt) {
     if (evt.key === 'Escape' && modalBg.classList.contains('visible')) closeModal();
 });
+
+// === deep-link: open a cell modal from URL hash #cell-y-x-z ===
+(function() {
+    var hash = window.location.hash;
+    if (!hash || hash.indexOf('#cell-') !== 0) return;
+    var parts = hash.slice(6).split('-');
+    if (parts.length !== 3) return;
+    var key = parts.join('_');
+    var card = CARDS[key];
+    if (!card) return;
+    // Small delay so the page has painted before the modal opens
+    setTimeout(function() { openModal(card); }, 150);
+})();
     </script>
 </body>
 </html>
