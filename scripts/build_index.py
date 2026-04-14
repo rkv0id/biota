@@ -522,9 +522,9 @@ def _build_card_context(
         insertion_rate = f"{100 * n_inserted / n_rollouts:.1f}%"
 
     cfg = _load_config(run_dir)
-    preset = cfg.get("rollout", {}).get("sim", {}).get("grid", "")
-    # Derive preset name from grid size - matches the three known presets
-    grid = cfg.get("rollout", {}).get("sim", {}).get("grid")
+    sim_cfg = cfg.get("rollout", {}).get("sim", {})
+    # Handle both old (grid) and new (grid_h/grid_w) config field names
+    grid = sim_cfg.get("grid_h") or sim_cfg.get("grid")
     if grid == 96:
         preset = "dev"
     elif grid == 192:

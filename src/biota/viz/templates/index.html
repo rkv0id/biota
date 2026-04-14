@@ -514,7 +514,7 @@
         <div class="runs-meta">{{ n_runs }} run{{ 's' if n_runs != 1 else '' }}</div>
         <div class="run-grid">
             {% for card in cards %}
-            <a class="run-card" href="{{ card.run_id }}/view.html">
+            <a class="run-card" href="archive/{{ card.run_id }}/view.html">
                 {% if card.thumb_url %}
                 <img class="card-thumb" src="{{ card.thumb_url }}" alt="preview" />
                 {% else %}
