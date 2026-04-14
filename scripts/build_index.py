@@ -609,143 +609,6 @@ def _discover_runs(runs_root: Path) -> list[Path]:
     return candidates
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--output-dir",
-        type=Path,
-        default=DEFAULT_RUNS_ROOT,
-        help="Directory containing run subdirectories.",
-    )
-    parser.add_argument(
-        "--run",
-        type=str,
-        default=None,
-        help="Regenerate only this single run (by directory name).",
-    )
-    parser.add_argument(
-        "--no-regen",
-        action="store_true",
-        help="Skip regenerating per-run view.html; only rebuild index.html.",
-    )
-    parser.add_argument(
-        "--publish",
-        action="store_true",
-        help=(
-            "Write GIF thumbnails as separate files under runs/<run_id>/thumbs/ "
-            "and reference them by relative path. The view.html drops from ~250 MB "
-            "to ~2 MB per run. Use this when building for web hosting. "
-            "Without this flag, thumbnails are embedded as base64 (self-contained, "
-            "works offline, suitable for local viewing)."
-        ),
-    )
-    parser.add_argument(
-        "--force",
-        action="store_true",
-        help=(
-            "Rebuild all view.html files even if they are up to date. "
-            "By default, runs are skipped when view.html is newer than "
-            "archive.pkl and the archive template."
-        ),
-    )
-    parser.add_argument(
-        "--ecosystem-dir",
-        type=Path,
-        default=DEFAULT_ECO_ROOT,
-        help="Directory containing ecosystem run subdirectories.",
-    )
-    args = parser.parse_args()
-
-    if not args.output_dir.exists():
-        print(f"error: runs directory not found: {args.output_dir}", file=sys.stderr)
-        sys.exit(1)
-
-    if args.run:
-        run_dirs = [args.output_dir / args.run]
-        if not run_dirs[0].exists():
-            print(f"error: run not found: {run_dirs[0]}", file=sys.stderr)
-            sys.exit(1)
-    else:
-        run_dirs = _discover_runs(args.output_dir)
-
-    if not run_dirs:
-        print("no runs with archive.pkl found", file=sys.stderr)
-        sys.exit(1)
-
-    # Regenerate per-run view.html files
-    good_runs: list[tuple[Path, Archive]] = []
-    for run_dir in run_dirs:
-        archive = _load_archive(run_dir)
-        if archive is None:
-            print(f"  skip {run_dir.name}: no archive.pkl or wrong type")
-            continue
-
-        if not args.no_regen:
-            if not args.force and not _needs_rebuild(run_dir, publish=args.publish):
-                size_kb = (run_dir / "view.html").stat().st_size / 1024
-                print(f"  {run_dir.name}: up to date ({len(archive)} cells, {size_kb:.0f} KB)")
-            else:
-                try:
-                    html = _render_run(run_dir, archive, publish=args.publish)
-                    out = run_dir / "view.html"
-                    out.write_text(html)
-                    size_kb = out.stat().st_size / 1024
-                    print(f"  {run_dir.name}: {len(archive)} cells, {size_kb:.0f} KB")
-                except Exception as exc:
-                    print(f"  {run_dir.name}: FAILED - {exc}", file=sys.stderr)
-                    continue
-
-        good_runs.append((run_dir, archive))
-
-    if args.run:
-        print(f"regenerated {args.run}")
-        return
-
-    # Build the index
-    card_contexts: list[dict[str, Any]] = []
-    for run_dir, archive in good_runs:
-        events = _load_events(run_dir)
-        card_contexts.append(_build_card_context(run_dir, archive, events))
-
-    index_html = _build_index_html(card_contexts)
-    index_out = args.output_dir / "index.html"
-    index_out.write_text(index_html)
-    size_kb = index_out.stat().st_size / 1024
-    print(f"index: {index_out} ({size_kb:.0f} KB, {len(card_contexts)} runs)")
-    print(f"open with: open {index_out}")
-
-    # === Ecosystem runs ===
-    eco_dirs = _discover_ecosystem_runs(args.ecosystem_dir)
-    eco_cards: list[dict[str, Any]] = []
-
-    for eco_dir in eco_dirs:
-        if not args.no_regen:
-            if not args.force and not _needs_eco_rebuild(eco_dir, publish=args.publish):
-                size_kb = (eco_dir / "view.html").stat().st_size / 1024
-                print(f"  eco {eco_dir.name}: up to date ({size_kb:.0f} KB)")
-            else:
-                try:
-                    html = _render_ecosystem_run(eco_dir, publish=args.publish)
-                    out = eco_dir / "view.html"
-                    out.write_text(html)
-                    size_kb = out.stat().st_size / 1024
-                    print(f"  eco {eco_dir.name}: {size_kb:.0f} KB")
-                except Exception as exc:
-                    print(f"  eco {eco_dir.name}: FAILED - {exc}", file=sys.stderr)
-                    continue
-        eco_cards.append(_build_eco_card_context(eco_dir))
-
-    if eco_cards:
-        # Rebuild index with ecosystem cards populated
-        index_html = _build_index_html(card_contexts, eco_cards=eco_cards)
-        index_out.write_text(index_html)
-        print(f"index: updated with {len(eco_cards)} ecosystem run(s)")
-
-
-if __name__ == "__main__":
-    main()
-
-
 # ============================================================
 # === Ecosystem run support ==================================
 # ============================================================
@@ -921,3 +784,140 @@ def _build_eco_card_context(run_dir: Path) -> dict[str, Any]:
         "mass_turnover": f"{measures.get('mass_turnover', 0.0) * 100:.3f}",
         "elapsed": f"{summary.get('elapsed_seconds', 0.0):.1f}s",
     }
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=DEFAULT_RUNS_ROOT,
+        help="Directory containing run subdirectories.",
+    )
+    parser.add_argument(
+        "--run",
+        type=str,
+        default=None,
+        help="Regenerate only this single run (by directory name).",
+    )
+    parser.add_argument(
+        "--no-regen",
+        action="store_true",
+        help="Skip regenerating per-run view.html; only rebuild index.html.",
+    )
+    parser.add_argument(
+        "--publish",
+        action="store_true",
+        help=(
+            "Write GIF thumbnails as separate files under runs/<run_id>/thumbs/ "
+            "and reference them by relative path. The view.html drops from ~250 MB "
+            "to ~2 MB per run. Use this when building for web hosting. "
+            "Without this flag, thumbnails are embedded as base64 (self-contained, "
+            "works offline, suitable for local viewing)."
+        ),
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help=(
+            "Rebuild all view.html files even if they are up to date. "
+            "By default, runs are skipped when view.html is newer than "
+            "archive.pkl and the archive template."
+        ),
+    )
+    parser.add_argument(
+        "--ecosystem-dir",
+        type=Path,
+        default=DEFAULT_ECO_ROOT,
+        help="Directory containing ecosystem run subdirectories.",
+    )
+    args = parser.parse_args()
+
+    if not args.output_dir.exists():
+        print(f"error: runs directory not found: {args.output_dir}", file=sys.stderr)
+        sys.exit(1)
+
+    if args.run:
+        run_dirs = [args.output_dir / args.run]
+        if not run_dirs[0].exists():
+            print(f"error: run not found: {run_dirs[0]}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        run_dirs = _discover_runs(args.output_dir)
+
+    if not run_dirs:
+        print("no runs with archive.pkl found", file=sys.stderr)
+        sys.exit(1)
+
+    # Regenerate per-run view.html files
+    good_runs: list[tuple[Path, Archive]] = []
+    for run_dir in run_dirs:
+        archive = _load_archive(run_dir)
+        if archive is None:
+            print(f"  skip {run_dir.name}: no archive.pkl or wrong type")
+            continue
+
+        if not args.no_regen:
+            if not args.force and not _needs_rebuild(run_dir, publish=args.publish):
+                size_kb = (run_dir / "view.html").stat().st_size / 1024
+                print(f"  {run_dir.name}: up to date ({len(archive)} cells, {size_kb:.0f} KB)")
+            else:
+                try:
+                    html = _render_run(run_dir, archive, publish=args.publish)
+                    out = run_dir / "view.html"
+                    out.write_text(html)
+                    size_kb = out.stat().st_size / 1024
+                    print(f"  {run_dir.name}: {len(archive)} cells, {size_kb:.0f} KB")
+                except Exception as exc:
+                    print(f"  {run_dir.name}: FAILED - {exc}", file=sys.stderr)
+                    continue
+
+        good_runs.append((run_dir, archive))
+
+    if args.run:
+        print(f"regenerated {args.run}")
+        return
+
+    # Build the index
+    card_contexts: list[dict[str, Any]] = []
+    for run_dir, archive in good_runs:
+        events = _load_events(run_dir)
+        card_contexts.append(_build_card_context(run_dir, archive, events))
+
+    index_html = _build_index_html(card_contexts)
+    index_out = args.output_dir / "index.html"
+    index_out.write_text(index_html)
+    size_kb = index_out.stat().st_size / 1024
+    print(f"index: {index_out} ({size_kb:.0f} KB, {len(card_contexts)} runs)")
+    print(f"open with: open {index_out}")
+
+    # === Ecosystem runs ===
+    eco_dirs = _discover_ecosystem_runs(args.ecosystem_dir)
+    eco_cards: list[dict[str, Any]] = []
+
+    for eco_dir in eco_dirs:
+        if not args.no_regen:
+            if not args.force and not _needs_eco_rebuild(eco_dir, publish=args.publish):
+                size_kb = (eco_dir / "view.html").stat().st_size / 1024
+                print(f"  eco {eco_dir.name}: up to date ({size_kb:.0f} KB)")
+            else:
+                try:
+                    html = _render_ecosystem_run(eco_dir, publish=args.publish)
+                    out = eco_dir / "view.html"
+                    out.write_text(html)
+                    size_kb = out.stat().st_size / 1024
+                    print(f"  eco {eco_dir.name}: {size_kb:.0f} KB")
+                except Exception as exc:
+                    print(f"  eco {eco_dir.name}: FAILED - {exc}", file=sys.stderr)
+                    continue
+        eco_cards.append(_build_eco_card_context(eco_dir))
+
+    if eco_cards:
+        # Rebuild index with ecosystem cards populated
+        index_html = _build_index_html(card_contexts, eco_cards=eco_cards)
+        index_out.write_text(index_html)
+        print(f"index: updated with {len(eco_cards)} ecosystem run(s)")
+
+
+if __name__ == "__main__":
+    main()
