@@ -73,17 +73,17 @@ class RolloutConfig:
 
 def dev_preset() -> RolloutConfig:
     """Small and fast: 96x96 grid, 200 steps. For iteration and smoke tests."""
-    return RolloutConfig(sim=SimConfig(grid=96), steps=200)
+    return RolloutConfig(sim=SimConfig(grid_h=96, grid_w=96), steps=200)
 
 
 def standard_preset() -> RolloutConfig:
     """The v1 default: 192x192 grid, 300 steps. For real searches and benchmarks."""
-    return RolloutConfig(sim=SimConfig(grid=192), steps=300)
+    return RolloutConfig(sim=SimConfig(grid_h=192, grid_w=192), steps=300)
 
 
 def pretty_preset() -> RolloutConfig:
     """The hero shot: 384x384 grid, 500 steps. For the M6 export bundle."""
-    return RolloutConfig(sim=SimConfig(grid=384), steps=500)
+    return RolloutConfig(sim=SimConfig(grid_h=384, grid_w=384), steps=500)
 
 
 def _params_dict_to_tensors(params: ParamDict, device: str) -> Params:
@@ -190,7 +190,7 @@ def rollout(
 
     # 2. Initial state, deterministic for the seed
     state = _initial_state(
-        grid=config.sim.grid,
+        grid=config.sim.grid_h,
         patch_fraction=config.patch_fraction,
         seed=seed,
         device=device,
@@ -201,7 +201,7 @@ def rollout(
     # doesn't try to upsample - if the configured thumbnail size is larger
     # than the sim grid, cap it at the grid itself. This lets us keep a
     # single sensible default (192) without per-preset overrides.
-    thumbnail_size = min(config.thumbnail_size, config.sim.grid)
+    thumbnail_size = min(config.thumbnail_size, config.sim.grid_h)
 
     # 3. Pick frame indices for the thumbnail (uniform across the full rollout)
     if config.thumbnail_frames > 0:
@@ -261,7 +261,7 @@ def rollout(
         com_history=com_history[-tail:].astype(np.float32),
         bbox_fraction_history=bbox_np[-tail:].astype(np.float32),
         final_state=final_state_np,
-        grid_size=config.sim.grid,
+        grid_size=config.sim.grid_h,
         total_steps=config.steps,
     )
 
@@ -441,7 +441,19 @@ def _batched_sim_step(
 
     clipped_flow = torch.clamp(config.dt * F_flow, -ma, ma)
     mu = pos_b + clipped_flow
-    mu = torch.clamp(mu, sigma, config.grid - sigma)
+    grid_hw = torch.tensor([config.grid_h, config.grid_w], device=A.device, dtype=A.dtype).view(
+        1, 2, 1, 1
+    )
+    if config.border == "torus":
+        mu = torch.stack([mu[:, 0] % config.grid_h, mu[:, 1] % config.grid_w], dim=1)
+    else:
+        mu = torch.stack(
+            [
+                torch.clamp(mu[:, 0], sigma, config.grid_h - sigma),
+                torch.clamp(mu[:, 1], sigma, config.grid_w - sigma),
+            ],
+            dim=1,
+        )
 
     new_A2 = torch.zeros_like(A2)
     sigma_clip_max = min(1.0, 2.0 * sigma)
@@ -452,6 +464,8 @@ def _batched_sim_step(
             Ar = torch.roll(A2, shifts=(dx, dy), dims=(1, 2))
             mur = torch.roll(mu, shifts=(dx, dy), dims=(2, 3))
             dpmu = torch.abs(pos_b - mur)
+            if config.border == "torus":
+                dpmu = torch.minimum(dpmu, grid_hw - dpmu)
             sz = 0.5 - dpmu + sigma
             sz_clipped = torch.clamp(sz, 0.0, sigma_clip_max)
             area = (sz_clipped[:, 0] * sz_clipped[:, 1]) / denom
@@ -493,7 +507,7 @@ def rollout_batch(
     started_at = time.perf_counter()
     created_at = time.time()
 
-    thumbnail_size = min(config.thumbnail_size, config.sim.grid)
+    thumbnail_size = min(config.thumbnail_size, config.sim.grid_h)
 
     # Frame capture indices shared across all elements
     if config.thumbnail_frames > 0:
@@ -521,7 +535,7 @@ def rollout_batch(
     states = torch.stack(
         [
             _initial_state(
-                grid=config.sim.grid,
+                grid=config.sim.grid_h,
                 patch_fraction=config.patch_fraction,
                 seed=seeds[i],
                 device=device,
@@ -601,7 +615,7 @@ def rollout_batch(
             com_history=com_history[-tail:].astype(np.float32),
             bbox_fraction_history=bbox_hist[i, -tail:].astype(np.float32),
             final_state=final_state_np,
-            grid_size=config.sim.grid,
+            grid_size=config.sim.grid_h,
             total_steps=config.steps,
         )
 

@@ -123,7 +123,8 @@ def _jittered_grid_fallback(
 
 def compute_spawn_positions(
     spawn: SpawnConfig,
-    grid: int,
+    grid_h: int,
+    grid_w: int,
 ) -> list[tuple[int, int]]:
     """Return (y, x) spawn center coordinates using Poisson disk sampling.
 
@@ -132,28 +133,34 @@ def compute_spawn_positions(
     """
     rng = np.random.default_rng(spawn.seed)
     margin = spawn.patch + 2  # keep patches off the wall border
+    # Use the smaller dimension for the Poisson disk to guarantee min_dist
+    grid_min = min(grid_h, grid_w)
 
     positions = _poisson_disk_sample(
         n=spawn.n,
-        grid=grid,
+        grid=grid_min,
         min_dist=float(spawn.min_dist),
         margin=margin,
         rng=rng,
     )
 
     if len(positions) < spawn.n:
-        # Poisson disk couldn't place all n - grid too small or min_dist too large
-        positions = _jittered_grid_fallback(spawn.n, grid, margin, rng)
+        positions = _jittered_grid_fallback(spawn.n, grid_min, margin, rng)
+
+    # Scale positions to actual grid_h x grid_w if rectangular
+    if grid_h != grid_w:
+        positions = [(int(y * grid_h / grid_min), int(x * grid_w / grid_min)) for y, x in positions]
 
     return positions
 
 
 def build_initial_state(
     spawn: SpawnConfig,
-    grid: int,
+    grid_h: int,
+    grid_w: int,
     device: str,
 ) -> torch.Tensor:
-    """Build a (grid, grid, 1) initial state with n creatures on a shared grid.
+    """Build a (grid_h, grid_w, 1) initial state with n creatures on a shared grid.
 
     Spawn positions are determined by Poisson disk sampling. Each creature gets
     an independent random patch of size spawn.patch x spawn.patch centered at
@@ -168,8 +175,8 @@ def build_initial_state(
     Returns:
         state:     (grid, grid, 1) float32 tensor on device.
     """
-    positions = compute_spawn_positions(spawn, grid)
-    state = torch.zeros((grid, grid, 1), dtype=torch.float32, device=device)
+    positions = compute_spawn_positions(spawn, grid_h, grid_w)
+    state = torch.zeros((grid_h, grid_w, 1), dtype=torch.float32, device=device)
     patch = spawn.patch
 
     for i, (cy, cx) in enumerate(positions):
@@ -178,8 +185,8 @@ def build_initial_state(
 
         y0 = max(0, cy - patch // 2)
         x0 = max(0, cx - patch // 2)
-        y1 = min(grid, y0 + patch)
-        x1 = min(grid, x0 + patch)
+        y1 = min(grid_h, y0 + patch)
+        x1 = min(grid_w, x0 + patch)
 
         ph = y1 - y0
         pw = x1 - x0

@@ -191,7 +191,8 @@ def test_search_grid_steps_override_applies(tmp_path: Path) -> None:
     )
     run_dir = next(tmp_path.iterdir())
     config = json.loads((run_dir / "config.json").read_text())
-    assert config["rollout"]["sim"]["grid"] == 32
+    assert config["rollout"]["sim"]["grid_h"] == 32
+    assert config["rollout"]["sim"]["grid_w"] == 32
     assert config["rollout"]["steps"] == 110
 
 
@@ -216,6 +217,7 @@ def test_ecosystem_help_lists_all_flags() -> None:
         "--min-dist",
         "--seed",
         "--border",
+        "--output-format",
     ):
         assert flag in output, f"missing flag {flag} in ecosystem --help output"
 
@@ -226,7 +228,25 @@ def test_ecosystem_help_lists_all_flags() -> None:
 def test_ecosystem_bad_cell_format_errors_cleanly() -> None:
     result = runner.invoke(
         app,
-        ["ecosystem", "--run", "some-run", "--cell", "not,a,valid,coord"],
+        [
+            "ecosystem",
+            "--run",
+            "some-run",
+            "--cell",
+            "not,a,valid,coord",
+            "--n",
+            "2",
+            "--grid",
+            "64",
+            "--steps",
+            "5",
+            "--snapshot-every",
+            "5",
+            "--patch",
+            "8",
+            "--min-dist",
+            "20",
+        ],
     )
     assert result.exit_code != 0
     assert "cell" in _strip_ansi(result.output).lower()
@@ -235,7 +255,25 @@ def test_ecosystem_bad_cell_format_errors_cleanly() -> None:
 def test_ecosystem_bad_cell_non_integer_errors_cleanly() -> None:
     result = runner.invoke(
         app,
-        ["ecosystem", "--run", "some-run", "--cell", "1,2,x"],
+        [
+            "ecosystem",
+            "--run",
+            "some-run",
+            "--cell",
+            "1,2,x",
+            "--n",
+            "2",
+            "--grid",
+            "64",
+            "--steps",
+            "5",
+            "--snapshot-every",
+            "5",
+            "--patch",
+            "8",
+            "--min-dist",
+            "20",
+        ],
     )
     assert result.exit_code != 0
 
@@ -249,6 +287,18 @@ def test_ecosystem_missing_run_dir_errors_cleanly(tmp_path: Path) -> None:
             "nonexistent-run",
             "--cell",
             "1,2,3",
+            "--n",
+            "2",
+            "--grid",
+            "64",
+            "--steps",
+            "5",
+            "--snapshot-every",
+            "5",
+            "--patch",
+            "8",
+            "--min-dist",
+            "20",
             "--archive-dir",
             str(tmp_path),
         ],
@@ -313,6 +363,12 @@ def test_ecosystem_end_to_end(tmp_path: Path) -> None:
             "5",
             "--snapshot-every",
             "5",
+            "--patch",
+            "8",
+            "--min-dist",
+            "20",
+            "--output-format",
+            "frames",
             "--archive-dir",
             str(tmp_path / "archive-runs"),
             "--output-dir",

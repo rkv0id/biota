@@ -671,7 +671,8 @@ def _render_ecosystem_run(run_dir: Path, publish: bool = False) -> str:
     run_id = summary.get("run_id", run_dir.name)
     source_run_id = summary.get("source_run_id", "")
     source_coords = summary.get("source_coords", [])
-    grid = summary.get("grid", "")
+    grid_h = summary.get("grid_h", summary.get("grid", ""))
+    grid_w = summary.get("grid_w", summary.get("grid", ""))
     steps = summary.get("steps", "")
     border = summary.get("border", "wall")
     spawn = summary.get("spawn", {})
@@ -727,13 +728,29 @@ def _render_ecosystem_run(run_dir: Path, publish: bool = False) -> str:
             b64 = base64.b64encode(buf.getvalue()).decode("ascii")
             frames.append({"step": step, "src": f"data:image/png;base64,{b64}"})
 
+    output_format = summary.get("output_format", "frames")
+    gif_path = run_dir / "ecosystem.gif"
+
+    # For GIF output: embed the GIF directly instead of individual frames
+    gif_src: str = ""
+    if output_format == "gif" and gif_path.exists():
+        if publish:
+            # Reference by relative path
+            gif_src = "ecosystem.gif"
+        else:
+            # Embed as base64
+            import base64 as _b64
+
+            gif_data = gif_path.read_bytes()
+            gif_src = "data:image/gif;base64," + _b64.b64encode(gif_data).decode("ascii")
+
     n_snapshots = len(frames)
     template = _ENV.get_template("ecosystem.html")
     return template.render(
         run_id=run_id,
         source_run_id=source_run_id,
         source_coords=source_coords_str,
-        grid=f"{grid}x{grid}",
+        grid=f"{grid_h}x{grid_w}",
         steps=steps,
         border=border,
         n_creatures=n_creatures,
@@ -748,6 +765,8 @@ def _render_ecosystem_run(run_dir: Path, publish: bool = False) -> str:
         mass_line_path=mass_line_path,
         frames=frames,
         thumb_px=THUMB_PX,
+        output_format=output_format,
+        gif_src=gif_src,
     )
 
 
@@ -775,7 +794,8 @@ def _build_eco_card_context(run_dir: Path) -> dict[str, Any]:
         "run_id": run_dir.name,
         "source_run_id": summary.get("source_run_id", ""),
         "source_coords": summary.get("source_coords", []),
-        "grid": summary.get("grid", ""),
+        "grid_h": summary.get("grid_h", summary.get("grid", "")),
+        "grid_w": summary.get("grid_w", summary.get("grid", "")),
         "steps": summary.get("steps", ""),
         "border": summary.get("border", "wall"),
         "n_creatures": spawn.get("n_creatures", spawn.get("n", "")),

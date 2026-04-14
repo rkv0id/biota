@@ -50,12 +50,14 @@ class EcosystemConfig:
 
     source_run_id: str
     source_coords: tuple[int, int, int]
-    grid: int
+    grid_h: int
+    grid_w: int
     steps: int
     snapshot_every: int
     spawn: SpawnConfig
     device: str = "cpu"
     border: str = "torus"
+    output_format: str = "gif"
 
 
 @dataclass
@@ -109,11 +111,13 @@ class EcosystemResult:
             "run_id": self.run_id,
             "source_run_id": cfg.source_run_id,
             "source_coords": list(cfg.source_coords),
-            "grid": cfg.grid,
+            "grid_h": cfg.grid_h,
+            "grid_w": cfg.grid_w,
             "steps": cfg.steps,
             "snapshot_every": cfg.snapshot_every,
             "device": cfg.device,
             "border": cfg.border,
+            "output_format": cfg.output_format,
             "spawn": {
                 "n": sp.n,
                 "min_dist": sp.min_dist,

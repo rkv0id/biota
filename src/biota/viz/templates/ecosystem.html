@@ -163,6 +163,16 @@
             display: block;
         }
 
+        /* === gif display === */
+        .gif-wrap { margin-bottom: 40px; }
+        .eco-gif {
+            max-width: 100%;
+            border-radius: 8px;
+            image-rendering: pixelated;
+            border: 1px solid rgba(255,255,255,0.06);
+            display: block;
+        }
+
         /* === filmstrip === */
         .filmstrip-wrap { margin-bottom: 40px; }
         .filmstrip {
@@ -333,7 +343,13 @@
             </svg>
         </div>
 
-        <!-- Frame filmstrip -->
+        <!-- Animation or filmstrip depending on output format -->
+        {% if output_format == "gif" and gif_src %}
+        <div class="gif-wrap">
+            <div class="section-title">animation</div>
+            <img class="eco-gif" src="{{ gif_src }}" alt="ecosystem animation" />
+        </div>
+        {% else %}
         <div class="filmstrip-wrap">
             <div class="section-title">snapshots</div>
             <div class="filmstrip" id="filmstrip">
@@ -345,6 +361,7 @@
                 {% endfor %}
             </div>
         </div>
+        {% endif %}
     </main>
 
     <!-- Lightbox -->

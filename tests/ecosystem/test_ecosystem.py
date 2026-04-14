@@ -98,20 +98,20 @@ def test_jittered_grid_fallback_returns_exactly_n() -> None:
 
 def test_compute_spawn_positions_returns_n() -> None:
     spawn = _spawn(n=4, min_dist=60)
-    pts = compute_spawn_positions(spawn, grid=512)
+    pts = compute_spawn_positions(spawn, grid_h=512, grid_w=512)
     assert len(pts) == 4
 
 
 def test_compute_spawn_positions_reproducible() -> None:
     spawn = _spawn(n=4, min_dist=60, seed=99)
-    pts1 = compute_spawn_positions(spawn, grid=512)
-    pts2 = compute_spawn_positions(spawn, grid=512)
+    pts1 = compute_spawn_positions(spawn, grid_h=512, grid_w=512)
+    pts2 = compute_spawn_positions(spawn, grid_h=512, grid_w=512)
     assert pts1 == pts2
 
 
 def test_compute_spawn_positions_seed_matters() -> None:
-    pts1 = compute_spawn_positions(_spawn(seed=0), grid=512)
-    pts2 = compute_spawn_positions(_spawn(seed=1), grid=512)
+    pts1 = compute_spawn_positions(_spawn(seed=0), grid_h=512, grid_w=512)
+    pts2 = compute_spawn_positions(_spawn(seed=1), grid_h=512, grid_w=512)
     assert pts1 != pts2
 
 
@@ -122,29 +122,29 @@ def test_build_initial_state_shape() -> None:
     import torch
 
     spawn = _spawn(n=4, patch=12)
-    state = build_initial_state(spawn, grid=256, device="cpu")
+    state = build_initial_state(spawn, grid_h=256, grid_w=256, device="cpu")
     assert state.shape == (256, 256, 1)
     assert state.dtype == torch.float32
 
 
 def test_build_initial_state_has_nonzero_mass() -> None:
     spawn = _spawn(n=4, patch=12)
-    state = build_initial_state(spawn, grid=256, device="cpu")
+    state = build_initial_state(spawn, grid_h=256, grid_w=256, device="cpu")
     assert float(state.sum()) > 0.0
 
 
 def test_build_initial_state_mass_bounded() -> None:
     # Each patch is uniform [0, 1) so total mass <= n * patch^2
     spawn = _spawn(n=4, patch=12)
-    state = build_initial_state(spawn, grid=256, device="cpu")
+    state = build_initial_state(spawn, grid_h=256, grid_w=256, device="cpu")
     max_possible = 4 * 12 * 12
     assert float(state.sum()) <= max_possible
 
 
 def test_build_initial_state_reproducible() -> None:
     spawn = _spawn(n=3, seed=42)
-    s1 = build_initial_state(spawn, grid=256, device="cpu")
-    s2 = build_initial_state(spawn, grid=256, device="cpu")
+    s1 = build_initial_state(spawn, grid_h=256, grid_w=256, device="cpu")
+    s2 = build_initial_state(spawn, grid_h=256, grid_w=256, device="cpu")
     assert (s1 == s2).all()
 
 
@@ -158,7 +158,8 @@ def test_to_summary_dict_is_json_serializable() -> None:
     config = EcosystemConfig(
         source_run_id="test-run",
         source_coords=(5, 8, 3),
-        grid=128,
+        grid_h=128,
+        grid_w=128,
         steps=10,
         snapshot_every=5,
         spawn=spawn,
@@ -192,25 +193,45 @@ def test_run_ecosystem_creates_output_files() -> None:
     from biota.ecosystem.run import run_ecosystem
 
     spawn = _spawn(n=2, min_dist=30, patch=8)
-    config = EcosystemConfig(
-        source_run_id="test-run",
-        source_coords=(5, 8, 3),
-        grid=64,
-        steps=5,
-        snapshot_every=5,
-        spawn=spawn,
-        device="cpu",
-    )
-    creature = _synthetic_creature()
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        result = run_ecosystem(config, creature, output_root=tmpdir)
+        # Test gif mode (default)
+        config_gif = EcosystemConfig(
+            source_run_id="test-run",
+            source_coords=(5, 8, 3),
+            grid_h=64,
+            grid_w=64,
+            steps=5,
+            snapshot_every=5,
+            spawn=spawn,
+            device="cpu",
+            output_format="gif",
+        )
+        result = run_ecosystem(config_gif, _synthetic_creature(), output_root=tmpdir)
         run_dir = Path(result.run_dir)
-
         assert (run_dir / "summary.json").exists()
         assert (run_dir / "config.json").exists()
         assert (run_dir / "trajectory.npy").exists()
-        assert (run_dir / "frames").is_dir()
+        assert (run_dir / "ecosystem.gif").exists()
+        assert not (run_dir / "frames").exists()
+
+        # Test frames mode
+        config_frames = EcosystemConfig(
+            source_run_id="test-run-2",
+            source_coords=(5, 8, 3),
+            grid_h=64,
+            grid_w=64,
+            steps=5,
+            snapshot_every=5,
+            spawn=spawn,
+            device="cpu",
+            output_format="frames",
+        )
+        result2 = run_ecosystem(config_frames, _synthetic_creature(), output_root=tmpdir)
+        run_dir2 = Path(result2.run_dir)
+        assert (run_dir2 / "summary.json").exists()
+        assert (run_dir2 / "frames").is_dir()
+        assert not (run_dir2 / "ecosystem.gif").exists()
 
 
 def test_run_ecosystem_trajectory_shape() -> None:
@@ -220,7 +241,8 @@ def test_run_ecosystem_trajectory_shape() -> None:
     config = EcosystemConfig(
         source_run_id="test-run",
         source_coords=(1, 2, 3),
-        grid=64,
+        grid_h=64,
+        grid_w=64,
         steps=10,
         snapshot_every=5,
         spawn=spawn,
@@ -243,7 +265,8 @@ def test_run_ecosystem_summary_json_valid() -> None:
     config = EcosystemConfig(
         source_run_id="my-run",
         source_coords=(0, 1, 2),
-        grid=64,
+        grid_h=64,
+        grid_w=64,
         steps=5,
         snapshot_every=5,
         spawn=spawn,
@@ -267,7 +290,8 @@ def test_run_ecosystem_measures_plausible() -> None:
     config = EcosystemConfig(
         source_run_id="test-run",
         source_coords=(3, 3, 3),
-        grid=64,
+        grid_h=64,
+        grid_w=64,
         steps=10,
         snapshot_every=10,
         spawn=spawn,

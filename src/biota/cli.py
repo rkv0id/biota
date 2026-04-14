@@ -64,7 +64,8 @@ def _override_sim(
     effective_border = border if border is not None else rollout.sim.border
     if grid is not None or border is not None:
         new_sim = SimConfig(
-            grid=grid if grid is not None else rollout.sim.grid,
+            grid_h=grid if grid is not None else rollout.sim.grid_h,
+            grid_w=grid if grid is not None else rollout.sim.grid_w,
             kernels=rollout.sim.kernels,
             dd=rollout.sim.dd,
             dt=rollout.sim.dt,
@@ -339,11 +340,28 @@ def ecosystem(
         "--cell",
         help="Archive cell coordinate as y,x,z (e.g. 10,15,8).",
     ),
-    n: int = typer.Option(4, "--n", help="Number of creature copies to spawn."),
-    grid: int = typer.Option(512, "--grid", help="Ecosystem grid side length in pixels."),
-    steps: int = typer.Option(500, "--steps", help="Number of simulation steps."),
+    n: int = typer.Option(..., "--n", help="Number of creature copies to spawn."),
+    grid: str = typer.Option(
+        ...,
+        "--grid",
+        help="Grid dimensions. Square: 512. Rectangular: 768x512 (HxW).",
+    ),
+    steps: int = typer.Option(..., "--steps", help="Number of simulation steps."),
     snapshot_every: int = typer.Option(
-        50, "--snapshot-every", help="Capture a state snapshot every N steps."
+        ..., "--snapshot-every", help="Capture a state snapshot every N steps."
+    ),
+    patch: int = typer.Option(
+        ..., "--patch", help="Side length of the initial random patch per creature."
+    ),
+    min_dist: int = typer.Option(
+        ...,
+        "--min-dist",
+        help="Minimum pixel distance between spawn centers (Poisson disk sampling).",
+    ),
+    output_format: str = typer.Option(
+        "gif",
+        "--output-format",
+        help="Output format for simulation frames: 'gif' (default) or 'frames' (individual PNGs).",
     ),
     device: str = typer.Option("cpu", "--device", help="Torch device: cpu, mps, or cuda."),
     archive_dir: Path = typer.Option(
@@ -356,23 +374,11 @@ def ecosystem(
         "--output-dir",
         help="Root directory for ecosystem run output.",
     ),
-    patch: int = typer.Option(
-        16, "--patch", help="Side length of the initial random patch per creature."
-    ),
-    min_dist: int = typer.Option(
-        80,
-        "--min-dist",
-        help=(
-            "Minimum pixel distance between spawn centers (Poisson disk sampling). "
-            "Should be at least 2x the creature's typical radius. "
-            "Default 80 works well for standard preset creatures on a 512px grid."
-        ),
-    ),
     seed: int = typer.Option(0, "--seed", help="Base RNG seed for spawn positions and patches."),
     border: str = typer.Option(
         "torus",
         "--border",
-        help="Grid border for the ecosystem simulation: 'wall' or 'torus' (default).",
+        help="Grid border: 'wall' or 'torus' (default).",
     ),
 ) -> None:
     """Run a homogeneous ecosystem simulation from a single archive creature."""
@@ -382,17 +388,43 @@ def ecosystem(
     from biota.ecosystem.run import run_ecosystem
     from biota.search.archive import Archive
 
-    # Parse cell coordinate
+    # Parse --grid HxW or single integer
     try:
-        parts = [int(x.strip()) for x in cell.split(",")]
-        if len(parts) != 3:
+        if "x" in grid.lower():
+            parts_g = grid.lower().split("x")
+            if len(parts_g) != 2:
+                raise ValueError
+            grid_h, grid_w = int(parts_g[0]), int(parts_g[1])
+        else:
+            grid_h = grid_w = int(grid)
+    except ValueError:
+        raise typer.BadParameter(
+            f"--grid must be an integer (512) or HxW (768x512). Got: {grid!r}",
+            param_hint="--grid",
+        ) from None
+
+    # Parse --cell coordinate
+    try:
+        cell_parts = [int(x.strip()) for x in cell.split(",")]
+        if len(cell_parts) != 3:
             raise ValueError
-        coords: tuple[int, int, int] = (parts[0], parts[1], parts[2])
+        coords: tuple[int, int, int] = (cell_parts[0], cell_parts[1], cell_parts[2])
     except ValueError:
         raise typer.BadParameter(
             f"--cell must be three comma-separated integers, e.g. 10,15,8. Got: {cell!r}",
             param_hint="--cell",
         ) from None
+
+    if border not in ("wall", "torus"):
+        raise typer.BadParameter(
+            f"border must be 'wall' or 'torus', got {border!r}", param_hint="--border"
+        )
+
+    if output_format not in ("gif", "frames"):
+        raise typer.BadParameter(
+            f"output-format must be 'gif' or 'frames', got {output_format!r}",
+            param_hint="--output-format",
+        )
 
     # Load archive
     run_dir = archive_dir / run
@@ -417,21 +449,18 @@ def ecosystem(
 
     creature = archive[coords]
 
-    if border not in ("wall", "torus"):
-        raise typer.BadParameter(
-            f"border must be 'wall' or 'torus', got {border!r}", param_hint="--border"
-        )
-
     spawn = SpawnConfig(n=n, min_dist=min_dist, patch=patch, seed=seed)
     config = EcosystemConfig(
         source_run_id=run,
         source_coords=coords,
-        grid=grid,
+        grid_h=grid_h,
+        grid_w=grid_w,
         steps=steps,
         snapshot_every=snapshot_every,
         spawn=spawn,
         device=device,
         border=border,
+        output_format=output_format,
     )
 
     result = run_ecosystem(config, creature, output_root=output_dir)

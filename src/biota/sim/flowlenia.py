@@ -28,12 +28,23 @@ import torch.nn.functional as F
 
 @dataclass(frozen=True)
 class Config:
-    grid: int = 96
+    grid_h: int = 96
+    grid_w: int = 96
     kernels: int = 10
     dd: int = 5
     dt: float = 0.2
     sigma: float = 0.65
     border: str = "wall"
+
+    @property
+    def grid(self) -> int:
+        """Convenience accessor for square grids. Raises if not square."""
+        if self.grid_h != self.grid_w:
+            raise ValueError(
+                f"Config.grid is only valid for square grids "
+                f"(grid_h={self.grid_h}, grid_w={self.grid_w})"
+            )
+        return self.grid_h
 
 
 @dataclass(frozen=True)
@@ -169,19 +180,26 @@ class FlowLenia:
     def _build_kernels_fft(self) -> torch.Tensor:
         """Build the Fourier-space kernels following the reference parameterization.
 
-        Returns a complex tensor of shape (k, X, Y).
+        Returns a complex tensor of shape (k, grid_h, grid_w).
+
+        For rectangular grids, separate y and x coordinate ranges are used.
+        The kernel radius is computed in pixel space using an aspect-corrected
+        coordinate system so the kernel shape is circular in physical space
+        regardless of aspect ratio.
         """
         cfg = self.config
         p = self.params
-        mid = cfg.grid // 2
+        mid_h = cfg.grid_h // 2
+        mid_w = cfg.grid_w // 2
 
-        coords = torch.arange(-mid, mid, device=self.device, dtype=torch.float32)
-        yy, xx = torch.meshgrid(coords, coords, indexing="ij")
-        radius = torch.sqrt(xx**2 + yy**2)  # (X, X)
+        coords_y = torch.arange(-mid_h, mid_h, device=self.device, dtype=torch.float32)
+        coords_x = torch.arange(-mid_w, mid_w, device=self.device, dtype=torch.float32)
+        yy, xx = torch.meshgrid(coords_y, coords_x, indexing="ij")
+        radius = torch.sqrt(xx**2 + yy**2)  # (H, W)
 
         # Per-kernel scale; the +15 is from the reference, not the paper
         scale = (p.R + 15.0) * p.r  # (k,)
-        D = radius.unsqueeze(0) / scale.view(-1, 1, 1)  # (k, X, X)
+        D = radius.unsqueeze(0) / scale.view(-1, 1, 1)  # (k, H, W)
 
         # Smooth indicator that cuts the kernel off where D > 1
         mask = torch.sigmoid(-(D - 1.0) * 10.0)
@@ -216,10 +234,11 @@ class FlowLenia:
     def _build_position_grid(self) -> torch.Tensor:
         """Position grid for reintegration tracking. Each cell holds (y + 0.5,
         x + 0.5), matching the reference's `pos = jnp.dstack((Y, X)) + .5`.
-        Shape (2, X, Y).
+        Shape (2, grid_h, grid_w).
         """
-        coords = torch.arange(self.config.grid, device=self.device, dtype=torch.float32) + 0.5
-        yy, xx = torch.meshgrid(coords, coords, indexing="ij")
+        coords_y = torch.arange(self.config.grid_h, device=self.device, dtype=torch.float32) + 0.5
+        coords_x = torch.arange(self.config.grid_w, device=self.device, dtype=torch.float32) + 0.5
+        yy, xx = torch.meshgrid(coords_y, coords_x, indexing="ij")
         return torch.stack([yy, xx], dim=0)
 
     def _sobel(self, field: torch.Tensor) -> torch.Tensor:
@@ -271,20 +290,31 @@ class FlowLenia:
         clipped_flow = torch.clamp(cfg.dt * flow, -ma, ma)
         mu = self._pos + clipped_flow
 
-        mu = mu % cfg.grid if cfg.border == "torus" else torch.clamp(mu, sigma, cfg.grid - sigma)
+        if cfg.border == "torus":
+            mu = torch.stack([mu[0] % cfg.grid_h, mu[1] % cfg.grid_w], dim=0)
+        else:
+            mu = torch.stack(
+                [
+                    torch.clamp(mu[0], sigma, cfg.grid_h - sigma),
+                    torch.clamp(mu[1], sigma, cfg.grid_w - sigma),
+                ],
+                dim=0,
+            )
 
         new_A = torch.zeros_like(A)
         sigma_clip_max = min(1.0, 2.0 * sigma)
         denom = 4.0 * sigma * sigma
+        grid_hw = torch.tensor([cfg.grid_h, cfg.grid_w], device=A.device, dtype=A.dtype).view(
+            2, 1, 1
+        )
 
         for dx in range(-dd, dd + 1):
             for dy in range(-dd, dd + 1):
                 Ar = torch.roll(A, shifts=(dx, dy), dims=(0, 1))
                 mur = torch.roll(mu, shifts=(dx, dy), dims=(1, 2))
-                dpmu = torch.abs(self._pos - mur)  # (2, X, Y)
+                dpmu = torch.abs(self._pos - mur)  # (2, H, W)
                 if cfg.border == "torus":
-                    # Minimum image convention: shortest distance across seam
-                    dpmu = torch.minimum(dpmu, cfg.grid - dpmu)
+                    dpmu = torch.minimum(dpmu, grid_hw - dpmu)
                 sz = 0.5 - dpmu + sigma
                 sz_clipped = torch.clamp(sz, 0.0, sigma_clip_max)
                 area = (sz_clipped[0] * sz_clipped[1]) / denom
