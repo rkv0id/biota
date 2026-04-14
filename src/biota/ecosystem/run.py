@@ -42,11 +42,16 @@ def _make_eco_run_id(source_run_id: str, coords: tuple[int, int, int]) -> str:
     return f"{timestamp}-eco-{suffix}-{coord_str}"
 
 
-def _colorize_frame(state: np.ndarray) -> np.ndarray:
-    """Convert a (H, W) float32 state to (H, W, 3) uint8 magma-colorized RGB."""
+def _colorize_frame(state: np.ndarray, global_peak: float | None = None) -> np.ndarray:
+    """Convert a (H, W) float32 state to (H, W, 3) uint8 magma-colorized RGB.
+
+    If global_peak is provided it is used for normalization so all frames in a
+    sequence share the same scale - prevents seam artifacts on torus grids where
+    mass concentration at a wrap edge would otherwise dominate per-frame normalization.
+    """
     from biota.viz.colormap import apply_magma
 
-    peak = float(np.percentile(state, 99.9))
+    peak = global_peak if global_peak is not None else float(np.percentile(state, 99.9))
     if peak > 0:
         normalized = (state / peak * 255).clip(0, 255).astype(np.uint8)
     else:
@@ -157,7 +162,6 @@ def run_ecosystem(
     initial_mass = float(state.sum().item())
 
     raw_snapshots: list[np.ndarray] = []
-    rgb_frames: list[np.ndarray] = []
     snapshot_steps: list[int] = []
     mass_history: list[float] = [initial_mass]
 
@@ -172,12 +176,17 @@ def run_ecosystem(
             frame = state[:, :, 0].detach().cpu().numpy().astype(np.float32)
             raw_snapshots.append(frame)
             snapshot_steps.append(step)
-            colored = _colorize_frame(frame)
-            rgb_frames.append(colored)
             if config.output_format == "frames":
                 _save_frame_png(frame, frames_dir / f"step_{step:06d}.png")
 
     elapsed = time.time() - started_at
+
+    # Colorize all frames with a shared global peak so torus seams and other
+    # local concentrations don't warp the colormap across frames
+    rgb_frames: list[np.ndarray] = []
+    if raw_snapshots:
+        global_peak = float(np.percentile(np.stack(raw_snapshots), 99.9))
+        rgb_frames = [_colorize_frame(f, global_peak) for f in raw_snapshots]
 
     if config.output_format == "gif" and rgb_frames:
         _write_gif(rgb_frames, run_dir / "ecosystem.gif")
