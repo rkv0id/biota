@@ -53,17 +53,23 @@ def _resolve_preset(name: str) -> RolloutConfig:
     return factory()
 
 
-def _override_sim(rollout: RolloutConfig, grid: int | None, steps: int | None) -> RolloutConfig:
-    """Apply --grid and --steps overrides on top of a preset."""
+def _override_sim(
+    rollout: RolloutConfig,
+    grid: int | None,
+    steps: int | None,
+    border: str | None,
+) -> RolloutConfig:
+    """Apply --grid, --steps, and --border overrides on top of a preset."""
     new_sim = rollout.sim
-    if grid is not None:
+    effective_border = border if border is not None else rollout.sim.border
+    if grid is not None or border is not None:
         new_sim = SimConfig(
-            grid=grid,
+            grid=grid if grid is not None else rollout.sim.grid,
             kernels=rollout.sim.kernels,
             dd=rollout.sim.dd,
             dt=rollout.sim.dt,
             sigma=rollout.sim.sigma,
-            border=rollout.sim.border,
+            border=effective_border,
         )
     new_steps = steps if steps is not None else rollout.steps
     return replace(rollout, sim=new_sim, steps=new_steps)
@@ -256,6 +262,11 @@ def search_cmd(
     steps: int | None = typer.Option(
         None, "--steps", help="Override preset step count (for experimentation)."
     ),
+    border: str | None = typer.Option(
+        None,
+        "--border",
+        help="Grid border: 'wall' (default) or 'torus' (wrapping edges).",
+    ),
     descriptors: str = typer.Option(
         ",".join(DEFAULT_DESCRIPTORS),
         "--descriptors",
@@ -287,7 +298,11 @@ def search_cmd(
 
     descriptor_names = _resolve_descriptor_names(descriptors)
 
-    rollout_cfg = _override_sim(_resolve_preset(preset), grid=grid, steps=steps)
+    if border is not None and border not in ("wall", "torus"):
+        raise typer.BadParameter(
+            f"border must be 'wall' or 'torus', got {border!r}", param_hint="--border"
+        )
+    rollout_cfg = _override_sim(_resolve_preset(preset), grid=grid, steps=steps, border=border)
     config = SearchConfig(
         rollout=rollout_cfg,
         budget=budget,
@@ -354,6 +369,11 @@ def ecosystem(
         ),
     ),
     seed: int = typer.Option(0, "--seed", help="Base RNG seed for spawn positions and patches."),
+    border: str = typer.Option(
+        "torus",
+        "--border",
+        help="Grid border for the ecosystem simulation: 'wall' or 'torus' (default).",
+    ),
 ) -> None:
     """Run a homogeneous ecosystem simulation from a single archive creature."""
     import pickle
@@ -397,6 +417,11 @@ def ecosystem(
 
     creature = archive[coords]
 
+    if border not in ("wall", "torus"):
+        raise typer.BadParameter(
+            f"border must be 'wall' or 'torus', got {border!r}", param_hint="--border"
+        )
+
     spawn = SpawnConfig(n=n, min_dist=min_dist, patch=patch, seed=seed)
     config = EcosystemConfig(
         source_run_id=run,
@@ -406,6 +431,7 @@ def ecosystem(
         snapshot_every=snapshot_every,
         spawn=spawn,
         device=device,
+        border=border,
     )
 
     result = run_ecosystem(config, creature, output_root=output_dir)

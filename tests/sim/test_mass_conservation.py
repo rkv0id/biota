@@ -74,3 +74,71 @@ def test_mass_conservation_cpu() -> None:
 )
 def test_mass_conservation_mps() -> None:
     _run_and_check("mps", MPS_TOLERANCE)
+
+
+def test_mass_conservation_torus_cpu() -> None:
+    """Torus border must conserve mass to the same tolerance as wall."""
+    config = Config(grid=96, kernels=10, dd=5, dt=0.2, sigma=0.65, border="torus")
+    params = _load_params("cpu")
+    A0 = _load_initial_state("cpu")
+
+    fl = FlowLenia(config, params, device="cpu")
+    _, masses = fl.rollout_with_mass(A0, steps=200)
+
+    masses_np = masses.cpu().numpy()
+    initial = float(masses_np[0])
+    rel_errors = np.abs(masses_np - initial) / initial
+    max_rel_error = float(rel_errors.max())
+
+    assert max_rel_error < CPU_TOLERANCE, (
+        f"torus: max relative mass error {max_rel_error:.2e} exceeds tolerance {CPU_TOLERANCE:.2e}"
+    )
+
+
+def test_torus_differs_from_wall() -> None:
+    """Torus and wall borders must produce different final states when mass
+    is placed near the grid boundary.
+
+    We construct a state with a small mass patch in the top-left corner.
+    Wall border traps mass at the boundary; torus border wraps it. After
+    enough steps the two states must diverge.
+    """
+    params = _load_params("cpu")
+
+    # Place a patch of mass in the top-left corner so it immediately
+    # interacts with the boundary on the first step.
+    rng = np.random.default_rng(42)
+    A0_np = np.zeros((96, 96, 1), dtype=np.float32)
+    A0_np[:8, :8, 0] = rng.random((8, 8)).astype(np.float32)
+    A0 = torch.tensor(A0_np, dtype=torch.float32)
+
+    fl_wall = FlowLenia(
+        Config(grid=96, kernels=10, dd=5, dt=0.2, sigma=0.65, border="wall"),
+        params,
+        device="cpu",
+    )
+    fl_torus = FlowLenia(
+        Config(grid=96, kernels=10, dd=5, dt=0.2, sigma=0.65, border="torus"),
+        params,
+        device="cpu",
+    )
+
+    final_wall = fl_wall.rollout(A0, steps=50)
+    final_torus = fl_torus.rollout(A0, steps=50)
+
+    diff = float((final_wall - final_torus).abs().sum().item())
+    assert diff > 0.0, (
+        "torus and wall produced identical states with corner mass - border has no effect"
+    )
+
+
+def test_invalid_border_raises() -> None:
+    params = _load_params("cpu")
+    import pytest as _pytest
+
+    with _pytest.raises(ValueError, match="border must be"):
+        FlowLenia(
+            Config(grid=96, kernels=10, border="invalid"),
+            params,
+            device="cpu",
+        )

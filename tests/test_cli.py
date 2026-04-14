@@ -83,6 +83,7 @@ def test_search_help_lists_all_flags() -> None:
         "--output-dir",
         "--grid",
         "--steps",
+        "--border",
     ):
         assert flag in output, f"missing flag {flag} in search --help output"
 
@@ -214,6 +215,7 @@ def test_ecosystem_help_lists_all_flags() -> None:
         "--patch",
         "--min-dist",
         "--seed",
+        "--border",
     ):
         assert flag in output, f"missing flag {flag} in ecosystem --help output"
 

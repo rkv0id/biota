@@ -55,6 +55,7 @@ class EcosystemConfig:
     snapshot_every: int
     spawn: SpawnConfig
     device: str = "cpu"
+    border: str = "torus"
 
 
 @dataclass
@@ -112,6 +113,7 @@ class EcosystemResult:
             "steps": cfg.steps,
             "snapshot_every": cfg.snapshot_every,
             "device": cfg.device,
+            "border": cfg.border,
             "spawn": {
                 "n": sp.n,
                 "min_dist": sp.min_dist,

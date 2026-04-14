@@ -50,8 +50,8 @@ class Params:
 
 class FlowLenia:
     def __init__(self, config: Config, params: Params, device: str = "cpu") -> None:
-        if config.border != "wall":
-            raise NotImplementedError(f"only border='wall' is implemented, got {config.border!r}")
+        if config.border not in ("wall", "torus"):
+            raise ValueError(f"border must be 'wall' or 'torus', got {config.border!r}")
         self.config = config
         self.device = device
         self.params = Params(
@@ -255,6 +255,12 @@ class FlowLenia:
         and accumulate. Mass conservation is exact modulo float roundoff
         because the per-source overlaps tile the destination plane.
 
+        Wall border: clamp mu to [sigma, grid-sigma] so mass stays inside.
+        Torus border: wrap mu via modulo so mass crossing one edge reappears
+        on the opposite edge. The distance dpmu uses the shortest-path
+        (minimum image) convention so the overlap area is computed correctly
+        across the seam.
+
         A: (X, Y), flow: (2, X, Y) -> (X, Y)
         """
         cfg = self.config
@@ -262,11 +268,10 @@ class FlowLenia:
         sigma = cfg.sigma
         ma = dd - sigma
 
-        # Target positions: pos + clipped flow, then clipped to keep boxes
-        # inside the grid (the wall border)
         clipped_flow = torch.clamp(cfg.dt * flow, -ma, ma)
         mu = self._pos + clipped_flow
-        mu = torch.clamp(mu, sigma, cfg.grid - sigma)
+
+        mu = mu % cfg.grid if cfg.border == "torus" else torch.clamp(mu, sigma, cfg.grid - sigma)
 
         new_A = torch.zeros_like(A)
         sigma_clip_max = min(1.0, 2.0 * sigma)
@@ -277,6 +282,9 @@ class FlowLenia:
                 Ar = torch.roll(A, shifts=(dx, dy), dims=(0, 1))
                 mur = torch.roll(mu, shifts=(dx, dy), dims=(1, 2))
                 dpmu = torch.abs(self._pos - mur)  # (2, X, Y)
+                if cfg.border == "torus":
+                    # Minimum image convention: shortest distance across seam
+                    dpmu = torch.minimum(dpmu, cfg.grid - dpmu)
                 sz = 0.5 - dpmu + sigma
                 sz_clipped = torch.clamp(sz, 0.0, sigma_clip_max)
                 area = (sz_clipped[0] * sz_clipped[1]) / denom
@@ -293,6 +301,9 @@ class FlowLenia:
         leading batch dimension. _pos (2, H, W) is unsqueezed to (1, 2, H, W)
         to broadcast against (B, 2, H, W). Roll operations shift the two
         spatial dims (1, 2) for A and (2, 3) for mu.
+
+        Torus border wraps mu via modulo and uses minimum image convention
+        for dpmu; wall border clamps as before.
         """
         cfg = self.config
         dd = cfg.dd
@@ -303,7 +314,10 @@ class FlowLenia:
 
         clipped_flow = torch.clamp(cfg.dt * flow, -ma, ma)  # (B, 2, H, W)
         mu = pos + clipped_flow
-        mu = torch.clamp(mu, sigma, cfg.grid - sigma)  # (B, 2, H, W)
+
+        mu = (
+            mu % cfg.grid if cfg.border == "torus" else torch.clamp(mu, sigma, cfg.grid - sigma)
+        )  # (B, 2, H, W)
 
         new_A = torch.zeros_like(A)
         sigma_clip_max = min(1.0, 2.0 * sigma)
@@ -314,6 +328,8 @@ class FlowLenia:
                 Ar = torch.roll(A, shifts=(dx, dy), dims=(1, 2))  # (B, H, W)
                 mur = torch.roll(mu, shifts=(dx, dy), dims=(2, 3))  # (B, 2, H, W)
                 dpmu = torch.abs(pos - mur)  # (B, 2, H, W)
+                if cfg.border == "torus":
+                    dpmu = torch.minimum(dpmu, cfg.grid - dpmu)
                 sz = 0.5 - dpmu + sigma
                 sz_clipped = torch.clamp(sz, 0.0, sigma_clip_max)
                 area = (sz_clipped[:, 0] * sz_clipped[:, 1]) / denom  # (B, H, W)

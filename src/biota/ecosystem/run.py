@@ -112,7 +112,7 @@ def run_ecosystem(
 
     # Build sim using the creature's native kernel count
     n_kernels = len(creature.params["r"])
-    sim_config = SimConfig(grid=config.grid, kernels=n_kernels)
+    sim_config = SimConfig(grid=config.grid, kernels=n_kernels, border=config.border)
     p = creature.params
     sim_params = Params(
         R=p["R"],
