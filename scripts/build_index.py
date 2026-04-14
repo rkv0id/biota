@@ -34,6 +34,7 @@ from biota.viz.render import render_archive_page
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_RUNS_ROOT = ROOT / "archive-runs"
+DEFAULT_ECO_ROOT = ROOT / "ecosystem-runs"
 
 _TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "src" / "biota" / "viz" / "templates"
 _ENV = Environment(
@@ -748,8 +749,6 @@ if __name__ == "__main__":
 # ============================================================
 # === Ecosystem run support ==================================
 # ============================================================
-
-DEFAULT_ECO_ROOT = ROOT / "ecosystem-runs"
 
 
 def _discover_ecosystem_runs(eco_root: Path) -> list[Path]:
