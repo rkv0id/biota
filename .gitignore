@@ -14,7 +14,7 @@ wheels/
 .ruff_cache/
 
 # biota run output
-index.html
+/index.html
 runs/
 exports/
 creature_render/
