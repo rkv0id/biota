@@ -1,6 +1,6 @@
 [project]
 name = "biota"
-version = "0.0.1"
+version = "2.0.0"
 description = "Distributed QD search over FlowLenia"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"

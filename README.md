@@ -57,11 +57,33 @@ uv run biota search --preset dev --budget 50
 Runs 50 rollouts synchronously on CPU. Then build the viewer:
 
 ```bash
-uv run python scripts/build_index.py
-open runs/index.html
+uv run python scripts/build_index.py --output-dir archive-runs
+open archive-runs/index.html
 ```
 
 Every creature is rendered as an animated magma-colorized thumbnail with hover tooltips, lineage highlighting, and a click-through modal with full parameters. No server required, fully self-contained HTML.
+
+## Ecosystem simulation
+
+Once you have an archive, seed a shared ecosystem grid from any archived creature:
+
+```bash
+biota ecosystem \
+    --run 20260413-134355-hazy-creek \
+    --cell 5,23,13 \
+    --n 8 --grid 512 --steps 5000 --snapshot-every 35 \
+    --patch 32 --min-dist 55 \
+    --device cuda --border torus --output-format gif
+```
+
+The grid can be square (`--grid 512`) or rectangular (`--grid 192x512` for a landscape layout). Output is an animated GIF. After running, rebuild the index to include ecosystem results in the atlas:
+
+```bash
+python scripts/build_index.py \
+    --output-dir archive-runs \
+    --ecosystem-dir ecosystem-runs \
+    --publish
+```
 
 ## Running on a cluster
 
@@ -91,6 +113,8 @@ Three presets: `dev` (64x64, 200 steps), `standard` (192x192, 300 steps), `prett
 
 ## CLI reference
 
+### `biota search`
+
 | Flag | Default | Description |
 |---|---|---|
 | `--preset` | `standard` | `dev`, `standard`, or `pretty` |
@@ -105,23 +129,60 @@ Three presets: `dev` (64x64, 200 steps), `standard` (192x192, 300 steps), `prett
 | `--checkpoint-every` | `100` | Checkpoint cadence in rollouts |
 | `--descriptors` | `velocity,gyradius,spectral_entropy` | Three descriptor names, comma-separated |
 | `--descriptor-module` | none | Path to a Python file defining custom `Descriptor` objects |
+| `--output-dir` | `archive-runs` | Directory for run output |
 
-`biota doctor` checks Python, torch, device availability, Ray, and module health.
+### `biota ecosystem`
+
+All positional flags are required.
+
+| Flag | Description |
+|---|---|
+| `--run` | Source archive run id (directory name under `--archive-dir`) |
+| `--cell` | Archive cell coordinate as `y,x,z` |
+| `--n` | Number of creature copies to spawn |
+| `--grid` | Grid size: `512` for square, `192x512` for rectangular (HxW) |
+| `--steps` | Number of simulation steps |
+| `--snapshot-every` | Capture a state snapshot every N steps |
+| `--patch` | Side length of the initial random patch per creature |
+| `--min-dist` | Minimum pixel distance between spawn centers |
+| `--output-format` | `gif` (default) or `frames` |
+| `--border` | `torus` (default) or `wall` |
+| `--device` | `cpu`, `mps`, or `cuda` |
+| `--archive-dir` | `archive-runs` |
+| `--output-dir` | `ecosystem-runs` |
+| `--seed` | RNG seed for spawn positions |
+
+`biota doctor` checks Python, torch, device availability, Ray, and module health (search, ray_compat, ecosystem).
 
 ## Run output
 
+### Archive runs
 ```
-runs/20260412-152312-lithe-willow/
+archive-runs/20260413-134355-hazy-creek/
 ├── manifest.json       # run metadata, biota version, preset, descriptors used
 ├── config.json         # exact SearchConfig serialized
 ├── archive.pkl         # MAP-Elites archive, rewritten on checkpoint
-└── events.jsonl        # append-only log of every rollout outcome
+├── events.jsonl        # append-only log of every rollout outcome
+├── thumbs/             # per-cell animated GIFs (--publish mode)
+├── view.html           # interactive archive viewer
+└── index.html          # top-level atlas (in archive-runs/ root)
+```
+
+### Ecosystem runs
+```
+ecosystem-runs/20260414-124443-700-eco-hazy-creek-5_23_13/
+├── config.json         # ecosystem configuration
+├── summary.json        # measures: mass history, turnover, snapshot steps
+├── ecosystem.gif       # animated GIF output (gif mode)
+├── frames/             # individual PNG snapshots (frames mode)
+├── trajectory.npy      # raw float32 state snapshots (n_snapshots, H, W)
+└── view.html           # ecosystem viewer with mass chart and animation
 ```
 
 ## Development
 
 ```bash
-just check       # ruff + pyright + pytest (180 tests)
+just check       # ruff + pyright + pytest (205 tests)
 just smoke-ray   # local-Ray integration smoke test
 ```
 
@@ -135,8 +196,8 @@ The test suite runs entirely in no-Ray mode. `just smoke-ray` exercises the Ray 
 - [x] v0.4.0 - Batched rollout engine, 3.5x cluster speedup
 - [x] v1.0.0 - Lineage view, atlas site, public launch at [biota-atlas.pages.dev](https://biota-atlas.pages.dev)
 - [x] v1.1.0 - 9 built-in descriptors, `--descriptors` CLI, per-axis archive filtering, custom descriptor API
-- [ ] v2.0.0 - Ecosystem simulation: spawn archive creatures on a shared grid
-- [ ] v2.1.0 - Heterogeneous ecosystems with parameter localization
+- [x] v2.0.0 - Ecosystem simulation: spawn archive creatures on a shared grid, animated GIF output, rectangular grids
+- [ ] v2.1.0 - Heterogeneous ecosystems: multiple creature types from descriptor-distant cells
 - [ ] v3.0.0 - Learned descriptors (AURORA-style autoencoder)
 
 ## References
