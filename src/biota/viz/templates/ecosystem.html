@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMiIgaGVpZ2h0PSIzMiIgdmlld0JveD0iMCAwIDMyIDMyIj4KICA8cmVjdCB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHJ4PSI1IiBmaWxsPSIjMGQwMjIxIi8+CiAgPCEtLSA0eDQgZ3JpZDogY2VsbD01cHgsIGdhcD0xcHgsIHRvdGFsPTQqNSszKjE9MjMsIG9mZnNldD0oMzItMjMpLzI9NC41IC0tPgogIDxyZWN0IHg9IjQiICB5PSI0IiAgd2lkdGg9IjUiIGhlaWdodD0iNSIgcng9IjEiIGZpbGw9IiMzYjBmNzAiLz4KICA8cmVjdCB4PSIxMCIgeT0iNCIgIHdpZHRoPSI1IiBoZWlnaHQ9IjUiIHJ4PSIxIiBmaWxsPSIjM2IwZjcwIiBvcGFjaXR5PSIwLjUiLz4KICA8cmVjdCB4PSIxNiIgeT0iNCIgIHdpZHRoPSI1IiBoZWlnaHQ9IjUiIHJ4PSIxIiBmaWxsPSIjMGQwMjIxIiBvcGFjaXR5PSIwLjQiLz4KICA8cmVjdCB4PSIyMiIgeT0iNCIgIHdpZHRoPSI1IiBoZWlnaHQ9IjUiIHJ4PSIxIiBmaWxsPSIjMGQwMjIxIiBvcGFjaXR5PSIwLjIiLz4KCiAgPHJlY3QgeD0iNCIgIHk9IjEwIiB3aWR0aD0iNSIgaGVpZ2h0PSI1IiByeD0iMSIgZmlsbD0iIzhjMjk4MSIvPgogIDxyZWN0IHg9IjEwIiB5PSIxMCIgd2lkdGg9IjUiIGhlaWdodD0iNSIgcng9IjEiIGZpbGw9IiNkZTQ5NjgiLz4KICA8cmVjdCB4PSIxNiIgeT0iMTAiIHdpZHRoPSI1IiBoZWlnaHQ9IjUiIHJ4PSIxIiBmaWxsPSIjOGMyOTgxIi8+CiAgPHJlY3QgeD0iMjIiIHk9IjEwIiB3aWR0aD0iNSIgaGVpZ2h0PSI1IiByeD0iMSIgZmlsbD0iIzNiMGY3MCIvPgoKICA8cmVjdCB4PSI0IiAgeT0iMTYiIHdpZHRoPSI1IiBoZWlnaHQ9IjUiIHJ4PSIxIiBmaWxsPSIjZGU0OTY4Ii8+CiAgPHJlY3QgeD0iMTAiIHk9IjE2IiB3aWR0aD0iNSIgaGVpZ2h0PSI1IiByeD0iMSIgZmlsbD0iI2ZlOWY2ZCIvPgogIDxyZWN0IHg9IjE2IiB5PSIxNiIgd2lkdGg9IjUiIGhlaWdodD0iNSIgcng9IjEiIGZpbGw9IiNmZWNlOTEiLz4KICA8cmVjdCB4PSIyMiIgeT0iMTYiIHdpZHRoPSI1IiBoZWlnaHQ9IjUiIHJ4PSIxIiBmaWxsPSIjZGU0OTY4Ii8+CgogIDxyZWN0IHg9IjQiICB5PSIyMiIgd2lkdGg9IjUiIGhlaWdodD0iNSIgcng9IjEiIGZpbGw9IiM4YzI5ODEiIG9wYWNpdHk9IjAuNiIvPgogIDxyZWN0IHg9IjEwIiB5PSIyMiIgd2lkdGg9IjUiIGhlaWdodD0iNSIgcng9IjEiIGZpbGw9IiNkZTQ5NjgiLz4KICA8cmVjdCB4PSIxNiIgeT0iMjIiIHdpZHRoPSI1IiBoZWlnaHQ9IjUiIHJ4PSIxIiBmaWxsPSIjZmU5ZjZkIi8+CiAgPHJlY3QgeD0iMjIiIHk9IjIyIiB3aWR0aD0iNSIgaGVpZ2h0PSI1IiByeD0iMSIgZmlsbD0iI2ZlY2U5MSIvPgo8L3N2Zz4K" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>biota ecosystem: {{ run_id }}</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+        html, body {
+            margin: 0; padding: 0;
+            background: #08090b;
+            color: #e4e4e7;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+                Helvetica, Arial, sans-serif;
+            font-size: 14px;
+            line-height: 1.5;
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+        }
+        body {
+            display: flex;
+            flex-direction: column;
+            background:
+                radial-gradient(ellipse at 50% 35%, #141820 0%, #0b0d10 45%, #08090b 100%);
+            background-attachment: fixed;
+        }
+
+        /* === header === */
+        .page-header {
+            flex: 0 0 auto;
+            padding: 32px 48px 24px 48px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+        }
+        .page-title {
+            font-size: 28px;
+            font-weight: 300;
+            letter-spacing: -0.01em;
+            color: #f4f4f5;
+            margin: 0 0 10px 0;
+            line-height: 1.15;
+        }
+        .title-prefix {
+            color: #52525b;
+            font-weight: 300;
+            margin-right: 6px;
+        }
+        .title-sub {
+            color: #71717a;
+            font-size: 18px;
+            font-weight: 300;
+            margin-left: 6px;
+        }
+        .title-home {
+            text-decoration: none;
+            color: inherit;
+        }
+        .title-home:hover .title-prefix { color: #71717a; }
+
+        .page-meta {
+            font-size: 12px;
+            color: #71717a;
+            letter-spacing: 0.02em;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            flex-wrap: wrap;
+            margin-bottom: 6px;
+        }
+        .meta-value { color: #a1a1aa; font-weight: 500; }
+        .meta-sep { color: #3f3f46; margin: 0 6px; }
+
+        .page-meta-row2 {
+            font-size: 11px;
+            color: #52525b;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            flex-wrap: wrap;
+        }
+        .source-link {
+            color: #fbbf77;
+            text-decoration: none;
+            font-variant-numeric: tabular-nums;
+        }
+        .source-link:hover { color: #fce7b0; }
+
+        /* Border badge */
+        .border-badge {
+            display: inline-flex;
+            align-items: center;
+            font-size: 10px;
+            font-weight: 500;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            padding: 2px 7px;
+            border-radius: 10px;
+            margin-left: 6px;
+            vertical-align: middle;
+        }
+        .border-badge.wall {
+            background: rgba(99, 160, 255, 0.1);
+            color: #63a0ff;
+            border: 1px solid rgba(99, 160, 255, 0.2);
+        }
+        .border-badge.torus {
+            background: rgba(251, 191, 119, 0.1);
+            color: #fbbf77;
+            border: 1px solid rgba(251, 191, 119, 0.2);
+        }
+
+        /* === main scroll area === */
+        main {
+            flex: 1 1 0;
+            overflow: auto;
+            padding: 32px 48px 64px 48px;
+            scrollbar-width: thin;
+            scrollbar-color: #3f3f46 transparent;
+        }
+
+        /* === stats row === */
+        .stats-row {
+            display: flex;
+            gap: 48px;
+            margin-bottom: 36px;
+            flex-wrap: wrap;
+        }
+        .stat-block { display: flex; flex-direction: column; gap: 4px; }
+        .stat-label {
+            font-size: 10px;
+            color: #52525b;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+        .stat-value {
+            font-size: 22px;
+            font-weight: 300;
+            color: #fbbf77;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: -0.02em;
+        }
+        .stat-unit {
+            font-size: 12px;
+            color: #71717a;
+            margin-left: 3px;
+        }
+
+        /* === mass chart === */
+        .section-title {
+            font-size: 10px;
+            color: #52525b;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin: 0 0 12px 0;
+        }
+        .mass-chart-wrap {
+            margin-bottom: 40px;
+        }
+        .mass-chart {
+            width: 100%;
+            max-width: 800px;
+            height: 80px;
+            display: block;
+        }
+
+        /* === filmstrip === */
+        .filmstrip-wrap { margin-bottom: 40px; }
+        .filmstrip {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding-bottom: 8px;
+            scrollbar-width: thin;
+            scrollbar-color: #3f3f46 transparent;
+        }
+        .filmstrip::-webkit-scrollbar { height: 4px; }
+        .filmstrip::-webkit-scrollbar-track { background: transparent; }
+        .filmstrip::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 2px; }
+
+        .frame-card {
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            cursor: pointer;
+        }
+        .frame-card img {
+            width: {{ thumb_px }}px;
+            height: {{ thumb_px }}px;
+            border-radius: 4px;
+            display: block;
+            object-fit: cover;
+            image-rendering: pixelated;
+            border: 1px solid rgba(255,255,255,0.05);
+            transition: border-color 0.12s, filter 0.12s;
+        }
+        .frame-card:hover img {
+            border-color: rgba(251,191,119,0.4);
+            filter: brightness(1.1);
+        }
+        .frame-card.active img {
+            border-color: #fbbf77;
+        }
+        .frame-label {
+            font-size: 10px;
+            color: #3f3f46;
+            text-align: center;
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* === lightbox === */
+        #lightbox {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(6, 7, 10, 0.88);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            padding: 32px;
+        }
+        #lightbox.visible { display: flex; }
+        #lightbox-inner {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+            max-width: 90vmin;
+        }
+        #lightbox-img {
+            max-width: 80vmin;
+            max-height: 80vmin;
+            border-radius: 8px;
+            image-rendering: pixelated;
+            display: block;
+        }
+        #lightbox-label {
+            font-size: 12px;
+            color: #71717a;
+            font-variant-numeric: tabular-nums;
+        }
+        #lightbox-close {
+            position: absolute;
+            top: 20px; right: 24px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.06);
+            color: #71717a;
+            font-size: 18px;
+            line-height: 1;
+            cursor: pointer;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-family: inherit;
+            transition: all 0.12s;
+        }
+        #lightbox-close:hover { background: rgba(255,255,255,0.08); color: #e4e4e7; }
+
+        /* === responsive === */
+        @media (max-width: 900px) {
+            .page-header { padding: 20px 20px 16px 20px; }
+            main { padding: 20px 20px 48px 20px; }
+            .page-title { font-size: 20px; }
+        }
+        @media (max-width: 600px) {
+            .page-header { padding: 16px 16px 12px 16px; }
+            main { padding: 12px 12px 40px 12px; }
+            .stats-row { gap: 24px; }
+            .stat-value { font-size: 18px; }
+        }
+    </style>
+</head>
+<body>
+    <header class="page-header">
+        <h1 class="page-title">
+            <a class="title-home" href="../../archive-runs/index.html"><span class="title-prefix">biota</span></a>ecosystem<span class="title-sub">{{ run_id }}</span><span class="border-badge {{ border }}">{{ border }}</span>
+        </h1>
+        <div class="page-meta">
+            <span class="meta-value">{{ n_creatures }}</span> creatures
+            <span class="meta-sep">&middot;</span>
+            <span class="meta-value">{{ grid }}</span> grid
+            <span class="meta-sep">&middot;</span>
+            <span class="meta-value">{{ steps }}</span> steps
+            <span class="meta-sep">&middot;</span>
+            <span class="meta-value">{{ n_snapshots }}</span> snapshots
+            <span class="meta-sep">&middot;</span>
+            <span class="meta-value">{{ elapsed }}</span>
+        </div>
+        <div class="page-meta-row2">
+            source:
+            <a class="source-link" href="../../archive-runs/{{ source_run_id }}/view.html">{{ source_run_id }}</a>
+            <span class="meta-sep">&middot;</span>
+            cell {{ source_coords }}
+            <span class="meta-sep">&middot;</span>
+            min-dist {{ min_dist }}px
+        </div>
+    </header>
+
+    <main>
+        <!-- Stats row -->
+        <div class="stats-row">
+            <div class="stat-block">
+                <div class="stat-label">initial mass</div>
+                <div class="stat-value">{{ initial_mass }}<span class="stat-unit">au</span></div>
+            </div>
+            <div class="stat-block">
+                <div class="stat-label">final mass</div>
+                <div class="stat-value">{{ final_mass }}<span class="stat-unit">au</span></div>
+            </div>
+            <div class="stat-block">
+                <div class="stat-label">mass turnover</div>
+                <div class="stat-value">{{ mass_turnover_pct }}<span class="stat-unit">%/step</span></div>
+            </div>
+            <div class="stat-block">
+                <div class="stat-label">peak mass</div>
+                <div class="stat-value">{{ peak_mass }}<span class="stat-unit">au</span></div>
+            </div>
+        </div>
+
+        <!-- Mass history chart -->
+        <div class="mass-chart-wrap">
+            <div class="section-title">mass over time</div>
+            <svg class="mass-chart" viewBox="0 0 800 80" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <linearGradient id="massGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#fbbf77" stop-opacity="0.3"/>
+                        <stop offset="100%" stop-color="#fbbf77" stop-opacity="0.02"/>
+                    </linearGradient>
+                </defs>
+                <path d="{{ mass_area_path }}" fill="url(#massGrad)"/>
+                <path d="{{ mass_line_path }}" fill="none" stroke="#fbbf77" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        </div>
+
+        <!-- Frame filmstrip -->
+        <div class="filmstrip-wrap">
+            <div class="section-title">snapshots</div>
+            <div class="filmstrip" id="filmstrip">
+                {% for frame in frames %}
+                <div class="frame-card" data-src="{{ frame.src }}" data-label="step {{ frame.step }}">
+                    <img src="{{ frame.src }}" alt="step {{ frame.step }}" loading="lazy" />
+                    <div class="frame-label">{{ frame.step }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </main>
+
+    <!-- Lightbox -->
+    <div id="lightbox" aria-hidden="true">
+        <button id="lightbox-close" type="button">&times;</button>
+        <div id="lightbox-inner">
+            <img id="lightbox-img" alt="" />
+            <div id="lightbox-label"></div>
+        </div>
+    </div>
+
+    <script>
+    // Filmstrip click -> lightbox
+    document.getElementById('filmstrip').addEventListener('click', function(e) {
+        var card = e.target.closest('.frame-card');
+        if (!card) return;
+        document.querySelectorAll('.frame-card').forEach(function(c) { c.classList.remove('active'); });
+        card.classList.add('active');
+        document.getElementById('lightbox-img').src = card.dataset.src;
+        document.getElementById('lightbox-label').textContent = card.dataset.label;
+        var lb = document.getElementById('lightbox');
+        lb.style.display = 'flex';
+        lb.setAttribute('aria-hidden', 'false');
+    });
+
+    function closeLightbox() {
+        var lb = document.getElementById('lightbox');
+        lb.style.display = 'none';
+        lb.setAttribute('aria-hidden', 'true');
+        document.querySelectorAll('.frame-card').forEach(function(c) { c.classList.remove('active'); });
+    }
+    document.getElementById('lightbox-close').addEventListener('click', closeLightbox);
+    document.getElementById('lightbox').addEventListener('click', function(e) {
+        if (e.target === this) closeLightbox();
+    });
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeLightbox();
+    });
+    </script>
+</body>
+</html>

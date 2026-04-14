@@ -29,6 +29,7 @@ from typing import Any
 from jinja2 import Environment, FileSystemLoader
 
 from biota.search.archive import Archive
+from biota.viz.colormap import apply_magma
 from biota.viz.render import render_archive_page
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -499,8 +500,6 @@ def _first_thumbnail_data_url(archive: Archive) -> str | None:
 
     import imageio.v3 as iio
 
-    from biota.viz.colormap import apply_magma
-
     for _coord, result in archive.iter_occupied():
         colored = apply_magma(result.thumbnail)
         frame = colored[len(colored) // 2]
@@ -556,9 +555,13 @@ def _build_card_context(
     }
 
 
-def _build_index_html(cards: list[dict[str, Any]]) -> str:
+def _build_index_html(
+    cards: list[dict[str, Any]], eco_cards: list[dict[str, Any]] | None = None
+) -> str:
     template = _ENV.get_template("index.html")
-    return template.render(n_runs=len(cards), cards=cards)
+    return template.render(
+        n_runs=len(cards), cards=cards, eco_cards=eco_cards or [], n_eco_runs=len(eco_cards or [])
+    )
 
 
 def _needs_rebuild(run_dir: Path, publish: bool) -> bool:
@@ -644,6 +647,12 @@ def main() -> None:
             "archive.pkl and the archive template."
         ),
     )
+    parser.add_argument(
+        "--ecosystem-dir",
+        type=Path,
+        default=DEFAULT_ECO_ROOT,
+        help="Directory containing ecosystem run subdirectories.",
+    )
     args = parser.parse_args()
 
     if not args.output_dir.exists():
@@ -704,6 +713,212 @@ def main() -> None:
     print(f"index: {index_out} ({size_kb:.0f} KB, {len(card_contexts)} runs)")
     print(f"open with: open {index_out}")
 
+    # === Ecosystem runs ===
+    eco_dirs = _discover_ecosystem_runs(args.ecosystem_dir)
+    eco_cards: list[dict[str, Any]] = []
+
+    for eco_dir in eco_dirs:
+        if not args.no_regen:
+            if not args.force and not _needs_eco_rebuild(eco_dir, publish=args.publish):
+                size_kb = (eco_dir / "view.html").stat().st_size / 1024
+                print(f"  eco {eco_dir.name}: up to date ({size_kb:.0f} KB)")
+            else:
+                try:
+                    html = _render_ecosystem_run(eco_dir, publish=args.publish)
+                    out = eco_dir / "view.html"
+                    out.write_text(html)
+                    size_kb = out.stat().st_size / 1024
+                    print(f"  eco {eco_dir.name}: {size_kb:.0f} KB")
+                except Exception as exc:
+                    print(f"  eco {eco_dir.name}: FAILED - {exc}", file=sys.stderr)
+                    continue
+        eco_cards.append(_build_eco_card_context(eco_dir))
+
+    if eco_cards:
+        # Rebuild index with ecosystem cards populated
+        index_html = _build_index_html(card_contexts, eco_cards=eco_cards)
+        index_out.write_text(index_html)
+        print(f"index: updated with {len(eco_cards)} ecosystem run(s)")
+
 
 if __name__ == "__main__":
     main()
+
+
+# ============================================================
+# === Ecosystem run support ==================================
+# ============================================================
+
+DEFAULT_ECO_ROOT = ROOT / "ecosystem-runs"
+
+
+def _discover_ecosystem_runs(eco_root: Path) -> list[Path]:
+    """Return ecosystem run dirs that have a summary.json, sorted newest-first."""
+    if not eco_root.exists():
+        return []
+    candidates = [p for p in eco_root.iterdir() if p.is_dir() and (p / "summary.json").exists()]
+    candidates.sort(key=lambda p: p.name, reverse=True)
+    return candidates
+
+
+def _load_summary(run_dir: Path) -> dict[str, Any]:
+    path = run_dir / "summary.json"
+    if not path.exists():
+        return {}
+    with open(path) as f:
+        return json.load(f)  # type: ignore[no-any-return]
+
+
+def _mass_svg_paths(
+    mass_history: list[float], width: int = 800, height: int = 80
+) -> tuple[str, str]:
+    """Build SVG path strings for the mass-over-time chart.
+
+    Returns (area_path, line_path) as SVG 'd' attribute strings.
+    """
+    if not mass_history or len(mass_history) < 2:
+        return "", ""
+    n = len(mass_history)
+    lo = min(mass_history)
+    hi = max(mass_history)
+    span = hi - lo if hi > lo else 1.0
+    margin = 4
+
+    def px(i: int, v: float) -> tuple[float, float]:
+        x = i / (n - 1) * width
+        y = height - margin - (v - lo) / span * (height - 2 * margin)
+        return x, y
+
+    pts = [px(i, v) for i, v in enumerate(mass_history)]
+    line = "M " + " L ".join(f"{x:.1f},{y:.1f}" for x, y in pts)
+    area = line + f" L {pts[-1][0]:.1f},{height} L {pts[0][0]:.1f},{height} Z"
+    return area, line
+
+
+def _render_ecosystem_run(run_dir: Path, publish: bool = False) -> str:
+    """Render an ecosystem run as a self-contained HTML page."""
+    import base64
+    import io as _io
+
+    import imageio.v3 as iio
+
+    summary = _load_summary(run_dir)
+    if not summary:
+        raise ValueError(f"no summary.json in {run_dir}")
+
+    run_id = summary.get("run_id", run_dir.name)
+    source_run_id = summary.get("source_run_id", "")
+    source_coords = summary.get("source_coords", [])
+    grid = summary.get("grid", "")
+    steps = summary.get("steps", "")
+    border = summary.get("border", "wall")
+    spawn = summary.get("spawn", {})
+    n_creatures = spawn.get("n_creatures", spawn.get("n", ""))
+    min_dist = spawn.get("min_dist", "")
+    measures = summary.get("measures", {})
+    mass_history: list[float] = measures.get("mass_history", [])
+    snapshot_steps: list[int] = measures.get("snapshot_steps", [])
+    initial_mass = measures.get("initial_mass", 0.0)
+    final_mass = measures.get("final_mass", 0.0)
+    peak_mass = measures.get("peak_mass", 0.0)
+    mass_turnover = measures.get("mass_turnover", 0.0)
+    elapsed_s = summary.get("elapsed_seconds", 0.0)
+
+    # Format display values
+    elapsed = f"{elapsed_s:.1f}s"
+    initial_mass_fmt = f"{initial_mass:.1f}"
+    final_mass_fmt = f"{final_mass:.1f}"
+    peak_mass_fmt = f"{peak_mass:.1f}"
+    mass_turnover_pct = f"{mass_turnover * 100:.3f}"
+    source_coords_str = f"({', '.join(str(c) for c in source_coords)})"
+
+    # Build mass chart paths
+    mass_area_path, mass_line_path = _mass_svg_paths(mass_history)
+
+    # Build frame list
+    THUMB_PX = 192
+    frames_dir = run_dir / "frames"
+    frames: list[dict[str, Any]] = []
+
+    thumbs_dir = run_dir / "thumbs_eco" if publish else None
+    if thumbs_dir is not None:
+        thumbs_dir.mkdir(parents=True, exist_ok=True)
+
+    for step in snapshot_steps:
+        png_path = frames_dir / f"step_{step:06d}.png"
+        if not png_path.exists():
+            continue
+
+        if publish and thumbs_dir is not None:
+            # Copy frame to thumbs_eco/ and reference by relative path
+            import shutil as _shutil
+
+            thumb_path = thumbs_dir / f"step_{step:06d}.png"
+            if not thumb_path.exists():
+                _shutil.copy2(png_path, thumb_path)
+            frames.append({"step": step, "src": f"thumbs_eco/step_{step:06d}.png"})
+        else:
+            # Embed as base64
+            raw = iio.imread(png_path)
+            buf = _io.BytesIO()
+            iio.imwrite(buf, raw, extension=".png")
+            b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+            frames.append({"step": step, "src": f"data:image/png;base64,{b64}"})
+
+    n_snapshots = len(frames)
+    template = _ENV.get_template("ecosystem.html")
+    return template.render(
+        run_id=run_id,
+        source_run_id=source_run_id,
+        source_coords=source_coords_str,
+        grid=f"{grid}x{grid}",
+        steps=steps,
+        border=border,
+        n_creatures=n_creatures,
+        min_dist=min_dist,
+        n_snapshots=n_snapshots,
+        elapsed=elapsed,
+        initial_mass=initial_mass_fmt,
+        final_mass=final_mass_fmt,
+        peak_mass=peak_mass_fmt,
+        mass_turnover_pct=mass_turnover_pct,
+        mass_area_path=mass_area_path,
+        mass_line_path=mass_line_path,
+        frames=frames,
+        thumb_px=THUMB_PX,
+    )
+
+
+def _needs_eco_rebuild(run_dir: Path, publish: bool) -> bool:
+    """Return True if ecosystem view.html needs to be regenerated."""
+    view = run_dir / "view.html"
+    summary = run_dir / "summary.json"
+    if not view.exists():
+        return True
+    view_mtime = view.stat().st_mtime
+    if summary.stat().st_mtime > view_mtime:
+        return True
+    template_path = _TEMPLATES_DIR / "ecosystem.html"
+    if template_path.exists() and template_path.stat().st_mtime > view_mtime:
+        return True
+    return publish and not (run_dir / "thumbs_eco").exists()
+
+
+def _build_eco_card_context(run_dir: Path) -> dict[str, Any]:
+    """Build the context dict for one ecosystem run card."""
+    summary = _load_summary(run_dir)
+    spawn = summary.get("spawn", {})
+    measures = summary.get("measures", {})
+    return {
+        "run_id": run_dir.name,
+        "source_run_id": summary.get("source_run_id", ""),
+        "source_coords": summary.get("source_coords", []),
+        "grid": summary.get("grid", ""),
+        "steps": summary.get("steps", ""),
+        "border": summary.get("border", "wall"),
+        "n_creatures": spawn.get("n_creatures", spawn.get("n", "")),
+        "min_dist": spawn.get("min_dist", ""),
+        "initial_mass": f"{measures.get('initial_mass', 0.0):.1f}",
+        "mass_turnover": f"{measures.get('mass_turnover', 0.0) * 100:.3f}",
+        "elapsed": f"{summary.get('elapsed_seconds', 0.0):.1f}s",
+    }

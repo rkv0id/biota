@@ -553,14 +553,41 @@
     <!-- === Ecosystem runs === -->
     <div class="tab-panel" id="panel-ecosystem">
     <div class="page-wrap">
+        {% if eco_cards %}
+        <div class="runs-meta">{{ n_eco_runs }} run{{ 's' if n_eco_runs != 1 else '' }}</div>
+        <div class="run-grid">
+            {% for card in eco_cards %}
+            <a class="run-card" href="../ecosystem-runs/{{ card.run_id }}/view.html">
+                <div class="card-body" style="padding-top:16px">
+                    <div class="card-id">{{ card.run_id }}</div>
+                    <div class="card-stats">
+                        <span class="card-stat"><span class="card-stat-v">{{ card.n_creatures }}</span> creatures</span>
+                        <span class="card-sep">&middot;</span>
+                        <span class="card-stat"><span class="card-stat-v">{{ card.grid }}x{{ card.grid }}</span> grid</span>
+                        <span class="card-sep">&middot;</span>
+                        <span class="card-stat"><span class="card-stat-v">{{ card.steps }}</span> steps</span>
+                    </div>
+                    <div class="card-rollouts">{{ card.elapsed }}</div>
+                    <div class="card-config">
+                        <span class="card-cfg-item">{{ card.source_run_id }}</span>
+                        <span class="card-cfg-item">cell {{ card.source_coords | join(',') }}</span>
+                        {% if card.border and card.border != "wall" %}<span class="card-cfg-item" style="color:#fbbf77">{{ card.border }}</span>{% endif %}
+                    </div>
+                    <div class="card-descriptors">mass turnover {{ card.mass_turnover }}%/step</div>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
         <div class="prose">
             <h2>Ecosystem runs</h2>
-            <p>Coming in v2.0.0. Spawn creatures from selected archive cells together on a large shared grid and observe what happens: do they interact, ignore each other, or destabilize? The behavioral descriptor space lets you make deliberate choices about which creatures to seed together.</p>
+            <p>Spawn creatures from selected archive cells together on a large shared grid and observe what happens: do they interact, ignore each other, or destabilize? The behavioral descriptor space lets you make deliberate choices about which creatures to seed together.</p>
             <p>Homogeneous first (v2.0.0): one archive cell, multiple copies, global parameters. Then heterogeneous (v2.1.0): creatures from descriptor-space-distant cells, parameter localization.</p>
             <div class="pill-row">
                 <a class="pill amber" href="https://github.com/rkv0id/biota" target="_blank">track progress on GitHub</a>
             </div>
         </div>
+        {% endif %}
     </div>
     </div>
 
