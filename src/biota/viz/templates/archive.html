@@ -766,13 +766,38 @@
             #tooltip { display: none !important; }
         }
 
+
+        /* Border type badge */
+        .border-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 10px;
+            font-weight: 500;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            padding: 2px 7px;
+            border-radius: 10px;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
+        .border-badge.wall {
+            background: rgba(99, 160, 255, 0.1);
+            color: #63a0ff;
+            border: 1px solid rgba(99, 160, 255, 0.2);
+        }
+        .border-badge.torus {
+            background: rgba(251, 191, 119, 0.1);
+            color: #fbbf77;
+            border: 1px solid rgba(251, 191, 119, 0.2);
+        }
         {{ stats_css }}
     </style>
 </head>
 <body>
     <header class="page-header">
         <h1 class="page-title">
-            <a class="title-home" href="../index.html"><span class="title-prefix">biota</span></a>{{ run_id }}
+            <a class="title-home" href="../index.html"><span class="title-prefix">biota</span></a>{{ run_id }}<span class="border-badge {{ border }}">{{ border }}</span>
         </h1>
         <div class="page-meta">
             <span class="meta-value">{{ n_cells }}</span> cells

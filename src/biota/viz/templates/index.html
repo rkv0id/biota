@@ -532,11 +532,12 @@
                         {% endif %}
                     </div>
                     <div class="card-rollouts">{{ card.n_rollouts }} rollouts</div>
-                    {% if card.preset or card.budget or card.device %}
+                    {% if card.preset or card.budget or card.device or card.border %}
                     <div class="card-config">
                         {% if card.preset %}<span class="card-cfg-item">{{ card.preset }}</span>{% endif %}
                         {% if card.budget %}<span class="card-cfg-item">{{ card.budget }} budget</span>{% endif %}
                         {% if card.device %}<span class="card-cfg-item">{{ card.device }}</span>{% endif %}
+                        {% if card.border and card.border != "wall" %}<span class="card-cfg-item" style="color:#fbbf77">{{ card.border }}</span>{% endif %}
                     </div>
                     {% endif %}
                     {% if card.descriptor_names %}

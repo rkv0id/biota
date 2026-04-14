@@ -468,6 +468,8 @@ def _render_run(run_dir: Path, archive: Archive, publish: bool = False) -> str:
 
     thumbs_dir = run_dir / "thumbs" if publish else None
 
+    cfg = _load_config(run_dir)
+    border: str = cfg.get("rollout", {}).get("sim", {}).get("border", "wall")
     return render_archive_page(
         archive,
         run_id,
@@ -475,6 +477,7 @@ def _render_run(run_dir: Path, archive: Archive, publish: bool = False) -> str:
         stats_html=stats_html,
         stats_css=_STATS_CSS if stats_html else "",
         thumbs_dir=thumbs_dir,
+        border=border,
     )
 
 
@@ -536,6 +539,7 @@ def _build_card_context(
     budget = cfg.get("budget", "")
     device = cfg.get("device", "")
     descriptor_names: list[str] = cfg.get("descriptor_names", [])
+    border: str = cfg.get("rollout", {}).get("sim", {}).get("border", "wall")
 
     return {
         "run_id": run_dir.name,
@@ -548,6 +552,7 @@ def _build_card_context(
         "budget": budget,
         "device": device,
         "descriptor_names": descriptor_names,
+        "border": border,
     }
 
 
