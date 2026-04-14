@@ -30,6 +30,7 @@ def _make_trace(
     return RolloutTrace(
         com_history=com_path.astype(np.float32),
         bbox_fraction_history=bbox_history.astype(np.float32),
+        gyradius_history=np.zeros(len(bbox_history), dtype=np.float32),
         final_state=final_state.astype(np.float32),
         grid_size=GRID,
         total_steps=STEPS,
@@ -162,6 +163,7 @@ def test_short_trace_persistence_rejects() -> None:
     trace = RolloutTrace(
         com_history=short_coms,
         bbox_fraction_history=short_bbox,
+        gyradius_history=np.zeros(len(short_bbox), dtype=np.float32),
         final_state=state,
         grid_size=GRID,
         total_steps=STEPS,

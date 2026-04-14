@@ -29,7 +29,7 @@ driver (archive + loop)
 
 ## Behavioral descriptors
 
-The archive grid has three axes, each a scalar measured empirically from the rollout. Choose any three from the built-in library of nine:
+The archive grid has three axes, each a scalar measured empirically from the rollout. Choose any three from the built-in library of fifteen:
 
 | Descriptor | What it captures |
 |---|---|
@@ -42,8 +42,14 @@ The archive grid has three axes, each a scalar measured empirically from the rol
 | `png_compressibility` | PNG compressed/uncompressed ratio of the final state |
 | `rotational_symmetry` | Angular variance of radial mass profile |
 | `persistence_score` | Max descriptor drift across the trace tail |
+| `displacement_ratio` | Total displacement / total path length (0 = orbiter, 1 = glider) |
+| `angular_velocity` | Mean absolute angular speed of COM motion |
+| `growth_gradient` | Mass-weighted mean spatial gradient magnitude (internal edge density) |
+| `morphological_instability` | Variance of gyradius over the trace tail (shape stability) |
+| `activity` | Mean absolute gyradius change per step (internal work rate) |
+| `spatial_entropy` | Shannon entropy of coarse spatial mass distribution |
 
-With 9 built-ins there are C(9,3) = 84 possible archive configurations. Supply your own via `--descriptor-module`. The archive viewer renders all three axes: two as the spatial grid, the third as an interactive slice slider.
+With 15 built-ins there are C(15,3) = 455 possible archive configurations. Supply your own via `--descriptor-module`. The archive viewer renders all three axes: two as the spatial grid, the third as an interactive slice slider.
 
 ## Quickstart
 
@@ -196,6 +202,7 @@ The test suite runs entirely in no-Ray mode. `just smoke-ray` exercises the Ray 
 - [x] v0.4.0 - Batched rollout engine, 3.5x cluster speedup
 - [x] v1.0.0 - Lineage view, atlas site, public launch at [biota-atlas.pages.dev](https://biota-atlas.pages.dev)
 - [x] v1.1.0 - 9 built-in descriptors, `--descriptors` CLI, per-axis archive filtering, custom descriptor API
+- [x] v2.1.0 - 15 built-in descriptors (displacement ratio, angular velocity, growth gradient, morphological instability, activity, spatial entropy)
 - [x] v2.0.0 - Ecosystem simulation: spawn archive creatures on a shared grid, animated GIF output, rectangular grids
 - [ ] v2.1.0 - Heterogeneous ecosystems: multiple creature types from descriptor-distant cells
 - [ ] v3.0.0 - Learned descriptors (AURORA-style autoencoder)

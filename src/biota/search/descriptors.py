@@ -4,17 +4,23 @@ Descriptors are normalized scalar reductions over a RolloutTrace, each
 returning a float in [0, 1]. They define the behavioral axes of the MAP-Elites
 archive. The search always uses exactly three active descriptors.
 
-Built-in descriptor library (9 total):
+Built-in descriptor library (15 total):
 
-  velocity             mean COM displacement/step over trailing WINDOW steps
-  gyradius             mass-weighted RMS distance from COM at final step
-  spectral_entropy     Shannon entropy of radially-averaged FFT spectrum
-  oscillation          variance of bbox fraction over trace tail
-  compactness          mass inside bbox / total mass at final step
-  mass_asymmetry       |mean COM_x drift - mean COM_y drift| / sum
-  png_compressibility  PNG compressed / uncompressed size of final state
-  rotational_symmetry  angular variance of radial mass profile at final step
-  persistence_score    max drift of the three core descriptors across trace tail
+  velocity                mean COM displacement/step over trailing WINDOW steps
+  gyradius                mass-weighted RMS distance from COM at final step
+  spectral_entropy        Shannon entropy of radially-averaged FFT spectrum
+  oscillation             variance of bbox fraction over trace tail
+  compactness             mass inside bbox / total mass at final step
+  mass_asymmetry          |mean COM_x drift - mean COM_y drift| / sum
+  png_compressibility     PNG compressed / uncompressed size of final state
+  rotational_symmetry     angular variance of radial mass profile at final step
+  persistence_score       max drift of the three core descriptors across trace tail
+  displacement_ratio      total displacement / total path length (0=orbiter, 1=glider)
+  angular_velocity        mean absolute angular speed of COM motion, normalized
+  growth_gradient         spatial gradient concentration relative to COM, normalized
+  morphological_instability variance of gyradius over trace tail (shape stability)
+  activity                mean absolute change in gyradius per step (internal work rate)
+  spatial_entropy         Shannon entropy of coarse spatial mass distribution
 
 Custom descriptors can be loaded from a user Python file via --descriptor-module;
 see cli.py. The file must define a list named DESCRIPTORS containing Descriptor
@@ -127,6 +133,10 @@ class RolloutTrace:
             step in the trailing window. Shape (T,). Used by the localized
             filter in quality.py, not by the descriptor functions in this
             module.
+        gyradius_history: Mass-weighted RMS distance from COM at each step in
+            the trailing window. Shape (T,). Tracked cheaply alongside COM
+            during the rollout loop. Used by morphological_instability and
+            activity descriptors.
         final_state: The simulation state at the final step. Shape
             (grid_size, grid_size), dtype float32.
         grid_size: The simulation grid edge length, used for descriptor
@@ -136,6 +146,7 @@ class RolloutTrace:
 
     com_history: np.ndarray
     bbox_fraction_history: np.ndarray
+    gyradius_history: np.ndarray
     final_state: np.ndarray
     grid_size: int
     total_steps: int
@@ -151,6 +162,7 @@ class RolloutTrace:
         return RolloutTrace(
             com_history=self.com_history[start:end],
             bbox_fraction_history=self.bbox_fraction_history[start:end],
+            gyradius_history=self.gyradius_history[start:end],
             final_state=self.final_state,
             grid_size=self.grid_size,
             total_steps=self.total_steps,
@@ -445,6 +457,194 @@ def compute_persistence_score(trace: RolloutTrace) -> float:
     return float(np.clip(max_drift / drift_threshold, 0.0, 1.0))
 
 
+ANGULAR_VELOCITY_NORMALIZER = 0.15
+"""Empirical upper bound for mean angular speed (radians/step) in biota's
+parameter prior. A creature traversing a full circle in 40 steps has angular
+speed 2*pi/40 ~ 0.157 rad/step, so 0.15 places a full rotation near 1.0."""
+
+GROWTH_GRADIENT_NORMALIZER = 0.5
+"""Empirical upper bound for the mass-weighted mean spatial gradient magnitude,
+normalized by grid_size. Calibrated so strongly driven asymmetric creatures
+saturate near 1.0."""
+
+MORPHOLOGICAL_INSTABILITY_NORMALIZER = 0.05
+"""Empirical upper bound for gyradius variance over the trace tail, divided
+by grid_size^2. Strongly deforming/pulsing creatures saturate near 1.0."""
+
+ACTIVITY_NORMALIZER = 0.02
+"""Empirical upper bound for mean absolute gyradius change per step, divided
+by grid_size. Creatures with strong pulsing or morphological change saturate
+near 1.0. Static creatures score near 0.0."""
+
+SPATIAL_ENTROPY_BINS = 8
+"""Number of spatial bins per axis for the coarse spatial entropy grid.
+An 8x8 = 64-cell grid captures meaningful spatial organization."""
+
+
+def compute_displacement_ratio(trace: "RolloutTrace") -> float:
+    """Ratio of total displacement to total path length over the trace tail.
+
+    A perfect translating glider travels in a straight line: displacement
+    equals path length, ratio = 1.0. A pure orbiter returns to its start:
+    displacement ~ 0 but path length > 0, ratio ~ 0.0. A stationary creature
+    has both near zero; ratio defaults to 0.0.
+
+    Separates true gliders from fast-moving orbiters, which velocity alone
+    cannot distinguish (Plantec et al. use linear vs angular speed as
+    separate optimization targets for exactly this reason).
+    """
+    coms = trace.com_history[-WINDOW:]
+    if len(coms) < 2:
+        return 0.0
+    deltas = np.diff(coms, axis=0)
+    step_distances = np.linalg.norm(deltas, axis=1)
+    path_length = float(step_distances.sum())
+    if path_length <= 0.0:
+        return 0.0
+    total_displacement = float(np.linalg.norm(coms[-1] - coms[0]))
+    return float(np.clip(total_displacement / path_length, 0.0, 1.0))
+
+
+def compute_angular_velocity(trace: "RolloutTrace") -> float:
+    """Mean absolute angular speed of COM motion over the trace tail, in [0, 1].
+
+    Measures how quickly the direction of COM motion rotates. Pure rotors and
+    orbiters score high; straight-line translators and stationary creatures
+    score near zero. Orthogonal to mass_asymmetry (which measures directional
+    bias of displacement magnitude, not rotation rate).
+
+    Used by Plantec et al. as an optimization target for finding rotors; here
+    adapted as a MAP-Elites descriptor normalized by ANGULAR_VELOCITY_NORMALIZER
+    (0.15 rad/step ~ one full orbit in 40 steps).
+    """
+    coms = trace.com_history[-WINDOW:]
+    if len(coms) < 3:
+        return 0.0
+    deltas = np.diff(coms, axis=0)
+    speeds = np.linalg.norm(deltas, axis=1)
+    threshold = 1e-4
+    moving = speeds > threshold
+    if moving.sum() < 2:
+        return 0.0
+    angles = np.arctan2(deltas[:, 0], deltas[:, 1])
+    angle_diffs = np.diff(angles)
+    angle_diffs = (angle_diffs + np.pi) % (2 * np.pi) - np.pi
+    valid = moving[:-1] & moving[1:]
+    if valid.sum() == 0:
+        return 0.0
+    mean_angular_speed = float(np.abs(angle_diffs[valid]).mean())
+    return float(np.clip(mean_angular_speed / ANGULAR_VELOCITY_NORMALIZER, 0.0, 1.0))
+
+
+def compute_growth_gradient(trace: "RolloutTrace") -> float:
+    """Mass-weighted mean spatial gradient magnitude at the final step, in [0, 1].
+
+    Approximates Chan's growth-centroid distance (dgm): measures how strongly
+    the internal structure of the creature is driven by spatial gradients.
+    Computed using numpy.gradient on the final state, weighted by mass.
+
+    Low value: smooth internally consistent creature (rings, symmetric blobs).
+    High value: creature with strong internal gradients - channels, labyrinths,
+    sharp-edged structures. Complements spectral_entropy (frequency domain)
+    with a spatial-domain edge/gradient density measure.
+    """
+    state = trace.final_state
+    total_mass = float(state.sum())
+    if total_mass <= 0.0:
+        return 0.0
+    gy, gx = np.gradient(state.astype(np.float64))
+    grad_magnitude = np.sqrt(gy * gy + gx * gx).astype(np.float32)
+    weighted_grad = float((state * grad_magnitude).sum() / total_mass)
+    # GROWTH_GRADIENT_NORMALIZER is an absolute bound: a uniform block scores
+    # ~0.065, a thin ring ~0.22, strongly noisy states ~0.5+. Using 0.5 as
+    # the normalizer puts structured creatures in the mid-range.
+    if GROWTH_GRADIENT_NORMALIZER <= 0.0:
+        return 0.0
+    return float(np.clip(weighted_grad / GROWTH_GRADIENT_NORMALIZER, 0.0, 1.0))
+
+
+def compute_morphological_instability(trace: "RolloutTrace") -> float:
+    """Variance of gyradius over the trace tail, normalized to [0, 1].
+
+    Measures how much the creature's spread/size fluctuates over time.
+    Low value: rigid creature that maintains its form - predictable in
+    ecosystem contacts. High value: creature that constantly reshapes or pulses
+    in size - unpredictable and potentially interesting in multi-body dynamics.
+
+    Distinct from oscillation (bounding-box area variance) in using the
+    mass-weighted gyradius, which is more sensitive to internal mass
+    redistribution without threshold-based bounding box artifacts.
+    """
+    gyr = trace.gyradius_history[-WINDOW:]
+    if len(gyr) < 2:
+        return 0.0
+    variance = float(np.var(gyr))
+    normalizer = MORPHOLOGICAL_INSTABILITY_NORMALIZER * (trace.grid_size**2)
+    if normalizer <= 0.0:
+        return 0.0
+    return float(np.clip(variance / normalizer, 0.0, 1.0))
+
+
+def compute_activity(trace: "RolloutTrace") -> float:
+    """Mean absolute change in gyradius per step, normalized to [0, 1].
+
+    A per-creature adaptation of evolutionary activity (Michel et al. 2025):
+    measures how much internal work is happening step to step. Static or
+    rigidly translating creatures score near 0.0. Creatures that are pulsing,
+    reshaping, or undergoing morphological change score near 1.0.
+
+    Complementary to oscillation (bounding-box variance) and morphological_
+    instability (gyradius variance): activity captures the rate of change,
+    not just the total magnitude of variation.
+    """
+    gyr = trace.gyradius_history[-WINDOW:]
+    if len(gyr) < 2:
+        return 0.0
+    step_changes = np.abs(np.diff(gyr))
+    mean_change = float(step_changes.mean())
+    normalizer = ACTIVITY_NORMALIZER * max(trace.grid_size, 1)
+    if normalizer <= 0.0:
+        return 0.0
+    return float(np.clip(mean_change / normalizer, 0.0, 1.0))
+
+
+def compute_spatial_entropy(trace: "RolloutTrace") -> float:
+    """Shannon entropy of the coarse spatial mass distribution, in [0, 1].
+
+    Divides the grid into SPATIAL_ENTROPY_BINS x SPATIAL_ENTROPY_BINS cells
+    and computes the Shannon entropy of the resulting mass distribution.
+    Adapted from Michel et al. 2025's multi-scale matter distribution metric,
+    applied at a single coarse scale as a per-creature descriptor.
+
+    Low value: mass concentrated in a small region (compact, localized).
+    High value: mass spread uniformly across the grid (diffuse or multi-body).
+
+    Distinct from compactness (threshold-based bounding box) and gyradius
+    (distance-weighted from COM): spatial entropy captures distribution
+    uniformity across the full grid without distance or threshold assumptions.
+    """
+    state = trace.final_state
+    total_mass = float(state.sum())
+    if total_mass <= 0.0:
+        return 0.0
+    h, w = state.shape
+    n = SPATIAL_ENTROPY_BINS
+    h_crop = (h // n) * n
+    w_crop = (w // n) * n
+    cropped = state[:h_crop, :w_crop]
+    coarse = cropped.reshape(n, h_crop // n, n, w_crop // n).sum(axis=(1, 3))
+    total = float(coarse.sum())
+    if total <= 0.0:
+        return 0.0
+    p = coarse.ravel() / total
+    nonzero = p[p > 0.0]
+    entropy = float(-(nonzero * np.log(nonzero)).sum())
+    max_entropy = float(np.log(n * n))
+    if max_entropy <= 0.0:
+        return 0.0
+    return float(np.clip(entropy / max_entropy, 0.0, 1.0))
+
+
 # === registry ===
 
 
@@ -502,6 +702,42 @@ REGISTRY: dict[str, Descriptor] = {
         short_name="persist.",
         direction_label="less stable",
         compute=compute_persistence_score,
+    ),
+    "displacement_ratio": Descriptor(
+        name="displacement ratio",
+        short_name="displ.",
+        direction_label="more glider-like",
+        compute=compute_displacement_ratio,
+    ),
+    "angular_velocity": Descriptor(
+        name="angular velocity",
+        short_name="ang.vel.",
+        direction_label="faster rotation",
+        compute=compute_angular_velocity,
+    ),
+    "growth_gradient": Descriptor(
+        name="growth gradient",
+        short_name="grad.",
+        direction_label="higher gradient",
+        compute=compute_growth_gradient,
+    ),
+    "morphological_instability": Descriptor(
+        name="morphological instability",
+        short_name="morph.",
+        direction_label="more unstable",
+        compute=compute_morphological_instability,
+    ),
+    "activity": Descriptor(
+        name="activity",
+        short_name="act.",
+        direction_label="more active",
+        compute=compute_activity,
+    ),
+    "spatial_entropy": Descriptor(
+        name="spatial entropy",
+        short_name="spat.ent.",
+        direction_label="more diffuse",
+        compute=compute_spatial_entropy,
     ),
 }
 

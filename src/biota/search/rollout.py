@@ -116,35 +116,45 @@ def _initial_state(grid: int, patch_fraction: int, seed: int, device: str) -> to
     return state
 
 
-def _step_stats(state: torch.Tensor) -> tuple[float, float, float]:
-    """Compute COM_y, COM_x, and bbox-fraction for one state.
+def _step_stats(state: torch.Tensor) -> tuple[float, float, float, float]:
+    """Compute COM_y, COM_x, bbox-fraction, and gyradius for one state.
 
     Transfers the state to CPU and uses numpy. The per-step transfer cost is
     ~10% overhead on CPU device and similar order on MPS/CUDA. Worth it for
     code clarity over a fully on-device version that would need branch-free
     bbox computation.
+
+    Gyradius is the mass-weighted RMS distance from COM, tracked cheaply here
+    since we already have COM and the mass array, for use by the
+    morphological_instability and activity descriptors.
     """
     arr = state[:, :, 0].detach().cpu().numpy()
     total = float(arr.sum())
     if total <= 0.0:
-        return 0.0, 0.0, 0.0
+        return 0.0, 0.0, 0.0, 0.0
     h, w = arr.shape
 
     ys, xs = np.indices(arr.shape)
     com_y = float((ys * arr).sum() / total)
     com_x = float((xs * arr).sum() / total)
 
+    # Gyradius: mass-weighted RMS distance from COM
+    dy = ys - com_y
+    dx = xs - com_x
+    sq_dist = dy * dy + dx * dx
+    gyradius = float(np.sqrt(max(float((arr * sq_dist).sum() / total), 0.0)))
+
     peak = float(arr.max())
     if peak <= 0.0:
-        return com_y, com_x, 0.0
+        return com_y, com_x, 0.0, gyradius
     threshold = 0.1 * peak
     mask = arr > threshold
     if not mask.any():
-        return com_y, com_x, 0.0
+        return com_y, com_x, 0.0, gyradius
     rows = np.where(mask.any(axis=1))[0]
     cols = np.where(mask.any(axis=0))[0]
     bbox_area = (int(rows[-1]) - int(rows[0]) + 1) * (int(cols[-1]) - int(cols[0]) + 1)
-    return com_y, com_x, bbox_area / (h * w)
+    return com_y, com_x, bbox_area / (h * w), gyradius
 
 
 def _downsample_frame(state: torch.Tensor, target: int) -> torch.Tensor:
@@ -215,14 +225,16 @@ def rollout(
     com_y_np = np.zeros(history_len, dtype=np.float32)
     com_x_np = np.zeros(history_len, dtype=np.float32)
     bbox_np = np.zeros(history_len, dtype=np.float32)
+    gyradius_np = np.zeros(history_len, dtype=np.float32)
     thumb_buf: list[torch.Tensor] = []
 
     # 5. Run the loop, capturing stats and frames as we go
     for step in range(history_len):
-        com_y, com_x, bbox = _step_stats(state)
+        com_y, com_x, bbox, gyr = _step_stats(state)
         com_y_np[step] = com_y
         com_x_np[step] = com_x
         bbox_np[step] = bbox
+        gyradius_np[step] = gyr
         if step in frame_indices:
             thumb_buf.append(_downsample_frame(state, thumbnail_size))
         if step < config.steps:
@@ -260,6 +272,7 @@ def rollout(
     trace = RolloutTrace(
         com_history=com_history[-tail:].astype(np.float32),
         bbox_fraction_history=bbox_np[-tail:].astype(np.float32),
+        gyradius_history=gyradius_np[-tail:].astype(np.float32),
         final_state=final_state_np,
         grid_size=config.sim.grid_h,
         total_steps=config.steps,
@@ -295,14 +308,15 @@ def rollout(
     )
 
 
-def _step_stats_batch(states: torch.Tensor) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Compute COM and bbox-fraction for a batch of states in one pass.
+def _step_stats_batch(
+    states: torch.Tensor,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Compute COM, bbox-fraction, and gyradius for a batch of states.
 
-    states: (B, H, W, 1) -> three (B,) float32 arrays: com_y, com_x, bbox_frac.
+    states: (B, H, W, 1) -> four (B,) float32 arrays:
+        com_y, com_x, bbox_frac, gyradius.
 
     Transfers the whole batch to CPU once rather than one transfer per element.
-    The per-step transfer cost is the same order as the single-state version
-    but amortized over B.
     """
     arr = states[:, :, :, 0].detach().cpu().numpy().astype(np.float32)  # (B, H, W)
     B, h, w = arr.shape
@@ -311,6 +325,7 @@ def _step_stats_batch(states: torch.Tensor) -> tuple[np.ndarray, np.ndarray, np.
     com_y = np.zeros(B, dtype=np.float32)
     com_x = np.zeros(B, dtype=np.float32)
     bbox_frac = np.zeros(B, dtype=np.float32)
+    gyradius = np.zeros(B, dtype=np.float32)
 
     ys, xs = np.indices((h, w), dtype=np.float32)
 
@@ -319,8 +334,16 @@ def _step_stats_batch(states: torch.Tensor) -> tuple[np.ndarray, np.ndarray, np.
         if total <= 0.0:
             continue
         a = arr[i]
-        com_y[i] = float((ys * a).sum() / total)
-        com_x[i] = float((xs * a).sum() / total)
+        cy = float((ys * a).sum() / total)
+        cx = float((xs * a).sum() / total)
+        com_y[i] = cy
+        com_x[i] = cx
+
+        # Gyradius: mass-weighted RMS distance from COM
+        dy = ys - cy
+        dx = xs - cx
+        sq_dist = dy * dy + dx * dx
+        gyradius[i] = float(np.sqrt(max(float((a * sq_dist).sum() / total), 0.0)))
 
         peak = float(a.max())
         if peak <= 0.0:
@@ -334,7 +357,7 @@ def _step_stats_batch(states: torch.Tensor) -> tuple[np.ndarray, np.ndarray, np.
         bbox_area = (int(rows[-1]) - int(rows[0]) + 1) * (int(cols[-1]) - int(cols[0]) + 1)
         bbox_frac[i] = bbox_area / (h * w)
 
-    return com_y, com_x, bbox_frac
+    return com_y, com_x, bbox_frac, gyradius
 
 
 def _downsample_frame_batch(states: torch.Tensor, target: int) -> list[torch.Tensor]:
@@ -551,14 +574,16 @@ def rollout_batch(
     com_y_hist = np.zeros((B, history_len), dtype=np.float32)
     com_x_hist = np.zeros((B, history_len), dtype=np.float32)
     bbox_hist = np.zeros((B, history_len), dtype=np.float32)
+    gyradius_hist = np.zeros((B, history_len), dtype=np.float32)
     thumb_bufs: list[list[torch.Tensor]] = [[] for _ in range(B)]
 
     # Run the sim loop
     for step in range(history_len):
-        com_y, com_x, bbox = _step_stats_batch(states)
+        com_y, com_x, bbox, gyr = _step_stats_batch(states)
         com_y_hist[:, step] = com_y
         com_x_hist[:, step] = com_x
         bbox_hist[:, step] = bbox
+        gyradius_hist[:, step] = gyr
 
         if step in frame_indices:
             frames = _downsample_frame_batch(states, thumbnail_size)
@@ -614,6 +639,7 @@ def rollout_batch(
         trace = RolloutTrace(
             com_history=com_history[-tail:].astype(np.float32),
             bbox_fraction_history=bbox_hist[i, -tail:].astype(np.float32),
+            gyradius_history=gyradius_hist[i, -tail:].astype(np.float32),
             final_state=final_state_np,
             grid_size=config.sim.grid_h,
             total_steps=config.steps,

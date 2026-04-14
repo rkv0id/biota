@@ -457,7 +457,7 @@
             </div>
 
             <h2>Behavioral descriptors</h2>
-            <p>Three scalars measured from each rollout index the archive's three axes. The active set is chosen per run — any three from the built-in library of nine. All are normalized to [0, 1] and empirically calibrated against real cluster runs.</p>
+            <p>Three scalars measured from each rollout index the archive's three axes. The active set is chosen per run — any three from the built-in library of fifteen. All are normalized to [0, 1] and empirically calibrated against real cluster runs.</p>
             <div class="descriptor-grid">
                 <div class="descriptor-card">
                     <div class="descriptor-name">velocity</div>
@@ -494,6 +494,30 @@
                 <div class="descriptor-card">
                     <div class="descriptor-name">persistence score</div>
                     <div class="descriptor-desc">Maximum descriptor drift across the trace tail. Low = behaviorally stable over time, high = the creature is still changing.</div>
+                </div>
+                <div class="descriptor-card">
+                    <div class="descriptor-name">displacement ratio</div>
+                    <div class="descriptor-desc">Total displacement divided by total path length over the trace tail. Zero = pure orbiter, one = perfect straight-line glider.</div>
+                </div>
+                <div class="descriptor-card">
+                    <div class="descriptor-name">angular velocity</div>
+                    <div class="descriptor-desc">Mean absolute angular speed of COM motion over the trace tail. Separates rotors and orbiters from translators and stationary creatures.</div>
+                </div>
+                <div class="descriptor-card">
+                    <div class="descriptor-name">growth gradient</div>
+                    <div class="descriptor-desc">Mass-weighted mean spatial gradient magnitude at the final step. Low = smooth symmetric creature, high = labyrinthine internal structure.</div>
+                </div>
+                <div class="descriptor-card">
+                    <div class="descriptor-name">morphological instability</div>
+                    <div class="descriptor-desc">Variance of gyradius over the trace tail. Low = rigid stable form, high = creature constantly reshapes or fragments over time.</div>
+                </div>
+                <div class="descriptor-card">
+                    <div class="descriptor-name">activity</div>
+                    <div class="descriptor-desc">Mean absolute gyradius change per step. Measures internal work rate — static creatures score near zero, pulsing or morphing ones score high.</div>
+                </div>
+                <div class="descriptor-card">
+                    <div class="descriptor-name">spatial entropy</div>
+                    <div class="descriptor-desc">Shannon entropy of mass distribution over a coarse spatial grid. Low = compact localized mass, high = diffuse or multi-body spread.</div>
                 </div>
             </div>
 

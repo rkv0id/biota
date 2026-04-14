@@ -33,8 +33,14 @@ from biota.search.descriptors import (
     VELOCITY_NORMALIZER,
     WINDOW,
     RolloutTrace,
+    compute_activity,
+    compute_angular_velocity,
     compute_descriptors,
+    compute_displacement_ratio,
+    compute_growth_gradient,
     compute_gyradius,
+    compute_morphological_instability,
+    compute_spatial_entropy,
     compute_spectral_entropy,
     compute_velocity,
 )
@@ -59,6 +65,7 @@ def _make_trace(
     return RolloutTrace(
         com_history=com_path.astype(np.float32),
         bbox_fraction_history=np.full(TRACE_LEN, 0.01, dtype=np.float32),
+        gyradius_history=np.zeros(TRACE_LEN, dtype=np.float32),
         final_state=final_state.astype(np.float32),
         grid_size=GRID,
         total_steps=STEPS,
@@ -305,3 +312,224 @@ def test_compute_descriptors_slow_stationary_blob() -> None:
     assert velocity == 0.0
     assert 0.1 < gyradius < 0.25
     assert 0.0 < spectral < 1.0
+
+
+def _make_trace_with_gyradius(
+    *,
+    com_path: np.ndarray | None = None,
+    gyradius_path: np.ndarray | None = None,
+    final_state: np.ndarray | None = None,
+) -> RolloutTrace:
+    """Like _make_trace but with explicit gyradius_history control."""
+    if com_path is None:
+        com_path = np.full((TRACE_LEN, 2), GRID / 2.0, dtype=np.float32)
+    if gyradius_path is None:
+        gyradius_path = np.zeros(TRACE_LEN, dtype=np.float32)
+    if final_state is None:
+        final_state = np.zeros((GRID, GRID), dtype=np.float32)
+        final_state[GRID // 2, GRID // 2] = 1.0
+    return RolloutTrace(
+        com_history=com_path.astype(np.float32),
+        bbox_fraction_history=np.full(TRACE_LEN, 0.01, dtype=np.float32),
+        gyradius_history=gyradius_path.astype(np.float32),
+        final_state=final_state.astype(np.float32),
+        grid_size=GRID,
+        total_steps=STEPS,
+    )
+
+
+# === compute_displacement_ratio ===
+
+
+def test_displacement_ratio_straight_line_is_one() -> None:
+    """Perfect straight-line translator: displacement == path length -> ratio 1.0."""
+    coms = np.zeros((TRACE_LEN, 2), dtype=np.float32)
+    coms[:, 1] = np.linspace(0, 10, TRACE_LEN)  # moving right only
+    assert compute_displacement_ratio(_make_trace(com_path=coms)) == pytest.approx(1.0, abs=1e-4)
+
+
+def test_displacement_ratio_stationary_is_zero() -> None:
+    """Stationary creature: path length 0 -> returns 0."""
+    coms = np.full((TRACE_LEN, 2), 48.0, dtype=np.float32)
+    assert compute_displacement_ratio(_make_trace(com_path=coms)) == 0.0
+
+
+def test_displacement_ratio_orbiter_is_low() -> None:
+    """Circular orbit with period = WINDOW closes completely in the window:
+    start == end -> displacement ~ 0, path = 2*pi*R -> ratio ~ 0."""
+    t = np.linspace(0, 2 * np.pi, WINDOW)
+    orbit = np.stack([np.sin(t) * 10 + 48, np.cos(t) * 10 + 48], axis=1).astype(np.float32)
+    full = np.tile(orbit, (TRACE_LEN // WINDOW + 1, 1))[:TRACE_LEN]
+    ratio = compute_displacement_ratio(_make_trace(com_path=full))
+    assert ratio < 0.15
+
+
+def test_displacement_ratio_in_unit_interval() -> None:
+    """All outputs are in [0, 1]."""
+    coms = np.random.default_rng(42).random((TRACE_LEN, 2)).astype(np.float32) * GRID
+    assert 0.0 <= compute_displacement_ratio(_make_trace(com_path=coms)) <= 1.0
+
+
+# === compute_angular_velocity ===
+
+
+def test_angular_velocity_straight_line_is_zero() -> None:
+    """Straight-line mover: constant direction -> zero angular speed."""
+    coms = np.zeros((TRACE_LEN, 2), dtype=np.float32)
+    coms[:, 1] = np.linspace(0, 20, TRACE_LEN)
+    assert compute_angular_velocity(_make_trace(com_path=coms)) < 0.05
+
+
+def test_angular_velocity_full_orbit_saturates() -> None:
+    """One full circular orbit in WINDOW steps -> angular speed ~2*pi/WINDOW rad/step.
+    With WINDOW=50: 2*pi/50 ~ 0.126 rad/step vs normalizer 0.15 -> result ~0.84."""
+    t = np.linspace(0, 2 * np.pi, WINDOW)
+    orbit = np.stack([np.sin(t) * 10 + 48, np.cos(t) * 10 + 48], axis=1).astype(np.float32)
+    full = np.tile(orbit, (TRACE_LEN // WINDOW + 1, 1))[:TRACE_LEN]
+    val = compute_angular_velocity(_make_trace(com_path=full))
+    assert val > 0.6  # 2*pi/WINDOW / 0.15 ~ 0.84
+
+
+def test_angular_velocity_stationary_is_zero() -> None:
+    coms = np.full((TRACE_LEN, 2), 48.0, dtype=np.float32)
+    assert compute_angular_velocity(_make_trace(com_path=coms)) == 0.0
+
+
+def test_angular_velocity_in_unit_interval() -> None:
+    coms = np.random.default_rng(7).random((TRACE_LEN, 2)).astype(np.float32) * GRID
+    assert 0.0 <= compute_angular_velocity(_make_trace(com_path=coms)) <= 1.0
+
+
+# === compute_growth_gradient ===
+
+
+def test_growth_gradient_empty_is_zero() -> None:
+    state = np.zeros((GRID, GRID), dtype=np.float32)
+    assert compute_growth_gradient(_make_trace(final_state=state)) == 0.0
+
+
+def test_growth_gradient_uniform_is_low() -> None:
+    """A uniform square has gradient only at its boundary -> low score (~0.13)."""
+    state = np.zeros((GRID, GRID), dtype=np.float32)
+    state[30:60, 30:60] = 1.0
+    val = compute_growth_gradient(_make_trace(final_state=state))
+    assert val < 0.3
+
+
+def test_growth_gradient_sharp_edges_is_higher() -> None:
+    """A state with many small features has more gradient than a uniform block."""
+    rng = np.random.default_rng(3)
+    state_noisy = rng.random((GRID, GRID)).astype(np.float32)
+    state_smooth = np.zeros((GRID, GRID), dtype=np.float32)
+    state_smooth[30:60, 30:60] = 1.0
+    assert compute_growth_gradient(_make_trace(final_state=state_noisy)) > compute_growth_gradient(
+        _make_trace(final_state=state_smooth)
+    )
+
+
+def test_growth_gradient_in_unit_interval() -> None:
+    state = np.abs(np.random.default_rng(11).standard_normal((GRID, GRID))).astype(np.float32)
+    assert 0.0 <= compute_growth_gradient(_make_trace(final_state=state)) <= 1.0
+
+
+# === compute_morphological_instability ===
+
+
+def test_morphological_instability_constant_is_zero() -> None:
+    """Constant gyradius over time -> zero variance -> zero instability."""
+    gyr = np.full(TRACE_LEN, 10.0, dtype=np.float32)
+    assert compute_morphological_instability(_make_trace_with_gyradius(gyradius_path=gyr)) == 0.0
+
+
+def test_morphological_instability_pulsing_is_nonzero() -> None:
+    """Oscillating gyradius -> nonzero variance -> nonzero instability."""
+    t = np.arange(TRACE_LEN, dtype=np.float32)
+    gyr = 10.0 + 5.0 * np.sin(t * np.pi / 10)
+    val = compute_morphological_instability(_make_trace_with_gyradius(gyradius_path=gyr))
+    assert val > 0.0
+
+
+def test_morphological_instability_larger_swing_is_higher() -> None:
+    """Larger gyradius oscillation -> higher instability."""
+    t = np.arange(TRACE_LEN, dtype=np.float32)
+    gyr_small = (10.0 + 1.0 * np.sin(t * np.pi / 10)).astype(np.float32)
+    gyr_large = (10.0 + 8.0 * np.sin(t * np.pi / 10)).astype(np.float32)
+    small = compute_morphological_instability(_make_trace_with_gyradius(gyradius_path=gyr_small))
+    large = compute_morphological_instability(_make_trace_with_gyradius(gyradius_path=gyr_large))
+    assert large > small
+
+
+def test_morphological_instability_in_unit_interval() -> None:
+    gyr = np.random.default_rng(17).random(TRACE_LEN).astype(np.float32) * 30
+    assert (
+        0.0
+        <= compute_morphological_instability(_make_trace_with_gyradius(gyradius_path=gyr))
+        <= 1.0
+    )
+
+
+# === compute_activity ===
+
+
+def test_activity_static_is_zero() -> None:
+    """Constant gyradius -> no change per step -> activity 0."""
+    gyr = np.full(TRACE_LEN, 15.0, dtype=np.float32)
+    assert compute_activity(_make_trace_with_gyradius(gyradius_path=gyr)) == 0.0
+
+
+def test_activity_changing_is_nonzero() -> None:
+    """Linearly growing gyradius -> constant change per step -> nonzero activity."""
+    gyr = np.linspace(5.0, 25.0, TRACE_LEN).astype(np.float32)
+    assert compute_activity(_make_trace_with_gyradius(gyradius_path=gyr)) > 0.0
+
+
+def test_activity_faster_change_is_higher() -> None:
+    """Faster gyradius change -> higher activity."""
+    gyr_slow = np.linspace(10.0, 12.0, TRACE_LEN).astype(np.float32)
+    gyr_fast = np.linspace(10.0, 30.0, TRACE_LEN).astype(np.float32)
+    slow = compute_activity(_make_trace_with_gyradius(gyradius_path=gyr_slow))
+    fast = compute_activity(_make_trace_with_gyradius(gyradius_path=gyr_fast))
+    assert fast > slow
+
+
+def test_activity_in_unit_interval() -> None:
+    gyr = np.random.default_rng(23).random(TRACE_LEN).astype(np.float32) * 50
+    assert 0.0 <= compute_activity(_make_trace_with_gyradius(gyradius_path=gyr)) <= 1.0
+
+
+# === compute_spatial_entropy ===
+
+
+def test_spatial_entropy_empty_is_zero() -> None:
+    state = np.zeros((GRID, GRID), dtype=np.float32)
+    assert compute_spatial_entropy(_make_trace(final_state=state)) == 0.0
+
+
+def test_spatial_entropy_concentrated_is_low() -> None:
+    """Single pixel at center -> all mass in one bin -> low entropy."""
+    state = np.zeros((GRID, GRID), dtype=np.float32)
+    state[GRID // 2, GRID // 2] = 1.0
+    val = compute_spatial_entropy(_make_trace(final_state=state))
+    assert val < 0.3
+
+
+def test_spatial_entropy_uniform_is_high() -> None:
+    """Uniform mass everywhere -> maximum entropy -> high score."""
+    state = np.ones((GRID, GRID), dtype=np.float32)
+    val = compute_spatial_entropy(_make_trace(final_state=state))
+    assert val > 0.95
+
+
+def test_spatial_entropy_concentrated_less_than_diffuse() -> None:
+    """A small central blob has lower entropy than a full uniform state."""
+    state_compact = np.zeros((GRID, GRID), dtype=np.float32)
+    state_compact[40:56, 40:56] = 1.0
+    state_diffuse = np.ones((GRID, GRID), dtype=np.float32)
+    compact = compute_spatial_entropy(_make_trace(final_state=state_compact))
+    diffuse = compute_spatial_entropy(_make_trace(final_state=state_diffuse))
+    assert compact < diffuse
+
+
+def test_spatial_entropy_in_unit_interval() -> None:
+    state = np.random.default_rng(31).random((GRID, GRID)).astype(np.float32)
+    assert 0.0 <= compute_spatial_entropy(_make_trace(final_state=state)) <= 1.0

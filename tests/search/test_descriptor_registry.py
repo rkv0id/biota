@@ -57,6 +57,7 @@ def _make_trace(
     return RolloutTrace(
         com_history=com_path.astype(np.float32),
         bbox_fraction_history=bbox_history.astype(np.float32),
+        gyradius_history=np.zeros(len(bbox_history), dtype=np.float32),
         final_state=final_state.astype(np.float32),
         grid_size=GRID,
         total_steps=STEPS,
@@ -72,8 +73,8 @@ def _write_module(content: str) -> Path:
 # === REGISTRY ===
 
 
-def test_registry_has_nine_built_ins() -> None:
-    assert len(REGISTRY) == 9
+def test_registry_has_fifteen_built_ins() -> None:
+    assert len(REGISTRY) == 15
 
 
 def test_registry_contains_all_expected_names() -> None:
@@ -87,6 +88,12 @@ def test_registry_contains_all_expected_names() -> None:
         "png_compressibility",
         "rotational_symmetry",
         "persistence_score",
+        "displacement_ratio",
+        "angular_velocity",
+        "growth_gradient",
+        "morphological_instability",
+        "activity",
+        "spatial_entropy",
     }
     assert set(REGISTRY.keys()) == expected
 
@@ -320,6 +327,7 @@ def test_persistence_score_short_trace_is_zero() -> None:
     trace = RolloutTrace(
         com_history=short_coms,
         bbox_fraction_history=np.full(WINDOW - 1, 0.1, dtype=np.float32),
+        gyradius_history=np.zeros(WINDOW - 1, dtype=np.float32),
         final_state=np.zeros((GRID, GRID), dtype=np.float32),
         grid_size=GRID,
         total_steps=STEPS,

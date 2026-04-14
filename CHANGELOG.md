@@ -1,5 +1,24 @@
 # Changelog
 
+## v2.1.0 - 2026-04-15
+
+### New features
+
+**6 new behavioral descriptors** (library grows from 9 to 15, C(15,3) = 455 archive configurations):
+
+- `displacement_ratio` - total COM displacement / total path length over the trace tail. 0 = pure orbiter, 1 = straight-line glider. Separates true translators from fast-moving orbiters that velocity alone cannot distinguish. Grounded in Chan 2019's linear speed concept, normalized by path length.
+- `angular_velocity` - mean absolute angular speed of COM direction changes over the trace tail. Separates rotors and orbiters from translators. Used by Plantec et al. as an optimization target; here adapted as a MAP-Elites descriptor.
+- `growth_gradient` - mass-weighted mean spatial gradient magnitude at the final step. Approximates Chan's growth-centroid distance (dgm). Low = smooth internally consistent creature, high = labyrinthine channels and sharp internal structure.
+- `morphological_instability` - variance of gyradius over the trace tail. Low = rigid stable form, high = creature that constantly reshapes or pulses. Directly predicts ecosystem contact behavior.
+- `activity` - mean absolute gyradius change per step. Per-creature adaptation of evolutionary activity (Michel et al. 2025). Measures internal work rate: static or rigidly translating creatures score near 0, pulsing or morphing creatures score high.
+- `spatial_entropy` - Shannon entropy of mass over a coarse 8x8 spatial grid. Adapted from Michel et al. 2025's multi-scale matter distribution metric. Low = compact localized mass, high = diffuse or multi-body spread.
+
+**`gyradius_history` added to `RolloutTrace`** - tracked per step cheaply alongside COM in the rollout loop (both single and batch). Required by `morphological_instability` and `activity`.
+
+**`_step_stats` and `_step_stats_batch`** now return a 4-tuple including gyradius (was 3-tuple).
+
+---
+
 ## v2.0.1 - 2026-04-14
 
 ### Bug fixes
