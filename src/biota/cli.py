@@ -255,7 +255,7 @@ def search_cmd(
         100, "--checkpoint-every", help="Checkpoint cadence in completed rollouts."
     ),
     output_dir: Path = typer.Option(
-        Path("archive-runs"), "--output-dir", help="Root directory for run subdirectories."
+        Path("archive"), "--output-dir", help="Root directory for run subdirectories."
     ),
     grid: int | None = typer.Option(
         None, "--grid", help="Override preset grid size (for experimentation)."
@@ -365,12 +365,12 @@ def ecosystem(
     ),
     device: str = typer.Option("cpu", "--device", help="Torch device: cpu, mps, or cuda."),
     archive_dir: Path = typer.Option(
-        Path("archive-runs"),
+        Path("archive"),
         "--archive-dir",
         help="Directory containing archive run subdirectories.",
     ),
     output_dir: Path = typer.Option(
-        Path("ecosystem-runs"),
+        Path("ecosystem"),
         "--output-dir",
         help="Root directory for ecosystem run output.",
     ),

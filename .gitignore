@@ -17,8 +17,8 @@ wheels/
 runs/
 exports/
 creature_render/
-archive-runs/
-ecosystem-runs/
+ecosystem/
+archive/
 
 # OS noise
 .DS_Store

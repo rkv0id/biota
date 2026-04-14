@@ -36,7 +36,7 @@ from biota.search.archive import Archive
 from biota.viz.render import render_archive_page
 
 ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_RUNS_ROOT = ROOT / "archive-runs"
+DEFAULT_RUNS_ROOT = ROOT / "archive"
 
 
 def _find_latest_run(runs_root: Path) -> Path:

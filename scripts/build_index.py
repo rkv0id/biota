@@ -12,7 +12,7 @@ no matplotlib, no runtime dependency beyond stdlib and numpy.
 Usage:
 
     python scripts/build_index.py
-    python scripts/build_index.py --output-dir /path/to/archive-runs
+    python scripts/build_index.py --output-dir archive
     python scripts/build_index.py --run showcase-1-baseline   # single run
     python scripts/build_index.py --no-regen   # index only, skip html regen
 """
@@ -33,8 +33,8 @@ from biota.viz.colormap import apply_magma
 from biota.viz.render import render_archive_page
 
 ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_RUNS_ROOT = ROOT / "archive-runs"
-DEFAULT_ECO_ROOT = ROOT / "ecosystem-runs"
+DEFAULT_RUNS_ROOT = ROOT / "archive"
+DEFAULT_ECO_ROOT = ROOT / "ecosystem"
 
 _TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "src" / "biota" / "viz" / "templates"
 _ENV = Environment(
@@ -909,7 +909,7 @@ def main() -> None:
         card_contexts.append(_build_card_context(run_dir, archive, events))
 
     index_html = _build_index_html(card_contexts)
-    index_out = args.output_dir / "index.html"
+    index_out = args.output_dir.parent / "index.html"
     index_out.write_text(index_html)
     size_kb = index_out.stat().st_size / 1024
     print(f"index: {index_out} ({size_kb:.0f} KB, {len(card_contexts)} runs)")
@@ -939,6 +939,7 @@ def main() -> None:
     if eco_cards:
         # Rebuild index with ecosystem cards populated
         index_html = _build_index_html(card_contexts, eco_cards=eco_cards)
+        index_out = args.output_dir.parent / "index.html"
         index_out.write_text(index_html)
         print(f"index: updated with {len(eco_cards)} ecosystem run(s)")
 

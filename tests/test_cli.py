@@ -319,7 +319,7 @@ def test_ecosystem_end_to_end(tmp_path: Path) -> None:
     from biota.search.result import RolloutResult
 
     # Build a minimal archive with one occupied cell
-    archive_dir = tmp_path / "archive-runs" / "test-run"
+    archive_dir = tmp_path / "archive" / "test-run"
     archive_dir.mkdir(parents=True)
     archive = Archive(descriptor_names=("velocity", "gyradius", "spectral_entropy"))
     k = 3
@@ -347,7 +347,7 @@ def test_ecosystem_end_to_end(tmp_path: Path) -> None:
     with open(archive_dir / "archive.pkl", "wb") as f:
         pickle.dump(archive, f)
 
-    ecosystem_dir = tmp_path / "ecosystem-runs"
+    ecosystem_dir = tmp_path / "ecosystem"
     result = runner.invoke(
         app,
         [
@@ -371,7 +371,7 @@ def test_ecosystem_end_to_end(tmp_path: Path) -> None:
             "--output-format",
             "frames",
             "--archive-dir",
-            str(tmp_path / "archive-runs"),
+            str(tmp_path / "archive"),
             "--output-dir",
             str(ecosystem_dir),
         ],

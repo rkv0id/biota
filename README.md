@@ -57,8 +57,8 @@ uv run biota search --preset dev --budget 50
 Runs 50 rollouts synchronously on CPU. Then build the viewer:
 
 ```bash
-uv run python scripts/build_index.py --output-dir archive-runs
-open archive-runs/index.html
+uv run python scripts/build_index.py --output-dir archive
+open archive/index.html
 ```
 
 Every creature is rendered as an animated magma-colorized thumbnail with hover tooltips, lineage highlighting, and a click-through modal with full parameters. No server required, fully self-contained HTML.
@@ -80,8 +80,8 @@ The grid can be square (`--grid 512`) or rectangular (`--grid 192x512` for a lan
 
 ```bash
 python scripts/build_index.py \
-    --output-dir archive-runs \
-    --ecosystem-dir ecosystem-runs \
+    --output-dir archive \
+    --ecosystem-dir ecosystem \
     --publish
 ```
 
@@ -129,7 +129,7 @@ Three presets: `dev` (64x64, 200 steps), `standard` (192x192, 300 steps), `prett
 | `--checkpoint-every` | `100` | Checkpoint cadence in rollouts |
 | `--descriptors` | `velocity,gyradius,spectral_entropy` | Three descriptor names, comma-separated |
 | `--descriptor-module` | none | Path to a Python file defining custom `Descriptor` objects |
-| `--output-dir` | `archive-runs` | Directory for run output |
+| `--output-dir` | `archive` | Directory for run output |
 
 ### `biota ecosystem`
 
@@ -148,8 +148,8 @@ All positional flags are required.
 | `--output-format` | `gif` (default) or `frames` |
 | `--border` | `torus` (default) or `wall` |
 | `--device` | `cpu`, `mps`, or `cuda` |
-| `--archive-dir` | `archive-runs` |
-| `--output-dir` | `ecosystem-runs` |
+| `--archive-dir` | `archive` |
+| `--output-dir` | `ecosystem` |
 | `--seed` | RNG seed for spawn positions |
 
 `biota doctor` checks Python, torch, device availability, Ray, and module health (search, ray_compat, ecosystem).
@@ -158,19 +158,19 @@ All positional flags are required.
 
 ### Archive runs
 ```
-archive-runs/20260413-134355-hazy-creek/
+archive/20260413-134355-hazy-creek/
 ├── manifest.json       # run metadata, biota version, preset, descriptors used
 ├── config.json         # exact SearchConfig serialized
 ├── archive.pkl         # MAP-Elites archive, rewritten on checkpoint
 ├── events.jsonl        # append-only log of every rollout outcome
 ├── thumbs/             # per-cell animated GIFs (--publish mode)
 ├── view.html           # interactive archive viewer
-└── index.html          # top-level atlas (in archive-runs/ root)
+└── index.html          # top-level atlas (in archive/ root)
 ```
 
 ### Ecosystem runs
 ```
-ecosystem-runs/20260414-124443-700-eco-hazy-creek-5_23_13/
+ecosystem/20260414-124443-700-eco-hazy-creek-5_23_13/
 ├── config.json         # ecosystem configuration
 ├── summary.json        # measures: mass history, turnover, snapshot steps
 ├── ecosystem.gif       # animated GIF output (gif mode)

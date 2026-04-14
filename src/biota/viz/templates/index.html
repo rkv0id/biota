@@ -557,7 +557,7 @@
         <div class="runs-meta">{{ n_eco_runs }} run{{ 's' if n_eco_runs != 1 else '' }}</div>
         <div class="run-grid">
             {% for card in eco_cards %}
-            <a class="run-card" href="../ecosystem-runs/{{ card.run_id }}/view.html">
+            <a class="run-card" href="ecosystem/{{ card.run_id }}/view.html">
                 <div class="card-body" style="padding-top:16px">
                     <div class="card-id">{{ card.run_id }}</div>
                     <div class="card-stats">

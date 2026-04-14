@@ -5,7 +5,7 @@ archive), spawns N copies on a shared grid, runs the simulation, captures
 snapshots and measures, writes output files, and returns an EcosystemResult.
 
 Output directory structure:
-    ecosystem-runs/<run_id>/
+    ecosystem/<run_id>/
         summary.json        run metadata and measures
         trajectory.npy      state snapshots, shape (n_snapshots, H, W) float32
         frames/             PNG frames for every snapshot step
@@ -98,7 +98,7 @@ def _write_gif(frames: list[np.ndarray], path: Path, fps: int = 10) -> None:
 def run_ecosystem(
     config: EcosystemConfig,
     creature: RolloutResult,
-    output_root: Path | str = "ecosystem-runs",
+    output_root: Path | str = "ecosystem",
     on_event: object = None,
 ) -> EcosystemResult:
     """Run one ecosystem simulation and write output to disk.
