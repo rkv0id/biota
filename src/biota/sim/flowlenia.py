@@ -243,11 +243,18 @@ class FlowLenia:
 
     def _sobel(self, field: torch.Tensor) -> torch.Tensor:
         """Sobel gradients of a 2D field. Returns (gy, gx) stacked, shape (2, X, Y).
-        Uses zero-padding to match jax.scipy.signal.convolve2d(mode='same').
+
+        Wall border: zero-padding matches jax.scipy.signal.convolve2d(mode='same').
+        Torus border: circular padding so gradients at the seam see the opposite edge.
         """
         field_4d = field.unsqueeze(0).unsqueeze(0)
-        gx = F.conv2d(field_4d, self._sobel_kx, padding=1)[0, 0]
-        gy = F.conv2d(field_4d, self._sobel_ky, padding=1)[0, 0]
+        if self.config.border == "torus":
+            field_4d = F.pad(field_4d, (1, 1, 1, 1), mode="circular")
+            gx = F.conv2d(field_4d, self._sobel_kx, padding=0)[0, 0]
+            gy = F.conv2d(field_4d, self._sobel_ky, padding=0)[0, 0]
+        else:
+            gx = F.conv2d(field_4d, self._sobel_kx, padding=1)[0, 0]
+            gy = F.conv2d(field_4d, self._sobel_ky, padding=1)[0, 0]
         return torch.stack([gy, gx], dim=0)
 
     def _sobel_batch(self, field: torch.Tensor) -> torch.Tensor:
@@ -255,13 +262,18 @@ class FlowLenia:
 
         field: (B, H, W) -> (B, 2, H, W) stacked as [gy, gx].
 
-        F.conv2d treats the first dimension as the batch, so we reshape
-        to (B, 1, H, W), run both kernels, and stack the gradient channels.
+        Wall border: zero-padding; torus border: circular padding so seam
+        gradients are computed correctly across the wrap edge.
         """
         B = field.shape[0]
         field_4d = field.unsqueeze(1)  # (B, 1, H, W)
-        gx = F.conv2d(field_4d, self._sobel_kx, padding=1)[:, 0]  # (B, H, W)
-        gy = F.conv2d(field_4d, self._sobel_ky, padding=1)[:, 0]  # (B, H, W)
+        if self.config.border == "torus":
+            field_4d = F.pad(field_4d, (1, 1, 1, 1), mode="circular")
+            gx = F.conv2d(field_4d, self._sobel_kx, padding=0)[:, 0]
+            gy = F.conv2d(field_4d, self._sobel_ky, padding=0)[:, 0]
+        else:
+            gx = F.conv2d(field_4d, self._sobel_kx, padding=1)[:, 0]
+            gy = F.conv2d(field_4d, self._sobel_ky, padding=1)[:, 0]
         _ = B  # used implicitly via field_4d shape
         return torch.stack([gy, gx], dim=1)  # (B, 2, H, W)
 
