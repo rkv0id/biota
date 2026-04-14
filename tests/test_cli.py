@@ -53,6 +53,7 @@ def test_doctor_output_mentions_key_components() -> None:
     assert "torch" in output
     assert "biota.search" in output
     assert "biota.ray_compat" in output
+    assert "biota.ecosystem" in output
 
 
 def test_doctor_reports_torch_device_availability() -> None:

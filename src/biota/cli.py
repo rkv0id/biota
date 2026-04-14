@@ -538,6 +538,19 @@ def _format_doctor() -> str:
     except Exception as e:
         lines.append(f"biota.ray_compat: FAIL ({e})")
 
+    # biota.ecosystem module health
+    ecosystem_modules = (
+        "biota.ecosystem.result",
+        "biota.ecosystem.spawn",
+        "biota.ecosystem.run",
+    )
+    try:
+        for mod in ecosystem_modules:
+            importlib.import_module(mod)
+        lines.append(f"biota.ecosystem: ok ({len(ecosystem_modules)} modules)")
+    except ImportError as e:
+        lines.append(f"biota.ecosystem: FAIL ({e})")
+
     return "\n".join(lines)
 
 
