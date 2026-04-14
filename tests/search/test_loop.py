@@ -44,7 +44,7 @@ def _cheap_config(budget: int = 10, random_phase_size: int = 5, **kwargs: Any) -
     defaults: dict[str, Any] = {"batch_size": 1, "workers": 1}
     defaults.update(kwargs)
     return SearchConfig(
-        rollout=RolloutConfig(sim=SimConfig(grid=32, kernels=10), steps=110),
+        rollout=RolloutConfig(sim=SimConfig(grid_h=32, grid_w=32, kernels=10), steps=110),
         budget=budget,
         random_phase_size=random_phase_size,
         base_seed=42,

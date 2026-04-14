@@ -34,7 +34,7 @@ def _load_params() -> Params:
 
 
 def _build() -> tuple[FlowLenia, torch.Tensor]:
-    config = Config(grid=96, kernels=10, dd=5, dt=0.2, sigma=0.65, border="wall")
+    config = Config(grid_h=96, grid_w=96, kernels=10, dd=5, dt=0.2, sigma=0.65, border="wall")
     params = _load_params()
     A0 = torch.tensor(
         np.load(FIXTURE_DIR / "initial_state.npy"),

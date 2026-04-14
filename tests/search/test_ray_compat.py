@@ -29,7 +29,7 @@ from biota.search.rollout import (
 )
 from biota.sim.flowlenia import Config as SimConfig
 
-CHEAP_CONFIG = RolloutConfig(sim=SimConfig(grid=32, kernels=10), steps=50)
+CHEAP_CONFIG = RolloutConfig(sim=SimConfig(grid_h=32, grid_w=32, kernels=10), steps=50)
 
 
 @pytest.fixture(autouse=True)

@@ -45,7 +45,7 @@ def _load_initial_state(device: str) -> torch.Tensor:
 
 
 def _run_and_check(device: str, tolerance: float) -> None:
-    config = Config(grid=96, kernels=10, dd=5, dt=0.2, sigma=0.65, border="wall")
+    config = Config(grid_h=96, grid_w=96, kernels=10, dd=5, dt=0.2, sigma=0.65, border="wall")
     params = _load_params(device)
     A0 = _load_initial_state(device)
 
@@ -78,7 +78,7 @@ def test_mass_conservation_mps() -> None:
 
 def test_mass_conservation_torus_cpu() -> None:
     """Torus border must conserve mass to the same tolerance as wall."""
-    config = Config(grid=96, kernels=10, dd=5, dt=0.2, sigma=0.65, border="torus")
+    config = Config(grid_h=96, grid_w=96, kernels=10, dd=5, dt=0.2, sigma=0.65, border="torus")
     params = _load_params("cpu")
     A0 = _load_initial_state("cpu")
 
@@ -113,12 +113,12 @@ def test_torus_differs_from_wall() -> None:
     A0 = torch.tensor(A0_np, dtype=torch.float32)
 
     fl_wall = FlowLenia(
-        Config(grid=96, kernels=10, dd=5, dt=0.2, sigma=0.65, border="wall"),
+        Config(grid_h=96, grid_w=96, kernels=10, dd=5, dt=0.2, sigma=0.65, border="wall"),
         params,
         device="cpu",
     )
     fl_torus = FlowLenia(
-        Config(grid=96, kernels=10, dd=5, dt=0.2, sigma=0.65, border="torus"),
+        Config(grid_h=96, grid_w=96, kernels=10, dd=5, dt=0.2, sigma=0.65, border="torus"),
         params,
         device="cpu",
     )
@@ -138,7 +138,7 @@ def test_invalid_border_raises() -> None:
 
     with _pytest.raises(ValueError, match="border must be"):
         FlowLenia(
-            Config(grid=96, kernels=10, border="invalid"),
+            Config(grid_h=96, grid_w=96, kernels=10, border="invalid"),
             params,
             device="cpu",
         )

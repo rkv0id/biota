@@ -643,7 +643,7 @@ def _mass_svg_paths(
     n = len(mass_history)
     lo = min(mass_history)
     hi = max(mass_history)
-    span = hi - lo if hi > lo else 1.0
+    span = hi - lo if hi > lo else max(abs(lo) * 0.01, 1.0)  # show flat line if constant
     margin = 4
 
     def px(i: int, v: float) -> tuple[float, float]:
@@ -744,7 +744,9 @@ def _render_ecosystem_run(run_dir: Path, publish: bool = False) -> str:
             gif_data = gif_path.read_bytes()
             gif_src = "data:image/gif;base64," + _b64.b64encode(gif_data).decode("ascii")
 
-    n_snapshots = len(frames)
+    # Use snapshot count from summary.json as ground truth - frames may not
+    # exist on disk (gif mode only writes ecosystem.gif, not individual frames)
+    n_snapshots = len(snapshot_steps) if snapshot_steps else len(frames)
     template = _ENV.get_template("ecosystem.html")
     return template.render(
         run_id=run_id,

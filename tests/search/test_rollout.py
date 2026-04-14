@@ -32,7 +32,7 @@ from biota.search.rollout import (
 )
 from biota.sim.flowlenia import Config as SimConfig
 
-CHEAP_CONFIG = RolloutConfig(sim=SimConfig(grid=32, kernels=10), steps=50)
+CHEAP_CONFIG = RolloutConfig(sim=SimConfig(grid_h=32, grid_w=32, kernels=10), steps=50)
 """Used for fast unit tests. 50 steps means the persistent filter always
 rejects, so quality is always None and rejection_reason is always 'unstable'.
 We test the structure and behavior of the rollout function, not whether the
