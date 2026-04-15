@@ -101,11 +101,11 @@ fi
 log "running search (device=$SMOKE_DEVICE, transport=$SMOKE_TRANSPORT, batch=$SMOKE_BATCH_SIZE, budget=$SMOKE_BUDGET)..."
 # cd /tmp so we are NOT in the source tree - guards against any tool
 # inadvertently re-adding src/ to sys.path
-cd /tmp && "${ENV_ARGS[@]}" "$SMOKE_VENV/bin/biota" search \
+cd /tmp && ${ENV_ARGS[@]+"${ENV_ARGS[@]}"} "$SMOKE_VENV/bin/biota" search \
     --preset dev \
     --budget "$SMOKE_BUDGET" --random-phase "$SMOKE_RANDOM_PHASE" \
     --device "$SMOKE_DEVICE" --batch-size "$SMOKE_BATCH_SIZE" \
     --grid 32 --steps 110 \
-    "${TRANSPORT_ARGS[@]}"
+    ${TRANSPORT_ARGS[@]+"${TRANSPORT_ARGS[@]}"}
 
 log "done."

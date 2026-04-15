@@ -143,13 +143,13 @@ if [ "$SMOKE_DEVICE" = "mps" ]; then
 fi
 
 log "running 2-experiment ecosystem (device=$SMOKE_DEVICE, transport=$SMOKE_TRANSPORT, gpu_fraction=${SMOKE_GPU_FRACTION:-derived})..."
-cd "$SMOKE_DATA" && "${ENV_ARGS[@]}" "$SMOKE_VENV/bin/biota" ecosystem \
+cd "$SMOKE_DATA" && ${ENV_ARGS[@]+"${ENV_ARGS[@]}"} "$SMOKE_VENV/bin/biota" ecosystem \
     --config experiments.yaml \
     --archive-dir archive \
     --output-dir ecosystem \
     --device "$SMOKE_DEVICE" \
-    "${TRANSPORT_ARGS[@]}" \
-    "${GPU_ARGS[@]}"
+    ${TRANSPORT_ARGS[@]+"${TRANSPORT_ARGS[@]}"} \
+    ${GPU_ARGS[@]+"${GPU_ARGS[@]}"}
 
 test -d "$SMOKE_DATA/ecosystem"
 log "runs produced:"
