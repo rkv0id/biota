@@ -35,16 +35,32 @@ Failures isolate per experiment: one bad run does not abort the others. Failed e
 
 ### Smoke tests
 
-- `just smoke-ray` (existing) renamed to `just smoke-ray-search` for clarity.
-- New `just smoke-ray-ecosystem` exercises the parallel ecosystem dispatch end-to-end against a freshly seeded archive (CPU local Ray).
-- New `just smoke-ray-mps-ecosystem` and `just smoke-ray-cuda-ecosystem` cover MPS and CUDA local-Ray ecosystem dispatch respectively. Catch device-handoff bugs inside Ray tasks (CUDA_VISIBLE_DEVICES masking, per-task GPU memory accumulation) that unit tests cannot reach.
-- New `just smoke-cluster-ecosystem HEAD_ADDR` and `just smoke-cluster-cuda-ecosystem HEAD_ADDR` cover cluster-attached ecosystem dispatch. Catch cross-node EcosystemConfig serialization, cluster ObjectRef round-trips, and cluster bringup wiring that local-Ray cannot exercise.
-- New `just smoke-ray` umbrella runs the local-Ray smoke tests verifiable on a single dev machine (search + CPU ecosystem + MPS ecosystem). On Linux nodes without MPS, run the recipes individually.
-- All five ecosystem smoke variants share `scripts/smoke_ecosystem.sh`, so each justfile recipe is a 5-line env-var-setting wrapper rather than 80 lines of duplicated shell.
+Reorganized as a transport×device×command grid. Naming: `smoke-<transport>-<device>-<command>` for individual recipes, `smoke-<transport>-<device>` umbrellas that run both commands in a cell.
+
+Transports: `noray` (sequential, no Ray; catches packaging regressions and device code paths CI cannot reach), `local` (fresh single-host Ray), `cluster` (attach to running cluster). Devices: `cpu`, `mps`, `cuda`. The `cluster + mps` cell is omitted (Linux nodes don't have MPS), giving 8 cells × 3 recipes = 24 recipes. A top-level `smoke-ray` umbrella runs the CPU-only sanity (`smoke-noray-cpu` + `smoke-local-cpu`).
+
+Both commands now share extracted scaffolds: `scripts/smoke_search.sh` (new) and `scripts/smoke_ecosystem.sh` (extended to support the noray transport). Each justfile recipe is a 5-line env-var-setting wrapper.
+
+Recipe rename map (old → new):
+
+- `smoke-ray` → `smoke-local-cpu-search`
+- `smoke-ray-mps` → `smoke-noray-mps-search`
+- `smoke-ray-cuda` → `smoke-noray-cuda-search`
+- `smoke-cluster HEAD` → `smoke-cluster-cpu-search HEAD`
+- `smoke-cluster-cuda HEAD` → `smoke-cluster-cuda-search HEAD`
+- `smoke-ray-ecosystem` → `smoke-local-cpu-ecosystem`
+- `smoke-ray-mps-ecosystem` → `smoke-local-mps-ecosystem`
+- `smoke-ray-cuda-ecosystem` → `smoke-local-cuda-ecosystem`
+- `smoke-cluster-ecosystem HEAD` → `smoke-cluster-cpu-ecosystem HEAD`
+- `smoke-cluster-cuda-ecosystem HEAD` → `smoke-cluster-cuda-ecosystem HEAD`
+
+Heads-up: shell history and any local automation referencing the old names breaks. The new naming is the trade for a discoverable grid where adding a new transport or device means adding rows or columns rather than inventing more ad-hoc names.
+
+The `SMOKE_RAY_MODE` env var on `scripts/smoke_ecosystem.sh` is renamed to `SMOKE_TRANSPORT` for consistency with the new search script. Anyone calling the script directly (rather than via just) needs to update.
 
 ### Test count
 
-283 passing, 1 skipped, 2 deselected (was 273 + 1). 6 new functional tests (3 parser + 3 spawn/integration for patch override; 4 unit for dispatch validation) and 2 new `smoke_ray`-marked integration tests for real-Ray dispatch.
+287 passing, 1 skipped, 2 deselected (was 273 + 1). 10 new functional tests (3 parser + 3 spawn/integration for patch override; 4 dispatch validation; plus 5 CLI tests for device/gpu-fraction interaction guards) and 2 new `smoke_ray`-marked integration tests for real-Ray dispatch.
 
 ---
 

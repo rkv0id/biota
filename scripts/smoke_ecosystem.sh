@@ -9,16 +9,16 @@
 # env-var-setting wrapper.
 #
 # Required env vars:
-#   SMOKE_LABEL         tag used in log lines, e.g. "smoke-ray-cuda-ecosystem"
+#   SMOKE_LABEL         tag used in log lines, e.g. "smoke-local-cuda-ecosystem"
 #   SMOKE_DEVICE        cpu | mps | cuda
-#   SMOKE_RAY_MODE      local | cluster
+#   SMOKE_TRANSPORT     noray | local | cluster
 #
-# Required for cluster mode:
+# Required for cluster transport:
 #   SMOKE_RAY_ADDRESS   passed to --ray-address (e.g. 10.10.12.1:6379)
 #
 # Optional:
 #   SMOKE_GPU_FRACTION  if unset, --gpu-fraction is omitted (CLI derives from device)
-#   SMOKE_WORKERS       defaults to 2
+#   SMOKE_WORKERS       defaults to 2; ignored for noray transport
 #
 # All venv/data lives under /tmp and is cleaned up on exit.
 
@@ -26,7 +26,7 @@ set -euo pipefail
 
 : "${SMOKE_LABEL:?SMOKE_LABEL required}"
 : "${SMOKE_DEVICE:?SMOKE_DEVICE required (cpu|mps|cuda)}"
-: "${SMOKE_RAY_MODE:?SMOKE_RAY_MODE required (local|cluster)}"
+: "${SMOKE_TRANSPORT:?SMOKE_TRANSPORT required (noray|local|cluster)}"
 
 SMOKE_VENV=/tmp/biota-smoke-venv
 SMOKE_DATA=/tmp/biota-smoke-eco
@@ -110,18 +110,26 @@ experiments:
       - {run: seed-run, cell: [5, 8, 3], n: 2}
 YAMLEOF
 
-# Build the CLI invocation. Ray flag depends on mode; gpu-fraction passed
-# only when explicitly set (let the CLI derive its default from device).
-RAY_ARGS=()
-if [ "$SMOKE_RAY_MODE" = "local" ]; then
-    RAY_ARGS+=(--local-ray)
-elif [ "$SMOKE_RAY_MODE" = "cluster" ]; then
-    : "${SMOKE_RAY_ADDRESS:?SMOKE_RAY_ADDRESS required for cluster mode}"
-    RAY_ARGS+=(--ray-address "$SMOKE_RAY_ADDRESS")
-else
-    echo "[$SMOKE_LABEL] unknown SMOKE_RAY_MODE=$SMOKE_RAY_MODE" >&2
-    exit 2
-fi
+# Build the CLI invocation. Transport selects Ray flag (or none); --workers
+# only meaningful with Ray; --gpu-fraction passed only when explicitly set
+# (let the CLI derive its default from device).
+TRANSPORT_ARGS=()
+case "$SMOKE_TRANSPORT" in
+    noray)
+        # Sequential dispatch. No --local-ray, no --ray-address, no --workers.
+        ;;
+    local)
+        TRANSPORT_ARGS+=(--local-ray --workers "$SMOKE_WORKERS")
+        ;;
+    cluster)
+        : "${SMOKE_RAY_ADDRESS:?SMOKE_RAY_ADDRESS required for cluster transport}"
+        TRANSPORT_ARGS+=(--ray-address "$SMOKE_RAY_ADDRESS" --workers "$SMOKE_WORKERS")
+        ;;
+    *)
+        echo "[$SMOKE_LABEL] unknown SMOKE_TRANSPORT=$SMOKE_TRANSPORT" >&2
+        exit 2
+        ;;
+esac
 
 GPU_ARGS=()
 if [ -n "${SMOKE_GPU_FRACTION:-}" ]; then
@@ -134,14 +142,13 @@ if [ "$SMOKE_DEVICE" = "mps" ]; then
     ENV_ARGS+=(env PYTORCH_ENABLE_MPS_FALLBACK=1)
 fi
 
-log "running 2-experiment ecosystem (device=$SMOKE_DEVICE, ray=$SMOKE_RAY_MODE, workers=$SMOKE_WORKERS, gpu_fraction=${SMOKE_GPU_FRACTION:-derived})..."
+log "running 2-experiment ecosystem (device=$SMOKE_DEVICE, transport=$SMOKE_TRANSPORT, gpu_fraction=${SMOKE_GPU_FRACTION:-derived})..."
 cd "$SMOKE_DATA" && "${ENV_ARGS[@]}" "$SMOKE_VENV/bin/biota" ecosystem \
     --config experiments.yaml \
     --archive-dir archive \
     --output-dir ecosystem \
     --device "$SMOKE_DEVICE" \
-    --workers "$SMOKE_WORKERS" \
-    "${RAY_ARGS[@]}" \
+    "${TRANSPORT_ARGS[@]}" \
     "${GPU_ARGS[@]}"
 
 test -d "$SMOKE_DATA/ecosystem"
