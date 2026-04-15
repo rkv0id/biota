@@ -44,8 +44,13 @@ def _make_run_id(name: str) -> str:
     return f"{stamp}-{safe}"
 
 
-def _load_creature(source: CreatureSource) -> RolloutResult:
-    """Read one archive and extract the RolloutResult at the requested cell."""
+def load_creature(source: CreatureSource) -> RolloutResult:
+    """Read one archive and extract the RolloutResult at the requested cell.
+
+    Public utility shared between the sequential runner and the Ray
+    dispatcher. The dispatcher calls this on the driver before submitting
+    tasks so worker nodes do not need filesystem access to the archive.
+    """
     run_dir = Path(source.archive_dir) / source.run_id
     if not run_dir.exists():
         raise FileNotFoundError(
@@ -237,10 +242,11 @@ def _run_homogeneous(
     config: EcosystemConfig,
     run_dir: Path,
     frames_dir: Path,
+    creatures: list[RolloutResult] | None = None,
 ) -> tuple[list[np.ndarray], list[int], list[float], float]:
     """Scalar-path simulation loop. Returns (snapshots, snapshot_steps, mass_history, initial_mass)."""
     source = config.sources[0]
-    creature = _load_creature(source)
+    creature = creatures[0] if creatures is not None else load_creature(source)
     sim_cfg = _build_sim_config(creature, config)
     sim_params = _params_from_creature(creature, config.device)
     fl = FlowLenia(sim_cfg, sim_params, device=config.device)
@@ -277,9 +283,11 @@ def _run_heterogeneous(
     config: EcosystemConfig,
     run_dir: Path,
     frames_dir: Path,
+    creatures: list[RolloutResult] | None = None,
 ) -> tuple[list[np.ndarray], list[int], list[float], float]:
     """Species-indexed simulation loop via LocalizedFlowLenia."""
-    creatures = [_load_creature(s) for s in config.sources]
+    if creatures is None:
+        creatures = [load_creature(s) for s in config.sources]
 
     # All species must share the same kernel count: LocalizedFlowLenia's per-step
     # FFT path expects each species' fK to have the same K dim as the others.
@@ -331,12 +339,26 @@ def _run_heterogeneous(
 def run_ecosystem(
     config: EcosystemConfig,
     output_root: Path | str = "ecosystem",
+    creatures: list[RolloutResult] | None = None,
 ) -> EcosystemResult:
     """Run one ecosystem simulation and write output to disk.
 
     Homogeneous (one source): scalar FlowLenia step path, identical to v2.0.x.
     Heterogeneous (two or more sources): species-indexed LocalizedFlowLenia.
+
+    creatures, when provided, must be a list of RolloutResult objects in the
+    same order as config.sources. The runner uses these directly instead of
+    reading the archive from disk. This is the path taken by the cluster
+    Ray dispatcher: the driver loads creatures from its local archive
+    directory and ships them in the task payload, so worker nodes do not
+    need filesystem access to the archive. When None, creatures are loaded
+    from disk via load_creature (the standard sequential CLI path).
     """
+    if creatures is not None and len(creatures) != len(config.sources):
+        raise ValueError(
+            f"creatures length {len(creatures)} does not match sources length {len(config.sources)}"
+        )
+
     run_id = _make_run_id(config.name)
     run_dir = Path(output_root) / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -350,11 +372,11 @@ def run_ecosystem(
     started_at = time.time()
     if config.is_heterogeneous:
         snapshots, steps_taken, mass_history, initial_mass = _run_heterogeneous(
-            config, run_dir, frames_dir
+            config, run_dir, frames_dir, creatures=creatures
         )
     else:
         snapshots, steps_taken, mass_history, initial_mass = _run_homogeneous(
-            config, run_dir, frames_dir
+            config, run_dir, frames_dir, creatures=creatures
         )
     elapsed = time.time() - started_at
 

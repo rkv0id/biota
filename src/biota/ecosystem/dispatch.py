@@ -118,27 +118,66 @@ def _dispatch(
     """Submit all experiments as Ray tasks, collect results as they complete."""
     import ray
 
+    # Driver-side creature loading. Workers in cluster mode have no access to
+    # the driver's archive directory (different filesystems on different
+    # nodes), so we read each creature here and ship it as task payload.
+    # Local-Ray and noray paths still benefit: archives are read once per
+    # experiment regardless of how many tasks reference them.
+    #
+    # Load failures (missing archive, missing cell) isolate per experiment
+    # the same way runtime failures do: surfaced in the failures list, the
+    # other experiments still run. This matches the existing tolerance the
+    # rest of the dispatcher already provides.
+    from biota.ecosystem.run import load_creature
+
+    successes: dict[int, EcosystemResult] = {}  # keyed by submission index
+    failures: list[tuple[str, BaseException]] = []
+
+    # Resolve each experiment to (config, creatures_or_None). None means a
+    # driver-side load failed; the experiment is recorded as failed and
+    # not submitted to Ray.
+    resolved: list[tuple[int, EcosystemConfig, list[Any] | None]] = []
+    for idx, exp in enumerate(experiments):
+        try:
+            creatures = [load_creature(s) for s in exp.sources]
+        except Exception as exc:
+            failures.append((exp.name, exc))
+            resolved.append((idx, exp, None))
+            continue
+        resolved.append((idx, exp, creatures))
+
     # Build the remote function dynamically so num_gpus comes from the CLI flag.
     # Defining it inline (not at module scope) means re-decorating per call;
     # cheap, and avoids leaking a global with a fixed gpu_fraction.
     @ray.remote(num_gpus=gpu_fraction)
-    def _ray_run(cfg: EcosystemConfig, out: Path) -> EcosystemResult:
-        return run_ecosystem(cfg, output_root=out)
+    def _ray_run(cfg: EcosystemConfig, creatures: list[Any], out: Path) -> EcosystemResult:
+        return run_ecosystem(cfg, output_root=out, creatures=creatures)
 
-    # Tag each future with its experiment so we can name failures and report
-    # progress with the right name. ray.wait returns ObjectRefs in resolution
-    # order, not submission order, so a side-table is necessary.
-    futures = [_ray_run.remote(exp, output_root) for exp in experiments]
-    future_to_exp: dict[Any, EcosystemConfig] = dict(zip(futures, experiments, strict=True))
-
-    successes: dict[int, EcosystemResult] = {}  # keyed by submission index
-    failures: list[tuple[str, BaseException]] = []
-    submission_index = {id(f): i for i, f in enumerate(futures)}
+    # Submit only the experiments whose creatures resolved cleanly.
+    futures: list[Any] = []
+    future_to_exp: dict[Any, EcosystemConfig] = {}
+    submission_index: dict[int, int] = {}
+    for idx, exp, creatures in resolved:
+        if creatures is None:
+            continue
+        ref = _ray_run.remote(exp, creatures, output_root)
+        futures.append(ref)
+        future_to_exp[ref] = exp
+        submission_index[id(ref)] = idx
 
     pending = list(futures)
-    total = len(pending)
-    completed = 0
+    total = len(experiments)  # report against full experiment count, not just submitted
+    # Pre-failed (driver-side) count so the running tally is honest.
+    completed = sum(1 for _, _, c in resolved if c is None)
     started_at = time.time()
+
+    # Print pre-failure lines so the user sees them inline with progress.
+    for _, exp, creatures in resolved:
+        if creatures is None:
+            print(
+                f"[ecosystem] completed {completed}/{total}: {exp.name!r} "
+                f"FAILED (driver-side: archive load) (wall 0.0s)"
+            )
 
     # Cap concurrency by the workers flag using Ray's max_concurrency-style
     # pattern: only wait on at most `workers` tasks at a time. When fewer tasks

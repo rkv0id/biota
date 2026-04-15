@@ -1,5 +1,29 @@
 # Changelog
 
+## v2.4.0 - 2026-04-15
+
+Cluster-safe ecosystem dispatch via driver-side creature resolution. The v2.3.0 cluster ecosystem path assumed the worker node had filesystem access to the same archive directory as the driver — which is wrong: in real cluster setups the driver runs on a laptop and workers run on remote machines with completely separate filesystems. Tasks would fail with `FileNotFoundError: archive run directory not found` the moment they tried to read the archive on a worker that had never seen it.
+
+### Fix
+
+- The dispatcher now loads creatures on the driver from the local archive directory before submitting Ray tasks, then ships the loaded `RolloutResult` objects in the task payload. Workers never touch the archive filesystem.
+- `run_ecosystem` accepts an optional `creatures: list[RolloutResult]` parameter. When provided, the runner uses these directly instead of calling `load_creature`. When `None`, the disk-load path is unchanged (the standard sequential CLI path).
+- `_load_creature` promoted to public `load_creature` since it's now genuinely a shared utility (used by `run.py` internally and `dispatch.py` externally).
+
+### Failure isolation
+
+Driver-side load failures (missing archive, missing cell) now isolate per experiment the same way runtime failures do: the experiment is recorded in the failures list with its exception, the others continue, the CLI exits non-zero with a summary. Pre-failure lines print inline with the runtime progress for honest tallying.
+
+### Test count
+
+289 passing, 1 skipped, 2 deselected (was 287 + 1). 2 new functional tests: `test_run_ecosystem_accepts_preloaded_creatures` (proves disk and pre-loaded paths give bit-identical results), `test_run_ecosystem_rejects_creatures_length_mismatch`.
+
+### Verification
+
+`just smoke-cluster-cpu HEAD_ADDR` now passes end-to-end. v2.3.0's same recipe failed because workers couldn't reach the archive seeded on the driver.
+
+---
+
 ## v2.3.0 - 2026-04-15
 
 Three additions across the ecosystem stack: per-source patch sizing in YAML configs, parallel multi-experiment dispatch via Ray, and a sidebar layout with a borderless pan/zoom canvas for ecosystem run pages.

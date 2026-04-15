@@ -153,11 +153,17 @@ def test_run_experiments_parallel_local_ray_smoke() -> None:
 
 @pytest.mark.smoke_ray
 def test_run_experiments_parallel_isolates_failure() -> None:
-    """One bad experiment should not abort the others; failure is reported."""
+    """One bad experiment should not abort the others; failure is reported.
+
+    With v2.3.0+ creature resolution happens on the driver before Ray task
+    submission, so a missing archive surfaces as a driver-side FileNotFoundError
+    rather than a RayTaskError. Either way the dispatcher reports it in the
+    failures list and continues with the rest.
+    """
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         archive_dir = tmp / "archive"
-        # Only run-a exists; run-b will trigger a load failure in the task.
+        # Only run-a exists; run-b's load fails on the driver.
         _write_archive(archive_dir, "run-a", (5, 8, 3))
 
         experiments = (
@@ -177,7 +183,7 @@ def test_run_experiments_parallel_isolates_failure() -> None:
         assert len(successes) == 1
         assert len(failures) == 1
         assert failures[0][0] == "bad"
-        # FileNotFoundError from _load_creature when archive run dir is missing.
+        # FileNotFoundError from load_creature when archive run dir is missing.
         assert (
             isinstance(failures[0][1], FileNotFoundError)
             or "not found" in str(failures[0][1]).lower()

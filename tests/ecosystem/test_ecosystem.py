@@ -17,6 +17,7 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from biota.ecosystem.config import CreatureSource, EcosystemConfig, SpawnConfig
 from biota.ecosystem.result import EcosystemMeasures, EcosystemResult
@@ -385,6 +386,63 @@ def test_run_ecosystem_homogeneous_respects_source_patch() -> None:
         assert override_summary["sources"][0]["patch"] == baseline_cfg.spawn.patch * 2
         baseline_summary = json.loads((Path(baseline_result.run_dir) / "summary.json").read_text())
         assert baseline_summary["sources"][0]["patch"] == baseline_cfg.spawn.patch
+
+
+def test_run_ecosystem_accepts_preloaded_creatures() -> None:
+    """run_ecosystem(creatures=...) bypasses disk archive load.
+
+    This is the path the cluster Ray dispatcher takes: driver loads creatures
+    locally, passes them via Ray task payload so worker nodes don't need
+    filesystem access to the archive directory. The result should be
+    bit-identical to the disk-load path given the same creatures.
+    """
+    import tempfile
+    from pathlib import Path
+
+    from biota.ecosystem.run import load_creature, run_ecosystem
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        archive_dir = tmp / "archive"
+        _write_archive_with_creature(archive_dir, "test-run", (5, 8, 3), _synthetic_creature())
+
+        cfg = _single_source_config(
+            archive_dir, run_id="test-run", coords=(5, 8, 3), grid_h=64, grid_w=64
+        )
+
+        # Load via disk (standard sequential path)
+        disk_result = run_ecosystem(cfg, output_root=tmp / "disk")
+
+        # Load via pre-loaded creatures
+        creature = load_creature(cfg.sources[0])
+        preloaded_result = run_ecosystem(cfg, output_root=tmp / "preloaded", creatures=[creature])
+
+        # Same simulation = same initial mass and same trajectory
+        assert disk_result.measures.initial_mass == preloaded_result.measures.initial_mass
+        assert disk_result.measures.final_mass == preloaded_result.measures.final_mass
+        assert disk_result.measures.peak_mass == preloaded_result.measures.peak_mass
+
+
+def test_run_ecosystem_rejects_creatures_length_mismatch() -> None:
+    """creatures must match config.sources length."""
+    import tempfile
+    from pathlib import Path
+
+    from biota.ecosystem.run import load_creature, run_ecosystem
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        archive_dir = tmp / "archive"
+        _write_archive_with_creature(archive_dir, "test-run", (5, 8, 3), _synthetic_creature())
+
+        cfg = _single_source_config(
+            archive_dir, run_id="test-run", coords=(5, 8, 3), grid_h=64, grid_w=64
+        )
+
+        creature = load_creature(cfg.sources[0])
+        # Two creatures for one source: mismatch.
+        with pytest.raises(ValueError, match=r"creatures length .* does not match"):
+            run_ecosystem(cfg, output_root=tmp / "bad", creatures=[creature, creature])
 
 
 # === EcosystemResult.to_summary_dict ===
