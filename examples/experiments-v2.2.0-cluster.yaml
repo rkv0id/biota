@@ -25,7 +25,7 @@ experiments:
 
   - name: pulser-colony-torus
     # wry-spire (25,27,0): dense pulsing colony.
-    # Wider min_dist=140 so we see 4 distinct colonies first, then merging.
+    # Wider min_dist=140 so we see 3 distinct colonies first, then merging.
     grid: 256
     steps: 10000
     snapshot_every: 40
@@ -33,7 +33,7 @@ experiments:
     output_format: gif
     spawn: {min_dist: 140, patch: 64, seed: 0}
     sources:
-      - {run: 20260415-031303-wry-spire, cell: [25, 27, 0], n: 4}
+      - {run: 20260415-031303-wry-spire, cell: [25, 27, 0], n: 3}
 
   - name: glider-formation-torus
     # noble-fjord (31,20,15) fast translator.
@@ -44,9 +44,9 @@ experiments:
     snapshot_every: 48
     border: torus
     output_format: gif
-    spawn: {min_dist: 140, patch: 64, seed: 1}
+    spawn: {min_dist: 100, patch: 64, seed: 1}
     sources:
-      - {run: 20260415-030240-noble-fjord, cell: [31, 20, 15], n: 4}
+      - {run: 20260415-030240-noble-fjord, cell: [31, 20, 15], n: 5}
 
   - name: woven-diamond-torus
     # frost-creek (19,21,9) structured diamond, very static.
@@ -56,9 +56,9 @@ experiments:
     snapshot_every: 40
     border: torus
     output_format: gif
-    spawn: {min_dist: 130, patch: 64, seed: 2}
+    spawn: {min_dist: 100, patch: 64, seed: 2}
     sources:
-      - {run: 20260415-014216-frost-creek, cell: [19, 21, 9], n: 3}
+      - {run: 20260415-014216-frost-creek, cell: [19, 21, 9], n: 4}
 
   # ============================================================
   # TORUS HETEROGENEOUS — 20k steps for full collision arc, more bodies
