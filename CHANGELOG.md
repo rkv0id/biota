@@ -2,24 +2,46 @@
 
 ## v2.3.0 - 2026-04-15
 
-Per-source patch override for heterogeneous ecosystem runs. Each `CreatureSource` in an experiment YAML can now declare its own `patch` size, overriding the experiment-level `spawn.patch`. Useful when species in a single run have substantially different natural scales (small fast glider mixed with a large dense colony, etc.).
+Three additions across the ecosystem stack: per-source patch sizing in YAML configs, parallel multi-experiment dispatch via Ray, and a sidebar layout with a borderless pan/zoom canvas for ecosystem run pages.
 
 ### New features
 
-- `sources[].patch` is an optional integer field in the YAML schema. When omitted, falls back to `spawn.patch` (existing behaviour).
-- `build_initial_state_multi_species` now accepts a `patches: list[int]` parameter matching the counts list. The Poisson disk margin uses `max(patches)` so the largest creature still fits inside the wall border.
-- `build_initial_state` and `compute_spawn_positions` gain an optional `patch_override` parameter for the homogeneous path's per-source override (called transparently from `_run_homogeneous`).
-- `summary.json` and `config.json` per-source entries now include the resolved `patch` field, so inspecting a run dir tells you what was actually used per species.
+**Per-source patch override.** Each `CreatureSource` in an experiment YAML can declare its own `patch` size, overriding the experiment-level `spawn.patch`. Useful when species in a single run have substantially different natural scales (small fast glider mixed with a large dense colony, etc.). When omitted, sources fall back to `spawn.patch`.
+
+```yaml
+sources:
+  - run: my-run
+    cell: [5, 8, 3]
+    n: 4
+    patch: 80
+```
+
+**Parallel ecosystem dispatch via Ray.** `biota ecosystem --local-ray` (or `--ray-address HOST:PORT`) now runs experiments in parallel instead of sequentially. Two new flags:
+- `--workers N`: maximum experiments running concurrently. Defaults to detected CUDA GPU count (or 1).
+- `--gpu-fraction F`: fraction of a GPU each worker reserves. Default 1.0 = one per GPU. Set to 0.5 to pack two workers per GPU when individual experiments leave the GPU underutilized.
+
+Failures isolate per experiment: one bad run does not abort the others. Failed experiments are listed at the end with their exception type and the CLI exits non-zero. Progress streams via `ray.wait` as each task completes.
+
+**Sidebar layout for ecosystem run pages.** The `view.html` template now uses a 320px sticky sidebar (source list, mass stats, mass chart) plus a borderless dark canvas hosting the animation. The canvas supports drag-to-pan, wheel-to-zoom centered on the cursor, and double-click to reset. Mass chart gets an explicit "mass essentially flat across run" fallback when the line path is suppressed for low variance. Mobile collapses to single column at <900px.
 
 ### Implementation notes
 
-- Additive change. Existing v2.2.0 configs without `patch:` overrides go through identical code paths because `patch_override=None` falls back to `spawn.patch` everywhere.
-- `min_dist` remains a global Poisson disk constraint; per-source override is not supported in v2.3.0 since it would break the deterministic single-pass spawn ordering. Save for v2.4.0 if anyone asks.
-- No auto-derivation of patch from creature parameters. Auto-from-R was considered and rejected: the calibration depends on the search preset's R distribution which the ecosystem layer shouldn't have to know about, and shipping a "smart default" would create user expectations that biota cannot reliably meet across custom presets.
+- Per-source patch is purely additive; v2.2.0 configs without overrides go through identical code paths because `patch_override=None` falls back to `spawn.patch` everywhere.
+- `build_initial_state_multi_species` uses `max(patches)` for the Poisson disk margin so the largest creature still fits inside the wall border.
+- Ray dispatch lives in `biota.ecosystem.dispatch` (pyright basic mode like `ray_compat.py`), keeping Ray imports out of the strict-typed core.
+- Auto-derivation of patch from creature parameters was considered and rejected: depends on the search preset's R distribution which the ecosystem layer shouldn't have to know about, and shipping a "smart default" creates user expectations biota cannot reliably meet across custom presets.
+- Per-source `min_dist` override is not supported in v2.3.0 since it would break the deterministic single-pass spawn ordering. Save for v2.4.0 if anyone asks.
+- Pan/zoom uses a `requestAnimationFrame`-debounced refit on resize and a smooth multiplicative wheel zoom. Initial scale is computed from natural image size to fit the viewport with 8% breathing margin.
+
+### Smoke tests
+
+- `just smoke-ray` (existing) renamed to `just smoke-ray-search` for clarity.
+- New `just smoke-ray-ecosystem` exercises the parallel ecosystem dispatch end-to-end against a freshly seeded archive.
+- New `just smoke-ray` umbrella runs both.
 
 ### Test count
 
-279 passing, 1 skipped (was 273 + 1). 6 new tests across YAML parser (3) and spawn/run integration (3).
+283 passing, 1 skipped, 2 deselected (was 273 + 1). 6 new functional tests (3 parser + 3 spawn/integration for patch override; 4 unit for dispatch validation) and 2 new `smoke_ray`-marked integration tests for real-Ray dispatch.
 
 ---
 

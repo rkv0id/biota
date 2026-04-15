@@ -199,8 +199,10 @@ Experiment-level parameters (grid, steps, sources, spawn) live in the YAML confi
 | `--archive-dir` | Default archive directory; sources may override per-entry. Default: `archive` |
 | `--output-dir` | Root directory for ecosystem run output. Default: `ecosystem` |
 | `--device` | `cpu`, `mps`, or `cuda`. Default: `cpu` |
-| `--local-ray` | Reserved for parallel multi-experiment dispatch. Accepted but not yet used; experiments run sequentially in v2.2.0 |
-| `--ray-address` | Reserved for cluster dispatch. Accepted but not yet used |
+| `--local-ray` | Start a fresh local Ray instance and run experiments in parallel. Mutually exclusive with `--ray-address` |
+| `--ray-address` | Attach to an existing Ray cluster at `HOST[:PORT]` (or `ray://host:port` for the Client protocol) and run experiments in parallel |
+| `--workers` | Maximum experiments running concurrently when Ray is active. Defaults to detected CUDA GPU count, or 1 |
+| `--gpu-fraction` | Fraction of a GPU each worker reserves. Default `1.0` = one worker per GPU. Set to `0.5` to pack two workers per GPU |
 
 `biota doctor` checks Python, torch, device availability, Ray, and module health (search, ray_compat, ecosystem).
 
@@ -249,7 +251,8 @@ The test suite runs entirely in no-Ray mode. `just smoke-ray` exercises the Ray 
 - [x] v2.0.0 - Ecosystem simulation: spawn archive creatures on a shared grid, animated GIF output, rectangular grids
 - [x] v2.1.0 - 15 built-in descriptors (displacement ratio, angular velocity, growth gradient, morphological instability, activity, spatial entropy)
 - [x] v2.2.0 - Heterogeneous ecosystems: multi-source YAML configs, species-indexed parameter localization, per-cell ownership tracking
-- [ ] v2.3.0 - Parallel ecosystem dispatch via Ray (`--local-ray`, `--ray-address` wired through)
+- [x] v2.3.0 - Per-source `patch` override; parallel ecosystem dispatch via Ray (`--local-ray`, `--ray-address`, `--workers`, `--gpu-fraction`); sidebar layout with pan/zoom canvas
+- [ ] v2.4.0 - Per-source `min_dist` override; ecosystem auto-fit polish from cluster runs
 - [ ] v3.0.0 - Learned descriptors (AURORA-style autoencoder)
 
 ## References

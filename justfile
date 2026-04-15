@@ -21,33 +21,33 @@ typecheck:
 
 check: lint format-check typecheck test
 
-# Real-Ray smoke test, hermetic. Builds a wheel from the current source,
-# installs it into a throwaway venv at /tmp/biota-smoke-venv, runs a small
-# Ray-backed search through the wheel-installed binary, and tears the venv
-# down. Hermetic on purpose: every run starts from a clean wheel install,
-# so a stale venv can't paper over a packaging regression.
+# Real-Ray smoke test for biota search, hermetic. Builds a wheel from the
+# current source, installs it into a throwaway venv at /tmp/biota-smoke-venv,
+# runs a small Ray-backed search through the wheel-installed binary, and tears
+# the venv down. Hermetic on purpose: every run starts from a clean wheel
+# install, so a stale venv can't paper over a packaging regression.
 #
 # Tests the full local-Ray code path: @ray.remote decoration, ObjectRef
 # serialization, ray.wait, ray.get, and the cross-worker round trip.
 # The default test suite runs in no-Ray mode and cannot exercise any of that.
 #
 # Equivalent GPU test: just smoke-ray-mps (MPS) or just smoke-ray-cuda (CUDA).
-smoke-ray:
+smoke-ray-search:
     #!/usr/bin/env bash
     set -euo pipefail
     SMOKE_VENV=/tmp/biota-smoke-venv
-    echo "[smoke-ray] cleaning previous smoke venv (if any)..."
+    echo "[smoke-ray-search] cleaning previous smoke venv (if any)..."
     rm -rf "$SMOKE_VENV"
-    echo "[smoke-ray] building wheel..."
+    echo "[smoke-ray-search] building wheel..."
     rm -f dist/biota-*.whl
     uv build --wheel >/dev/null
     WHEEL=$(find dist -maxdepth 1 -name 'biota-*.whl' -type f | head -n 1)
-    echo "[smoke-ray] wheel: $WHEEL"
-    echo "[smoke-ray] creating smoke venv at $SMOKE_VENV..."
+    echo "[smoke-ray-search] wheel: $WHEEL"
+    echo "[smoke-ray-search] creating smoke venv at $SMOKE_VENV..."
     uv venv --python 3.12 "$SMOKE_VENV" >/dev/null
-    echo "[smoke-ray] installing wheel into smoke venv..."
+    echo "[smoke-ray-search] installing wheel into smoke venv..."
     uv pip install --python "$SMOKE_VENV/bin/python" --quiet "$WHEEL"
-    echo "[smoke-ray] running CPU local-Ray smoke search..."
+    echo "[smoke-ray-search] running CPU local-Ray smoke search..."
     # cd /tmp so we are NOT in the source tree - guards against any tool
     # inadvertently re-adding src/ to sys.path
     cd /tmp && "$SMOKE_VENV/bin/biota" search \
@@ -55,9 +55,80 @@ smoke-ray:
         --batch-size 4 --workers 4 \
         --local-ray \
         --grid 32 --steps 110
-    echo "[smoke-ray] cleaning up smoke venv..."
+    echo "[smoke-ray-search] cleaning up smoke venv..."
     rm -rf "$SMOKE_VENV"
-    echo "[smoke-ray] done."
+    echo "[smoke-ray-search] done."
+
+# Real-Ray smoke test for biota ecosystem. Hermetic wheel install, identical
+# pattern to smoke-ray-search but invokes the ecosystem command with a tiny
+# 2-experiment YAML config and the parallel-dispatch flags. Catches Ray
+# wiring regressions in the ecosystem path that unit tests can't reach
+# (ObjectRef serialization of EcosystemConfig, run_ecosystem-as-task
+# round trip, failure isolation across tasks).
+smoke-ray-ecosystem:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    SMOKE_VENV=/tmp/biota-smoke-venv
+    SMOKE_DATA=/tmp/biota-smoke-eco
+    echo "[smoke-ray-ecosystem] cleaning previous smoke venv and data (if any)..."
+    rm -rf "$SMOKE_VENV" "$SMOKE_DATA"
+    echo "[smoke-ray-ecosystem] building wheel..."
+    rm -f dist/biota-*.whl
+    uv build --wheel >/dev/null
+    WHEEL=$(find dist -maxdepth 1 -name 'biota-*.whl' -type f | head -n 1)
+    echo "[smoke-ray-ecosystem] wheel: $WHEEL"
+    uv venv --python 3.12 "$SMOKE_VENV" >/dev/null
+    uv pip install --python "$SMOKE_VENV/bin/python" --quiet "$WHEEL"
+    # Seed an archive with one cell so the ecosystem run has something to
+    # spawn from. Cheapest way: run a tiny dev search, capture the archive.
+    mkdir -p "$SMOKE_DATA"
+    echo "[smoke-ray-ecosystem] seeding archive..."
+    cd "$SMOKE_DATA" && "$SMOKE_VENV/bin/biota" search \
+        --preset dev --budget 8 --random-phase 4 \
+        --batch-size 2 --grid 32 --steps 80 \
+        --output-dir archive >/dev/null
+    SEED_RUN=$(ls -1 "$SMOKE_DATA/archive" | head -n 1)
+    SEED_CELL=$("$SMOKE_VENV/bin/python" -c \
+        "import pickle; a=pickle.load(open('$SMOKE_DATA/archive/$SEED_RUN/archive.pkl','rb')); print(*list(a._cells.keys())[0], sep=',')")
+    echo "[smoke-ray-ecosystem] seed run=$SEED_RUN cell=$SEED_CELL"
+    # Build a 2-experiment config that uses that cell.
+    cat > "$SMOKE_DATA/experiments.yaml" <<EOF
+    experiments:
+      - name: alpha
+        grid: 64
+        steps: 10
+        snapshot_every: 5
+        border: torus
+        output_format: gif
+        spawn: {min_dist: 20, patch: 8, seed: 0}
+        sources:
+          - {run: $SEED_RUN, cell: [$SEED_CELL], n: 2}
+      - name: beta
+        grid: 64
+        steps: 10
+        snapshot_every: 5
+        border: wall
+        output_format: gif
+        spawn: {min_dist: 20, patch: 8, seed: 1}
+        sources:
+          - {run: $SEED_RUN, cell: [$SEED_CELL], n: 2}
+    EOF
+    echo "[smoke-ray-ecosystem] running 2-experiment local-Ray ecosystem..."
+    cd "$SMOKE_DATA" && "$SMOKE_VENV/bin/biota" ecosystem \
+        --config experiments.yaml \
+        --archive-dir archive \
+        --output-dir ecosystem \
+        --local-ray --workers 2 --gpu-fraction 0
+    test -d "$SMOKE_DATA/ecosystem"
+    echo "[smoke-ray-ecosystem] runs produced:"
+    ls -1 "$SMOKE_DATA/ecosystem"
+    test "$(ls -1 "$SMOKE_DATA/ecosystem" | wc -l)" -eq 2
+    echo "[smoke-ray-ecosystem] cleaning up smoke venv and data..."
+    rm -rf "$SMOKE_VENV" "$SMOKE_DATA"
+    echo "[smoke-ray-ecosystem] done."
+
+# Umbrella: run both Ray-backed smoke tests. Useful before tagging a release.
+smoke-ray: smoke-ray-search smoke-ray-ecosystem
 
 # MPS variant of the smoke test. Same hermetic wheel setup; passes --device mps
 # and a meaningful batch size to exercise the GPU code path on Apple Silicon.

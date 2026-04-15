@@ -355,16 +355,35 @@ def ecosystem(
         False,
         "--local-ray",
         help=(
-            "Reserved for parallel dispatch of multi-experiment configs. "
-            "Accepted but not yet used; experiments run sequentially."
+            "Start a fresh local Ray instance and run experiments in parallel. "
+            "Mutually exclusive with --ray-address."
         ),
     ),
     ray_address: str | None = typer.Option(
         None,
         "--ray-address",
         help=(
-            "Reserved for parallel dispatch across a Ray cluster. "
-            "Accepted but not yet used; experiments run sequentially."
+            "Attach to an existing Ray cluster at HOST[:PORT] and run experiments "
+            "in parallel. Use 'ray://host:port' for Ray Client protocol. "
+            "Mutually exclusive with --local-ray."
+        ),
+    ),
+    workers: int | None = typer.Option(
+        None,
+        "--workers",
+        help=(
+            "Maximum experiments running concurrently when Ray is active. "
+            "Defaults to the detected CUDA GPU count, or 1 if no GPUs found. "
+            "Ignored without --local-ray or --ray-address."
+        ),
+    ),
+    gpu_fraction: float = typer.Option(
+        1.0,
+        "--gpu-fraction",
+        help=(
+            "Fraction of a GPU each worker reserves. Default 1.0 = one worker "
+            "per GPU. Set to 0.5 to pack two workers per GPU when individual "
+            "experiments leave the GPU underutilized. Ignored without Ray."
         ),
     ),
 ) -> None:
@@ -372,11 +391,15 @@ def ecosystem(
     from biota.ecosystem.config import ConfigError, load_config_file
     from biota.ecosystem.run import run_ecosystem
 
-    if local_ray or ray_address is not None:
-        print(
-            "[ecosystem] note: --local-ray and --ray-address are accepted but "
-            "not yet used; experiments will run sequentially.",
-            file=sys.stderr,
+    if local_ray and ray_address is not None:
+        raise typer.BadParameter(
+            "--local-ray and --ray-address are mutually exclusive; pass one or the other",
+            param_hint="--local-ray / --ray-address",
+        )
+    if gpu_fraction <= 0:
+        raise typer.BadParameter(
+            f"--gpu-fraction must be > 0, got {gpu_fraction}",
+            param_hint="--gpu-fraction",
         )
 
     try:
@@ -394,6 +417,49 @@ def ecosystem(
         file=sys.stderr,
     )
 
+    use_ray = local_ray or ray_address is not None
+    if use_ray:
+        from biota.ecosystem.dispatch import detect_gpu_count, run_experiments_parallel
+
+        if workers is None:
+            workers = max(1, detect_gpu_count())
+        if workers < 1:
+            raise typer.BadParameter(
+                f"--workers must be >= 1, got {workers}", param_hint="--workers"
+            )
+        print(
+            f"[ecosystem] parallel dispatch: workers={workers}, "
+            f"gpu_fraction={gpu_fraction} "
+            f"({'local Ray' if local_ray else f'cluster {ray_address}'})",
+            file=sys.stderr,
+        )
+        successes, failures = run_experiments_parallel(
+            experiments,
+            output_dir,
+            workers=workers,
+            gpu_fraction=gpu_fraction,
+            local_ray=local_ray,
+            ray_address=_normalize_ray_address(ray_address),
+        )
+        for result in successes:
+            print(f"output={result.run_dir}")
+        if failures:
+            print(
+                f"[ecosystem] {len(failures)} of {len(experiments)} experiments failed:",
+                file=sys.stderr,
+            )
+            for name, exc in failures:
+                print(f"  - {name}: {type(exc).__name__}: {exc}", file=sys.stderr)
+            raise typer.Exit(code=1)
+        return
+
+    # Sequential path.
+    if workers is not None:
+        print(
+            "[ecosystem] note: --workers ignored without --local-ray or --ray-address; "
+            "running sequentially.",
+            file=sys.stderr,
+        )
     for i, exp in enumerate(experiments):
         print(
             f"[ecosystem] running experiment {i + 1}/{len(experiments)}: {exp.name!r} "
