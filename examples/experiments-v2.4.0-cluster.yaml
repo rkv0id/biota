@@ -1,0 +1,175 @@
+# Cluster ecosystem experiments for v2.4.0.
+#
+# Designed around the cells highlighted in the atlas screenshots from
+# 20260415:
+#
+#   keen-harbor (TORUS, displ/ang_vel/vel descriptors):
+#     (30, 15, 5)   compact ringed glider, mid-fast
+#     (30, 31, 8)   max ang_vel, fast, textured small square
+#     (31, 31, 7)   speckled blob, max ang_vel near-pure glider
+#
+#   ochre-bramble (WALL, vel/gyr/spec_ent descriptors):
+#     (4, 30, 12)   large sparse polka-dot disk, slow + spectrally rich
+#     (10, 26, 13)  nested-square with core, mid-mobile, very complex
+#     (8, 28, 13)   pitted hollow form, large gyradius, high entropy
+#     (9, 23, 13)   star-like with central node, mid-vel
+#
+#   noble-fjord (TORUS, ang_vel/asym/displ descriptors):
+#     (26, 19, 15)  pure glider, patchy textured body
+#
+# Design notes:
+#   - Per-source patch override (v2.3.0) lets us give the big ochre-bramble
+#     creatures more room (patch=96 or 128) while keeping the smaller
+#     keen-harbor/noble-fjord gliders at patch=64.
+#   - min_dist sized for the largest creature in each run: 130 for
+#     pure-keen-harbor, 160-180 for mixes with ochre-bramble.
+#   - Six experiments. Two homogeneous (control runs to see each species
+#     alone), four heterogeneous (the actual story).
+#   - Grids: 256x256 for homo, 384x384 for hetero with big species.
+#   - Steps: 10k homo, 20k hetero.
+#   - Border: torus for keen-harbor + noble-fjord runs (their native
+#     regime), wall for ochre-bramble homo, torus for mixes (more
+#     interesting interactions when species can wrap and meet).
+
+global:
+  device: cuda
+  output_format: gif
+  snapshot_every: 100
+  spawn:
+    seed: 42
+
+experiments:
+
+  # === Homogeneous controls ===
+
+  - name: keen-harbor-glider-cluster
+    grid_h: 256
+    grid_w: 256
+    steps: 10000
+    border: torus
+    spawn:
+      min_dist: 130
+      patch: 64
+    sources:
+      - archive_dir: archive
+        run: 20260415-013157-keen-harbor
+        cell: [30, 31, 8]
+        n: 6
+
+  - name: ochre-bramble-substrate
+    grid_h: 256
+    grid_w: 256
+    steps: 10000
+    border: wall
+    spawn:
+      min_dist: 180
+      patch: 128
+    sources:
+      - archive_dir: archive
+        run: 20260413-154511-ochre-bramble
+        cell: [10, 26, 13]
+        n: 4
+
+  # === Heterogeneous mixes ===
+
+  # Three keen-harbor gliders racing each other on torus.
+  # Tests intra-archive species interactions where all creatures are
+  # mobile and spawned with similar patch sizing.
+  - name: keen-harbor-glider-trio
+    grid_h: 384
+    grid_w: 384
+    steps: 20000
+    border: torus
+    spawn:
+      min_dist: 140
+      patch: 64
+    sources:
+      - archive_dir: archive
+        run: 20260415-013157-keen-harbor
+        cell: [30, 15, 5]
+        n: 4
+      - archive_dir: archive
+        run: 20260415-013157-keen-harbor
+        cell: [30, 31, 8]
+        n: 4
+      - archive_dir: archive
+        run: 20260415-013157-keen-harbor
+        cell: [31, 31, 7]
+        n: 4
+
+  # Mobile gliders meet spectrally-rich substrates. Per-source patch
+  # gives the large ochre-bramble cell its needed canvas while keeping
+  # the keen-harbor glider compact.
+  - name: gliders-vs-substrate
+    grid_h: 384
+    grid_w: 384
+    steps: 20000
+    border: torus
+    spawn:
+      min_dist: 170
+      patch: 64
+    sources:
+      - archive_dir: archive
+        run: 20260415-013157-keen-harbor
+        cell: [30, 31, 8]
+        n: 6
+        patch: 64
+      - archive_dir: archive
+        run: 20260413-154511-ochre-bramble
+        cell: [4, 30, 12]
+        n: 3
+        patch: 128
+
+  # Three ochre-bramble species coexisting. All large, all spectrally
+  # complex, low mobility. Tests whether high-entropy patterns interfere
+  # constructively or destructively when they share a canvas.
+  - name: ochre-bramble-substrate-trio
+    grid_h: 384
+    grid_w: 384
+    steps: 20000
+    border: wall
+    spawn:
+      min_dist: 200
+      patch: 128
+    sources:
+      - archive_dir: archive
+        run: 20260413-154511-ochre-bramble
+        cell: [10, 26, 13]
+        n: 3
+      - archive_dir: archive
+        run: 20260413-154511-ochre-bramble
+        cell: [8, 28, 13]
+        n: 3
+      - archive_dir: archive
+        run: 20260413-154511-ochre-bramble
+        cell: [9, 23, 13]
+        n: 3
+
+  # Cross-archive cross-topology mix. Pure noble-fjord glider meets
+  # keen-harbor glider meets ochre-bramble substrate. Three archives,
+  # three descriptor regimes, on torus. The "everything everywhere all
+  # at once" run.
+  - name: cross-archive-cross-regime
+    grid_h: 384
+    grid_w: 384
+    steps: 20000
+    border: torus
+    spawn:
+      min_dist: 170
+      patch: 64
+    sources:
+      - archive_dir: archive
+        run: 20260415-030240-noble-fjord
+        cell: [26, 19, 15]
+        n: 4
+        patch: 64
+      - archive_dir: archive
+        run: 20260415-013157-keen-harbor
+        cell: [30, 15, 5]
+        n: 4
+        patch: 64
+      - archive_dir: archive
+        run: 20260413-154511-ochre-bramble
+        cell: [9, 23, 13]
+        n: 3
+        patch: 96
