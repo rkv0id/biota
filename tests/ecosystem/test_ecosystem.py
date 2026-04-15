@@ -445,6 +445,90 @@ def test_run_ecosystem_rejects_creatures_length_mismatch() -> None:
             run_ecosystem(cfg, output_root=tmp / "bad", creatures=[creature, creature])
 
 
+def test_compute_ecosystem_returns_artifacts_without_io() -> None:
+    """compute_ecosystem returns (result, artifacts) and writes nothing to disk.
+
+    This is the worker-side entry point for the Ray dispatcher: workers run
+    compute_ecosystem and ship the artifacts dict back to the driver, which
+    materializes locally. The contract is "pure compute, no I/O" so the
+    worker filesystem never gets touched.
+    """
+    import tempfile
+    from pathlib import Path
+
+    from biota.ecosystem.run import compute_ecosystem
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        archive_dir = tmp / "archive"
+        _write_archive_with_creature(archive_dir, "test-run", (5, 8, 3), _synthetic_creature())
+
+        cfg = _single_source_config(
+            archive_dir, run_id="test-run", coords=(5, 8, 3), grid_h=64, grid_w=64
+        )
+
+        # Use an output_root that does not exist; if compute_ecosystem writes
+        # anything the directory creation would itself be I/O we don't want.
+        nonexistent_out = tmp / "should-not-exist"
+        result, artifacts = compute_ecosystem(cfg, output_root=nonexistent_out)
+
+        # Nothing materialized
+        assert not nonexistent_out.exists(), "compute_ecosystem must not touch disk"
+
+        # Required artifacts present
+        assert "config.json" in artifacts
+        assert "summary.json" in artifacts
+        assert "trajectory.npy" in artifacts
+        # GIF is the default output_format for _single_source_config
+        assert "ecosystem.gif" in artifacts
+
+        # Bytes are non-empty and parseable where applicable
+        config_dict = json.loads(artifacts["config.json"].decode("utf-8"))
+        assert config_dict["name"] == cfg.name
+        summary_dict = json.loads(artifacts["summary.json"].decode("utf-8"))
+        assert summary_dict["run_id"] == result.run_id
+        assert summary_dict["measures"]["initial_mass"] == result.measures.initial_mass
+
+
+def test_compute_ecosystem_then_materialize_matches_run_ecosystem() -> None:
+    """Worker (compute) + driver (materialize) produces the same files
+    on disk as the sequential run_ecosystem path. This is the round-trip
+    invariant the cluster dispatcher relies on."""
+    import tempfile
+    from pathlib import Path
+
+    from biota.ecosystem.run import compute_ecosystem, materialize_outputs, run_ecosystem
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        archive_dir = tmp / "archive"
+        _write_archive_with_creature(archive_dir, "test-run", (5, 8, 3), _synthetic_creature())
+
+        cfg = _single_source_config(
+            archive_dir, run_id="test-run", coords=(5, 8, 3), grid_h=64, grid_w=64
+        )
+
+        # Path A: compute then materialize (the cluster dispatcher path)
+        result_a, artifacts = compute_ecosystem(cfg, output_root=tmp / "compute-then-materialize")
+        run_dir_a = Path(result_a.run_dir)
+        run_dir_a.mkdir(parents=True, exist_ok=True)
+        materialize_outputs(run_dir_a, artifacts)
+
+        # Path B: run_ecosystem (the sequential CLI path)
+        result_b = run_ecosystem(cfg, output_root=tmp / "run-ecosystem")
+        run_dir_b = Path(result_b.run_dir)
+
+        # Both produce the same set of artifact filenames on disk.
+        files_a = {p.relative_to(run_dir_a).as_posix() for p in run_dir_a.rglob("*") if p.is_file()}
+        files_b = {p.relative_to(run_dir_b).as_posix() for p in run_dir_b.rglob("*") if p.is_file()}
+        assert files_a == files_b, (
+            f"file sets differ: only-a={files_a - files_b} only-b={files_b - files_a}"
+        )
+
+        # config.json bytes are identical (same config -> same serialization).
+        assert (run_dir_a / "config.json").read_bytes() == (run_dir_b / "config.json").read_bytes()
+
+
 # === EcosystemResult.to_summary_dict ===
 
 

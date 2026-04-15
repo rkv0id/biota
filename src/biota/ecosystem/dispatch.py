@@ -36,7 +36,6 @@ from typing import Any
 
 from biota.ecosystem.config import EcosystemConfig
 from biota.ecosystem.result import EcosystemResult
-from biota.ecosystem.run import run_ecosystem
 
 # === public API ===
 
@@ -149,9 +148,19 @@ def _dispatch(
     # Build the remote function dynamically so num_gpus comes from the CLI flag.
     # Defining it inline (not at module scope) means re-decorating per call;
     # cheap, and avoids leaking a global with a fixed gpu_fraction.
+    #
+    # The remote task runs compute_ecosystem (no I/O) and returns
+    # (EcosystemResult, dict[str, bytes]). The driver materializes the bytes
+    # under its own output_root so cluster runs land on the driver, not on
+    # whichever worker happened to execute the task. Worker file systems
+    # never get written to.
     @ray.remote(num_gpus=gpu_fraction)
-    def _ray_run(cfg: EcosystemConfig, creatures: list[Any], out: Path) -> EcosystemResult:
-        return run_ecosystem(cfg, output_root=out, creatures=creatures)
+    def _ray_run(
+        cfg: EcosystemConfig, creatures: list[Any], out: Path
+    ) -> tuple[EcosystemResult, dict[str, bytes]]:
+        from biota.ecosystem.run import compute_ecosystem
+
+        return compute_ecosystem(cfg, output_root=out, creatures=creatures)
 
     # Submit only the experiments whose creatures resolved cleanly.
     futures: list[Any] = []
@@ -190,7 +199,16 @@ def _dispatch(
             exp = future_to_exp[ref]
             idx = submission_index[id(ref)]
             try:
-                result: EcosystemResult = ray.get(ref)
+                result, artifacts = ray.get(ref)
+                # Materialize on the driver. The worker's compute_ecosystem
+                # returned a prospective run_dir based on its view of
+                # output_root; on the driver that path is the same string but
+                # refers to the driver's filesystem. mkdir + write here.
+                from biota.ecosystem.run import materialize_outputs
+
+                local_run_dir = Path(result.run_dir)
+                local_run_dir.mkdir(parents=True, exist_ok=True)
+                materialize_outputs(local_run_dir, artifacts)
                 successes[idx] = result
                 status = "ok"
             except Exception as exc:

@@ -2,25 +2,43 @@
 
 ## v2.4.0 - 2026-04-15
 
-Cluster-safe ecosystem dispatch via driver-side creature resolution. The v2.3.0 cluster ecosystem path assumed the worker node had filesystem access to the same archive directory as the driver — which is wrong: in real cluster setups the driver runs on a laptop and workers run on remote machines with completely separate filesystems. Tasks would fail with `FileNotFoundError: archive run directory not found` the moment they tried to read the archive on a worker that had never seen it.
+Cluster-safe ecosystem dispatch. The v2.3.0 cluster ecosystem path made two wrong filesystem assumptions: workers could read the driver's archive directory (broken — `FileNotFoundError` on the first task), and outputs written by workers would be visible to the driver (broken — outputs landed on the worker filesystem). v2.4.0 fixes both with the same architectural pattern: dispatcher tasks are self-contained payloads, no shared filesystem assumed at any point.
 
-### Fix
+### Driver-side creature resolution
 
-- The dispatcher now loads creatures on the driver from the local archive directory before submitting Ray tasks, then ships the loaded `RolloutResult` objects in the task payload. Workers never touch the archive filesystem.
+The dispatcher now loads creatures on the driver from the local archive directory before submitting Ray tasks, then ships the loaded `RolloutResult` objects in the task payload. Workers never read the archive filesystem.
+
 - `run_ecosystem` accepts an optional `creatures: list[RolloutResult]` parameter. When provided, the runner uses these directly instead of calling `load_creature`. When `None`, the disk-load path is unchanged (the standard sequential CLI path).
-- `_load_creature` promoted to public `load_creature` since it's now genuinely a shared utility (used by `run.py` internally and `dispatch.py` externally).
+- `_load_creature` promoted to public `load_creature` since it's now a shared utility used by `run.py` internally and `dispatch.py` externally.
+
+### Driver-side output materialization
+
+The runner is split into pure compute and disk materialization. Workers run the compute and ship artifact bytes back to the driver, which writes them under its own `output_root`. Cluster runs land on the driver, not on whichever worker happened to execute the task.
+
+- New `compute_ecosystem(config, output_root, creatures=None) -> tuple[EcosystemResult, dict[str, bytes]]`. Pure compute: no I/O. Returns the result alongside an artifacts dict mapping relative filenames (`config.json`, `summary.json`, `trajectory.npy`, `ecosystem.gif` or `frames/step_*.png`) to their bytes.
+- New `materialize_outputs(run_dir, artifacts)` writes the bytes dict to disk, creating subdirectories as needed.
+- `run_ecosystem` is now a thin wrapper around `compute_ecosystem` + `materialize_outputs`. Same signature, same behavior for the sequential CLI path.
+- Per-frame PNG streaming during the simulation loop is gone — frames mode now buffers all snapshots and renders at the end. Memory cost is acceptable since long runs already buffered the snapshots in memory anyway for `trajectory.npy` and GIF rendering.
+- Old single-step writers `_save_frame_png`, `_write_gif`, `_write_outputs` removed (nothing referenced them after the refactor).
 
 ### Failure isolation
 
-Driver-side load failures (missing archive, missing cell) now isolate per experiment the same way runtime failures do: the experiment is recorded in the failures list with its exception, the others continue, the CLI exits non-zero with a summary. Pre-failure lines print inline with the runtime progress for honest tallying.
+Driver-side load failures (missing archive, missing cell) isolate per experiment the same way runtime failures do. Worker-side simulation or render failures isolate similarly. Pre-failure lines print inline with runtime progress for honest tallying.
 
-### Test count
+### Tests
 
-289 passing, 1 skipped, 2 deselected (was 287 + 1). 2 new functional tests: `test_run_ecosystem_accepts_preloaded_creatures` (proves disk and pre-loaded paths give bit-identical results), `test_run_ecosystem_rejects_creatures_length_mismatch`.
+291 passing, 1 skipped, 2 deselected (was 287 + 1). 4 new functional tests:
 
-### Verification
+- `test_run_ecosystem_accepts_preloaded_creatures`: disk and pre-loaded paths give bit-identical results.
+- `test_run_ecosystem_rejects_creatures_length_mismatch`: length validation.
+- `test_compute_ecosystem_returns_artifacts_without_io`: compute path writes nothing to disk and returns the expected artifact set.
+- `test_compute_ecosystem_then_materialize_matches_run_ecosystem`: round-trip equivalence with the sequential path.
 
-`just smoke-cluster-cpu HEAD_ADDR` now passes end-to-end. v2.3.0's same recipe failed because workers couldn't reach the archive seeded on the driver.
+### Smoke tests
+
+`scripts/smoke_ecosystem.sh` reverts the cluster-skip workaround added in v2.3.0; output verification now applies uniformly across noray, local, and cluster transports because outputs always land driver-local.
+
+`just smoke-cluster-cpu HEAD_ADDR` now passes end-to-end. v2.3.0's same recipe failed twice: first with `FileNotFoundError` because workers couldn't reach the archive seeded on the driver, then again after a workaround with a missing output directory because workers had written results to their own filesystem.
 
 ---
 

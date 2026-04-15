@@ -151,6 +151,9 @@ cd "$SMOKE_DATA" && ${ENV_ARGS[@]+"${ENV_ARGS[@]}"} "$SMOKE_VENV/bin/biota" ecos
     ${TRANSPORT_ARGS[@]+"${TRANSPORT_ARGS[@]}"} \
     ${GPU_ARGS[@]+"${GPU_ARGS[@]}"}
 
+# All transports now write outputs driver-local. Cluster mode used to land
+# outputs on the worker (broken, fixed in v2.4.0+ via materialize-on-driver),
+# so this verification is uniform across noray, local, and cluster.
 test -d "$SMOKE_DATA/ecosystem"
 log "runs produced:"
 ls -1 "$SMOKE_DATA/ecosystem"
