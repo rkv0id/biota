@@ -212,6 +212,8 @@ def test_ecosystem_help_lists_infra_flags_only() -> None:
         "--device",
         "--local-ray",
         "--ray-address",
+        "--workers",
+        "--gpu-fraction",
     ):
         assert flag in output, f"missing flag {flag} in ecosystem --help output"
     # Old inline-flag interface is gone.
@@ -254,6 +256,114 @@ def test_ecosystem_missing_name_surfaces_error(tmp_path: Path) -> None:
     result = runner.invoke(app, ["ecosystem", "--config", str(cfg)])
     assert result.exit_code != 0
     assert "name" in _strip_ansi(result.output).lower()
+
+
+def _minimal_config(path: Path) -> Path:
+    """Write a minimally-valid ecosystem config to disk and return its path.
+
+    Used by tests that exercise CLI flag validation; the config has to parse
+    cleanly so the validation runs after parsing reaches the body.
+    """
+    cfg = path / "ecosystem.yaml"
+    cfg.write_text(
+        "experiments:\n"
+        "  - name: x\n"
+        "    grid: 64\n"
+        "    steps: 5\n"
+        "    snapshot_every: 5\n"
+        "    border: wall\n"
+        "    output_format: gif\n"
+        "    spawn: {min_dist: 20, patch: 8, seed: 0}\n"
+        "    sources: [{run: r, cell: [0, 0, 0], n: 1}]\n"
+    )
+    return cfg
+
+
+def test_ecosystem_rejects_cuda_with_zero_gpu_fraction(tmp_path: Path) -> None:
+    """The contradictory combo: cuda but no GPU reservation. Must refuse."""
+    cfg = _minimal_config(tmp_path)
+    result = runner.invoke(
+        app,
+        [
+            "ecosystem",
+            "--config",
+            str(cfg),
+            "--device",
+            "cuda",
+            "--local-ray",
+            "--gpu-fraction",
+            "0",
+        ],
+    )
+    assert result.exit_code != 0
+    assert "contradictory" in _strip_ansi(result.output).lower()
+
+
+def test_ecosystem_rejects_negative_gpu_fraction(tmp_path: Path) -> None:
+    cfg = _minimal_config(tmp_path)
+    result = runner.invoke(
+        app,
+        [
+            "ecosystem",
+            "--config",
+            str(cfg),
+            "--local-ray",
+            "--gpu-fraction",
+            "-0.5",
+        ],
+    )
+    assert result.exit_code != 0
+    assert ">= 0" in _strip_ansi(result.output)
+
+
+def test_ecosystem_rejects_local_ray_and_ray_address_together(tmp_path: Path) -> None:
+    cfg = _minimal_config(tmp_path)
+    result = runner.invoke(
+        app,
+        [
+            "ecosystem",
+            "--config",
+            str(cfg),
+            "--local-ray",
+            "--ray-address",
+            "localhost:6379",
+        ],
+    )
+    assert result.exit_code != 0
+    assert "mutually exclusive" in _strip_ansi(result.output).lower()
+
+
+def test_ecosystem_warns_on_gpu_fraction_with_cpu_device(tmp_path: Path) -> None:
+    """Non-zero gpu-fraction with --device cpu should print a warning but
+    not fail; user might intentionally want this for cluster scheduling
+    reasons we cannot predict.
+
+    We pair the warning trigger with --workers 0 so that the workers
+    validation rejects after the warning prints, exiting fast without
+    actually starting Ray. The warning fires before any dispatch.
+    """
+    cfg = _minimal_config(tmp_path)
+    result = runner.invoke(
+        app,
+        [
+            "ecosystem",
+            "--config",
+            str(cfg),
+            "--device",
+            "cpu",
+            "--local-ray",
+            "--gpu-fraction",
+            "0.5",
+            "--workers",
+            "0",  # forces an early exit after the warning fires
+        ],
+    )
+    output = _strip_ansi(result.output).lower()
+    # Warning must appear regardless of whether Ray init succeeded.
+    assert "reserves gpus" in output, f"missing GPU-waste warning in: {result.output!r}"
+    # And the workers=0 validation should be the actual exit cause.
+    assert result.exit_code != 0
+    assert "workers" in output
 
 
 def test_ecosystem_end_to_end(tmp_path: Path) -> None:

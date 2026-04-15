@@ -377,14 +377,15 @@ def ecosystem(
             "Ignored without --local-ray or --ray-address."
         ),
     ),
-    gpu_fraction: float = typer.Option(
-        1.0,
+    gpu_fraction: float | None = typer.Option(
+        None,
         "--gpu-fraction",
         help=(
-            "Fraction of a GPU each worker reserves. Default 1.0 = one worker "
-            "per GPU. Set to 0.5 to pack two workers per GPU when individual "
-            "experiments leave the GPU underutilized. Set to 0 for CPU-only "
-            "scheduling (no GPU resource reservation). Ignored without Ray."
+            "Fraction of a GPU each worker reserves. Defaults derive from "
+            "--device: 1.0 for cuda (one worker per GPU), 0 for cpu and mps "
+            "(no GPU reservation). Set explicitly to pack workers per GPU, "
+            "e.g. 0.5 with --device cuda runs two workers per GPU. Ignored "
+            "without Ray."
         ),
     ),
 ) -> None:
@@ -397,10 +398,36 @@ def ecosystem(
             "--local-ray and --ray-address are mutually exclusive; pass one or the other",
             param_hint="--local-ray / --ray-address",
         )
-    if gpu_fraction < 0:
+
+    # Resolve --gpu-fraction from --device when not set explicitly. cpu and
+    # mps both mean "Ray should not reserve GPUs" because the simulation
+    # doesn't use them; cuda means "one worker per GPU" by default.
+    if gpu_fraction is None:
+        gpu_fraction = 1.0 if device == "cuda" else 0.0
+    elif gpu_fraction < 0:
         raise typer.BadParameter(
             f"--gpu-fraction must be >= 0, got {gpu_fraction}",
             param_hint="--gpu-fraction",
+        )
+    elif device == "cuda" and gpu_fraction == 0:
+        # The contradictory case: user asked for cuda but told Ray not to
+        # reserve GPUs. Tasks would compete chaotically for whichever GPU
+        # each happened to land on. Refuse rather than silently misbehave.
+        raise typer.BadParameter(
+            "--device cuda with --gpu-fraction 0 is contradictory; pass --device cpu "
+            "for CPU-only Ray scheduling, or pass --gpu-fraction > 0 to reserve GPU(s).",
+            param_hint="--gpu-fraction",
+        )
+    elif device != "cuda" and gpu_fraction > 0:
+        # User passed --gpu-fraction X with --device cpu/mps. Ray would
+        # reserve GPU resources that the simulation never uses, idling them.
+        # Warn but don't block; sometimes users want this for cluster
+        # scheduling reasons we can't predict.
+        print(
+            f"[ecosystem] note: --gpu-fraction {gpu_fraction} with --device {device} "
+            f"reserves GPUs that the simulation will not use. Pass --gpu-fraction 0 "
+            f"to release them.",
+            file=sys.stderr,
         )
 
     try:

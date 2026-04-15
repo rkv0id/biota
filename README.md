@@ -202,7 +202,7 @@ Experiment-level parameters (grid, steps, sources, spawn) live in the YAML confi
 | `--local-ray` | Start a fresh local Ray instance and run experiments in parallel. Mutually exclusive with `--ray-address` |
 | `--ray-address` | Attach to an existing Ray cluster at `HOST[:PORT]` (or `ray://host:port` for the Client protocol) and run experiments in parallel |
 | `--workers` | Maximum experiments running concurrently when Ray is active. Defaults to detected CUDA GPU count, or 1 |
-| `--gpu-fraction` | Fraction of a GPU each worker reserves. Default `1.0` = one worker per GPU. Set to `0.5` to pack two workers per GPU |
+| `--gpu-fraction` | Fraction of a GPU each worker reserves. Defaults from `--device`: `1.0` for `cuda` (one worker per GPU), `0` for `cpu` and `mps`. Set explicitly to pack workers per GPU (e.g. `0.5` with `--device cuda` runs two workers per GPU). Combinations like `--device cuda --gpu-fraction 0` are rejected as contradictory; combinations like `--device cpu --gpu-fraction 0.5` print a warning since they idle GPU resources |
 
 `biota doctor` checks Python, torch, device availability, Ray, and module health (search, ray_compat, ecosystem).
 
