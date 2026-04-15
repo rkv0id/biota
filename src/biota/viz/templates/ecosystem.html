@@ -21,17 +21,156 @@
         body {
             display: flex;
             flex-direction: column;
+            min-height: 100vh;
             background:
                 radial-gradient(ellipse at 50% 35%, #141820 0%, #0b0d10 45%, #08090b 100%);
             background-attachment: fixed;
         }
 
-        /* === centered container === */
+        /* === centered container (top header only; main area uses grid) === */
         .page-wrap {
             max-width: 1100px;
             margin: 0 auto;
             padding: 0 48px;
             width: 100%;
+        }
+
+        /* === two-column body grid: sticky meta sidebar + viz column === */
+        .page-grid {
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            flex: 1 1 0;
+            min-height: 0;  /* lets internal overflow work */
+        }
+        .run-meta {
+            border-right: 1px solid rgba(255, 255, 255, 0.04);
+            padding: 28px 24px 28px 32px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: #3f3f46 transparent;
+            position: sticky;
+            top: 0;
+            align-self: start;
+            max-height: calc(100vh - 1px);
+        }
+        .run-meta::-webkit-scrollbar { width: 4px; }
+        .run-meta::-webkit-scrollbar-track { background: transparent; }
+        .run-meta::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 2px; }
+        .run-viz {
+            padding: 28px 36px 64px 36px;
+            overflow: auto;
+            min-width: 0;  /* prevents grid item from forcing column wider than 1fr */
+            scrollbar-width: thin;
+            scrollbar-color: #3f3f46 transparent;
+        }
+        .run-viz::-webkit-scrollbar { width: 6px; height: 6px; }
+        .run-viz::-webkit-scrollbar-track { background: transparent; }
+        .run-viz::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 3px; }
+
+        /* Section blocks inside the meta sidebar */
+        .meta-section { margin-bottom: 28px; }
+        .meta-section:last-child { margin-bottom: 0; }
+        .meta-section-title {
+            font-size: 9px;
+            color: #52525b;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin: 0 0 10px 0;
+            padding-bottom: 6px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+        }
+
+        /* Source entries in the sidebar: structured 2-line blocks */
+        .source-entry {
+            margin-bottom: 14px;
+            padding-left: 8px;
+            border-left: 2px solid rgba(251, 191, 119, 0.15);
+        }
+        .source-entry:last-child { margin-bottom: 0; }
+        .source-entry-num {
+            font-size: 9px;
+            color: #71717a;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 2px;
+        }
+        .source-entry-id {
+            display: block;
+            font-size: 11px;
+            font-variant-numeric: tabular-nums;
+            color: #fbbf77;
+            text-decoration: none;
+            word-break: break-all;
+            line-height: 1.3;
+            margin-bottom: 2px;
+        }
+        .source-entry-id:hover { color: #fce7b0; }
+        .source-entry-cell {
+            font-size: 11px;
+            color: #a1a1aa;
+            font-variant-numeric: tabular-nums;
+        }
+        .source-entry-cell a {
+            color: #a1a1aa;
+            text-decoration: none;
+        }
+        .source-entry-cell a:hover { color: #d4d4d8; }
+        .source-entry-meta {
+            font-size: 10px;
+            color: #71717a;
+            margin-top: 2px;
+        }
+
+        /* Compact stat list in the sidebar (replaces the wide stats-row) */
+        .meta-stat {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            padding: 5px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.025);
+            font-size: 11px;
+        }
+        .meta-stat:last-child { border-bottom: none; }
+        .meta-stat-label {
+            color: #71717a;
+            text-transform: lowercase;
+        }
+        .meta-stat-value {
+            color: #fbbf77;
+            font-variant-numeric: tabular-nums;
+            font-weight: 500;
+        }
+        .meta-stat-unit {
+            color: #52525b;
+            font-size: 9px;
+            margin-left: 2px;
+        }
+
+        /* Sidebar mass chart: narrower, taller relative to width */
+        .meta-chart {
+            width: 100%;
+            height: 56px;
+            display: block;
+            margin-top: 8px;
+        }
+        .meta-chart-empty {
+            font-size: 10px;
+            color: #52525b;
+            font-style: italic;
+            margin-top: 8px;
+        }
+
+        /* Mobile: collapse to single column */
+        @media (max-width: 900px) {
+            .page-grid { grid-template-columns: 1fr; }
+            .run-meta {
+                position: static;
+                max-height: none;
+                border-right: none;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+                padding: 20px 24px;
+            }
+            .run-viz { padding: 20px 24px 48px 24px; }
         }
 
         /* === header === */
@@ -160,16 +299,15 @@
             margin-left: 2px;
         }
 
-        /* === main scroll area === */
+        /* === main scroll area (now the viz column handles scroll) === */
         main {
             flex: 1 1 0;
-            overflow: auto;
-            padding: 32px 0 64px 0;
-            scrollbar-width: thin;
-            scrollbar-color: #3f3f46 transparent;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
         }
 
-        /* === stats row === */
+        /* === stats row (legacy, retained for non-grid fallback paths) === */
         .stats-row {
             display: flex;
             gap: 48px;
@@ -214,16 +352,74 @@
             display: block;
         }
 
-        /* === gif display === */
-        .gif-wrap { margin-bottom: 40px; }
-        .eco-gif {
-            max-width: 768px;
+        /* === gif viewport: borderless dark canvas with pan/zoom === */
+        .gif-viewport {
+            position: relative;
             width: 100%;
-            border-radius: 8px;
-            image-rendering: pixelated;
-            border: 1px solid rgba(255,255,255,0.06);
-            display: block;
+            flex: 1 1 auto;
+            min-height: 320px;
+            overflow: hidden;
+            background: #06070a;
+            cursor: grab;
+            user-select: none;
+            -webkit-user-select: none;
         }
+        .gif-viewport.dragging { cursor: grabbing; }
+        .gif-viewport-inner {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            transform-origin: center center;
+            transition: transform 0.05s linear;
+            will-change: transform;
+        }
+        .gif-viewport-inner.no-transition { transition: none; }
+        .eco-gif {
+            display: block;
+            image-rendering: pixelated;
+            max-width: none;  /* override at runtime via JS using natural size */
+            pointer-events: none;  /* events handled by viewport */
+        }
+
+        /* HUD: zoom level + reset hint, bottom-right of viewport */
+        .gif-hud {
+            position: absolute;
+            bottom: 12px;
+            right: 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 10px;
+            color: #52525b;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            font-variant-numeric: tabular-nums;
+            pointer-events: none;
+            opacity: 0.7;
+            transition: opacity 0.15s;
+        }
+        .gif-viewport:hover .gif-hud { opacity: 1; }
+        .gif-hud-zoom {
+            color: #a1a1aa;
+            background: rgba(8, 9, 11, 0.6);
+            padding: 3px 8px;
+            border-radius: 3px;
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+        }
+        .gif-hud-hint {
+            color: #3f3f46;
+        }
+
+        /* When viz column hosts the gif viewport, drop its padding so the
+           canvas can bleed to the column edges. Filmstrip mode keeps padding. */
+        .run-viz.has-gif {
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+        }
+        .run-viz.has-gif .gif-viewport { flex: 1 1 auto; }
 
         /* === filmstrip === */
         .filmstrip-wrap { margin-bottom: 40px; }
@@ -357,72 +553,101 @@
             <span class="meta-value">{{ elapsed }}</span>
         </div>
         <div class="page-meta-row2">
-            {% if sources %}
-            {% for src in sources %}
+            {% if mode == "heterogeneous" and sources %}
+            {# Hetero: one-line summary in the header. Full list lives in the sidebar. #}
+            {{ sources | length }} sources
+            <span class="meta-sep">&middot;</span>
+            spawn min-dist {{ min_dist }}px
+            {% elif sources %}
+            {# Homogeneous: single source still fits inline. #}
             <div class="source-row">
-                <span class="source-label">source{% if mode == "heterogeneous" %} {{ loop.index }}{% endif %}:</span>
-                <a class="source-link" href="../../archive/{{ src.run_id }}/view.html">{{ src.run_id }}</a>
+                <span class="source-label">source:</span>
+                <a class="source-link" href="../../archive/{{ sources[0].run_id }}/view.html">{{ sources[0].run_id }}</a>
                 <span class="meta-sep">&middot;</span>
-                <a class="source-link" href="../../archive/{{ src.run_id }}/view.html#cell-{{ src.coords_hash }}">cell {{ src.coords_str }}</a>
-                <span class="source-count">&middot; {{ src.n }} creatures</span>
+                <a class="source-link" href="../../archive/{{ sources[0].run_id }}/view.html#cell-{{ sources[0].coords_hash }}">cell {{ sources[0].coords_str }}</a>
+                <span class="meta-sep">&middot;</span>
+                spawn min-dist {{ min_dist }}px
             </div>
-            {% endfor %}
             {% else %}
+            {# Legacy v2.0.x summary fallback. #}
             source:
             <a class="source-link" href="../../archive/{{ source_run_id }}/view.html">{{ source_run_id }}</a>
             <span class="meta-sep">&middot;</span>
             <a class="source-link" href="../../archive/{{ source_run_id }}/view.html#cell-{{ source_coords_hash }}">cell {{ source_coords }}</a>
+            <span class="meta-sep">&middot;</span>
+            spawn min-dist {{ min_dist }}px
             {% endif %}
-            <div class="source-row">
-                <span class="source-label">spawn:</span>
-                <span>min-dist {{ min_dist }}px</span>
-            </div>
         </div>
     </div>
     </header>
 
-    <main>
-    <div class="page-wrap">
-        <!-- Stats row -->
-        <div class="stats-row">
-            <div class="stat-block">
-                <div class="stat-label">initial mass</div>
-                <div class="stat-value">{{ initial_mass }}<span class="stat-unit">au</span></div>
+    <div class="page-grid">
+    <aside class="run-meta">
+        {% if sources %}
+        <div class="meta-section">
+            <div class="meta-section-title">{{ 'sources' if sources | length > 1 else 'source' }}</div>
+            {% for src in sources %}
+            <div class="source-entry">
+                {% if mode == "heterogeneous" %}
+                <div class="source-entry-num">species {{ loop.index }}</div>
+                {% endif %}
+                <a class="source-entry-id" href="../../archive/{{ src.run_id }}/view.html">{{ src.run_id }}</a>
+                <div class="source-entry-cell">
+                    <a href="../../archive/{{ src.run_id }}/view.html#cell-{{ src.coords_hash }}">cell {{ src.coords_str }}</a>
+                </div>
+                <div class="source-entry-meta">{{ src.n }} creature{{ 's' if src.n != 1 else '' }}</div>
             </div>
-            <div class="stat-block">
-                <div class="stat-label">final mass</div>
-                <div class="stat-value">{{ final_mass }}<span class="stat-unit">au</span></div>
-            </div>
-            <div class="stat-block">
-                <div class="stat-label">mass turnover</div>
-                <div class="stat-value">{{ mass_turnover_pct }}<span class="stat-unit">%/step</span></div>
-            </div>
-            <div class="stat-block">
-                <div class="stat-label">peak mass</div>
-                <div class="stat-value">{{ peak_mass }}<span class="stat-unit">au</span></div>
-            </div>
+            {% endfor %}
         </div>
+        {% endif %}
 
-        <!-- Mass history chart -->
-        <div class="mass-chart-wrap">
-            <div class="section-title">mass over time</div>
-            <svg class="mass-chart" viewBox="0 0 800 80" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+        <div class="meta-section">
+            <div class="meta-section-title">mass</div>
+            <div class="meta-stat">
+                <span class="meta-stat-label">initial</span>
+                <span class="meta-stat-value">{{ initial_mass }}<span class="meta-stat-unit">au</span></span>
+            </div>
+            <div class="meta-stat">
+                <span class="meta-stat-label">final</span>
+                <span class="meta-stat-value">{{ final_mass }}<span class="meta-stat-unit">au</span></span>
+            </div>
+            <div class="meta-stat">
+                <span class="meta-stat-label">peak</span>
+                <span class="meta-stat-value">{{ peak_mass }}<span class="meta-stat-unit">au</span></span>
+            </div>
+            <div class="meta-stat">
+                <span class="meta-stat-label">turnover</span>
+                <span class="meta-stat-value">{{ mass_turnover_pct }}<span class="meta-stat-unit">%/step</span></span>
+            </div>
+
+            {% if mass_line_path %}
+            <svg class="meta-chart" viewBox="0 0 800 80" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
                 <defs>
-                    <linearGradient id="massGrad" x1="0" y1="0" x2="0" y2="1">
+                    <linearGradient id="metaMassGrad" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stop-color="#fbbf77" stop-opacity="0.3"/>
                         <stop offset="100%" stop-color="#fbbf77" stop-opacity="0.02"/>
                     </linearGradient>
                 </defs>
-                <path d="{{ mass_area_path }}" fill="url(#massGrad)"/>
+                <path d="{{ mass_area_path }}" fill="url(#metaMassGrad)"/>
                 <path d="{{ mass_line_path }}" fill="none" stroke="#fbbf77" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
+            {% else %}
+            <div class="meta-chart-empty">mass essentially flat across run</div>
+            {% endif %}
         </div>
+    </aside>
 
-        <!-- Animation or filmstrip depending on output format -->
+    <main class="run-viz{% if output_format == 'gif' and gif_src %} has-gif{% endif %}">
+        {# Animation or filmstrip depending on output format #}
         {% if output_format == "gif" and gif_src %}
-        <div class="gif-wrap">
-            <div class="section-title">animation</div>
-            <img class="eco-gif" src="{{ gif_src }}" alt="ecosystem animation" />
+        <div class="gif-viewport" id="gifViewport">
+            <div class="gif-viewport-inner" id="gifInner">
+                <img class="eco-gif" id="ecoGif" src="{{ gif_src }}" alt="ecosystem animation" />
+            </div>
+            <div class="gif-hud">
+                <span class="gif-hud-hint">drag to pan · scroll to zoom · double-click to reset</span>
+                <span class="gif-hud-zoom" id="gifZoom">100%</span>
+            </div>
         </div>
         {% else %}
         <div class="filmstrip-wrap">
@@ -437,8 +662,8 @@
             </div>
         </div>
         {% endif %}
-    </div>
     </main>
+    </div>
 
     <!-- Lightbox -->
     <div id="lightbox" aria-hidden="true">
@@ -450,18 +675,22 @@
     </div>
 
     <script>
-    // Filmstrip click -> lightbox
-    document.getElementById('filmstrip').addEventListener('click', function(e) {
-        var card = e.target.closest('.frame-card');
-        if (!card) return;
-        document.querySelectorAll('.frame-card').forEach(function(c) { c.classList.remove('active'); });
-        card.classList.add('active');
-        document.getElementById('lightbox-img').src = card.dataset.src;
-        document.getElementById('lightbox-label').textContent = card.dataset.label;
-        var lb = document.getElementById('lightbox');
-        lb.style.display = 'flex';
-        lb.setAttribute('aria-hidden', 'false');
-    });
+    // Filmstrip click -> lightbox. Only present in frames-output mode; defensive
+    // because gif-output pages don't render a filmstrip element.
+    var filmstripEl = document.getElementById('filmstrip');
+    if (filmstripEl) {
+        filmstripEl.addEventListener('click', function(e) {
+            var card = e.target.closest('.frame-card');
+            if (!card) return;
+            document.querySelectorAll('.frame-card').forEach(function(c) { c.classList.remove('active'); });
+            card.classList.add('active');
+            document.getElementById('lightbox-img').src = card.dataset.src;
+            document.getElementById('lightbox-label').textContent = card.dataset.label;
+            var lb = document.getElementById('lightbox');
+            lb.style.display = 'flex';
+            lb.setAttribute('aria-hidden', 'false');
+        });
+    }
 
     function closeLightbox() {
         var lb = document.getElementById('lightbox');
@@ -476,6 +705,123 @@
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') closeLightbox();
     });
+
+    // === GIF viewport: pan + zoom ===
+    // Mild "infinite world" feel: drag to pan, wheel to zoom centered on cursor,
+    // double-click to reset. Only attached when gif viewport is present (gif mode).
+    var gifViewport = document.getElementById('gifViewport');
+    if (gifViewport) {
+        var inner = document.getElementById('gifInner');
+        var zoomLabel = document.getElementById('gifZoom');
+        var img = document.getElementById('ecoGif');
+
+        var scale = 1;
+        var tx = 0;
+        var ty = 0;
+        var minScale = 0.2;
+        var maxScale = 12;
+
+        // Apply transform. translate is applied AFTER the initial -50%/-50%
+        // centering, so (tx, ty) measure pixel offsets from centered position.
+        function apply(transition) {
+            inner.classList.toggle('no-transition', !transition);
+            inner.style.transform =
+                'translate(calc(-50% + ' + tx + 'px), calc(-50% + ' + ty + 'px)) ' +
+                'scale(' + scale + ')';
+            zoomLabel.textContent = Math.round(scale * 100) + '%';
+        }
+
+        // Fit-to-viewport scaling on load. The image's natural pixels are tiny
+        // (e.g. 256x256), so the default browser size would be a postage stamp.
+        // We compute the largest scale that fits the GIF inside the viewport
+        // with a small breathing margin and use that as scale=1.
+        var baseScale = 1;
+        function fitToViewport() {
+            if (!img.naturalWidth || !img.naturalHeight) return;
+            var vw = gifViewport.clientWidth;
+            var vh = gifViewport.clientHeight;
+            var margin = 0.92;  // breathing room
+            var sx = (vw * margin) / img.naturalWidth;
+            var sy = (vh * margin) / img.naturalHeight;
+            baseScale = Math.min(sx, sy);
+            // Set img to natural pixel size; scaling happens via transform.
+            img.style.width = img.naturalWidth + 'px';
+            img.style.height = img.naturalHeight + 'px';
+            scale = baseScale;
+            tx = 0;
+            ty = 0;
+            apply(false);
+        }
+        if (img.complete && img.naturalWidth) {
+            fitToViewport();
+        } else {
+            img.addEventListener('load', fitToViewport);
+        }
+        // Refit on viewport resize (browser window or sidebar collapse).
+        var resizeRaf = null;
+        window.addEventListener('resize', function() {
+            if (resizeRaf) cancelAnimationFrame(resizeRaf);
+            resizeRaf = requestAnimationFrame(fitToViewport);
+        });
+
+        // Zoom centered on cursor: keep the world point under the cursor fixed.
+        // Math: if cursor is at (cx, cy) relative to viewport center, and the
+        // current transform is (tx, ty, scale), then the world point under
+        // cursor is wp = (cx - tx) / scale. After zoom to newScale, we want
+        // newTx such that (cx - newTx) / newScale = wp, i.e.
+        // newTx = cx - wp * newScale.
+        gifViewport.addEventListener('wheel', function(e) {
+            e.preventDefault();
+            var rect = gifViewport.getBoundingClientRect();
+            var cx = e.clientX - rect.left - rect.width / 2;
+            var cy = e.clientY - rect.top - rect.height / 2;
+            var wpx = (cx - tx) / scale;
+            var wpy = (cy - ty) / scale;
+            // Smooth multiplicative zoom; deltaY positive = scroll down = zoom out.
+            var factor = Math.exp(-e.deltaY * 0.0015);
+            var newScale = Math.max(minScale * baseScale,
+                                     Math.min(maxScale * baseScale, scale * factor));
+            tx = cx - wpx * newScale;
+            ty = cy - wpy * newScale;
+            scale = newScale;
+            apply(false);
+        }, { passive: false });
+
+        // Drag to pan.
+        var dragging = false;
+        var dragStartX = 0;
+        var dragStartY = 0;
+        var dragOriginTx = 0;
+        var dragOriginTy = 0;
+        gifViewport.addEventListener('mousedown', function(e) {
+            if (e.button !== 0) return;
+            dragging = true;
+            dragStartX = e.clientX;
+            dragStartY = e.clientY;
+            dragOriginTx = tx;
+            dragOriginTy = ty;
+            gifViewport.classList.add('dragging');
+        });
+        window.addEventListener('mousemove', function(e) {
+            if (!dragging) return;
+            tx = dragOriginTx + (e.clientX - dragStartX);
+            ty = dragOriginTy + (e.clientY - dragStartY);
+            apply(false);
+        });
+        window.addEventListener('mouseup', function() {
+            if (!dragging) return;
+            dragging = false;
+            gifViewport.classList.remove('dragging');
+        });
+
+        // Double-click resets to fit.
+        gifViewport.addEventListener('dblclick', function() {
+            scale = baseScale;
+            tx = 0;
+            ty = 0;
+            apply(true);
+        });
+    }
     </script>
 </body>
 </html>
