@@ -31,7 +31,7 @@ experiments:
     snapshot_every: 40
     border: torus
     output_format: gif
-    spawn: {min_dist: 140, patch: 64, seed: 0}
+    spawn: {min_dist: 160, patch: 64, seed: 0}
     sources:
       - {run: 20260415-031303-wry-spire, cell: [25, 27, 0], n: 3}
 
@@ -56,9 +56,9 @@ experiments:
     snapshot_every: 40
     border: torus
     output_format: gif
-    spawn: {min_dist: 100, patch: 64, seed: 2}
+    spawn: {min_dist: 130, patch: 64, seed: 2}
     sources:
-      - {run: 20260415-014216-frost-creek, cell: [19, 21, 9], n: 4}
+      - {run: 20260415-014216-frost-creek, cell: [19, 21, 9], n: 3}
 
   # ============================================================
   # TORUS HETEROGENEOUS — 20k steps for full collision arc, more bodies
