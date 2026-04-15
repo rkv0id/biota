@@ -1,130 +1,126 @@
-# biota v2.2.0 ecosystem experiments — v2 after first batch failed to show dynamics
+# biota v2.2.0 ecosystem experiments - v3
 #
-# What went wrong with v1:
-# - patch=32 crushed creatures below their natural scale (8x scale-down vs the
-#   search grid). Result: pixelated stationary blobs with 0.000% mass turnover
-#   instead of pulsing/translating creatures. The DISPL=1.0 gliders didn't even
-#   glide because their body was sub-scale for the dynamics that produce flow.
-# - 512x512 and 384x1024 grids meant <1% canvas occupation. Even when something
-#   happened it looked like nothing.
-# - min_dist tuning was a non-issue compared to the patch/grid problem.
+# v2 lessons:
+# - patch=64 was correct (creatures developed natural form, dynamics worked).
+# - min_dist needed to be larger: gap = min_dist - patch was 16-36px, which
+#   meant kernel reach overlapped immediately. You missed the "here are N
+#   discrete creatures" establishment shot before they coupled.
+# - Glider-vs-static runs worked well at moderate density; could use more
+#   bodies per side.
+# - Hetero runs need more steps to play out the full collision -> exchange ->
+#   equilibrium arc. 12k cuts off mid-story.
 #
-# v2 principles:
-# - patch=64 (doubles starting mass, gets creatures near natural scale).
-# - 256x256 to 384x384 grids for most runs. ~25% canvas occupation per creature.
-# - min_dist scales: patch + ~R = patch + 16 = ~80px for static, ~100 for gliders.
-# - Drop wide landscape entirely. 320x512 if translators need running room.
-# - 4x fewer FFT cells per step than v1, so wall clock drops despite bigger patches.
+# v3 principles:
+# - min_dist = patch + 2*reach + buffer ≈ patch + 70 → ~130-140 for patch=64.
+#   Gives ~50-70px clear space at init = visible establishment.
+# - Homogeneous runs: 10k steps (most resolve fast).
+# - Heterogeneous runs: 20k steps (need full collision arc).
+# - Bump creature counts where the v2 grid had room.
 
 experiments:
 
   # ============================================================
-  # TORUS BASELINES: dense single-species, see what each creature does at scale
+  # TORUS BASELINES
   # ============================================================
 
   - name: pulser-colony-torus
-    # wry-spire (25,27,0): dense pulsing colony with sub-bodies (SPAT.ENT 0.785,
-    # GYR 0.863). At natural scale should show internal pulsing AND inter-colony
-    # interaction since min_dist=80 puts kernel reach in overlap range.
+    # wry-spire (25,27,0): dense pulsing colony.
+    # Wider min_dist=140 so we see 4 distinct colonies first, then merging.
     grid: 256
     steps: 10000
     snapshot_every: 40
     border: torus
     output_format: gif
-    spawn: {min_dist: 80, patch: 64, seed: 0}
+    spawn: {min_dist: 140, patch: 64, seed: 0}
     sources:
       - {run: 20260415-031303-wry-spire, cell: [25, 27, 0], n: 4}
 
   - name: glider-formation-torus
-    # noble-fjord (31,20,15): fast translator+rotator (DISPL 0.971, ANG.VEL 1.0).
-    # Larger grid (320x512) to give them running room. min_dist=100 wider since
-    # gliders close it themselves; too tight and they collide and merge instantly.
+    # noble-fjord (31,20,15) fast translator.
+    # min_dist=140 so initial layout is clearly N gliders, then they translate
+    # and meet on their own terms.
     grid: [320, 512]
     steps: 12000
     snapshot_every: 48
     border: torus
     output_format: gif
-    spawn: {min_dist: 100, patch: 64, seed: 1}
+    spawn: {min_dist: 140, patch: 64, seed: 1}
     sources:
       - {run: 20260415-030240-noble-fjord, cell: [31, 20, 15], n: 4}
 
   - name: woven-diamond-torus
-    # frost-creek (19,21,9): structured diamond, GRAD 0.687. Stays put. Dense
-    # spacing critical — without overlapping kernel reach they sit isolated.
+    # frost-creek (19,21,9) structured diamond, very static.
+    # Needs space at init or they look like one merged blob immediately.
     grid: 256
     steps: 10000
     snapshot_every: 40
     border: torus
     output_format: gif
-    spawn: {min_dist: 80, patch: 64, seed: 2}
+    spawn: {min_dist: 130, patch: 64, seed: 2}
     sources:
       - {run: 20260415-014216-frost-creek, cell: [19, 21, 9], n: 3}
 
   # ============================================================
-  # TORUS HETEROGENEOUS
+  # TORUS HETEROGENEOUS — 20k steps for full collision arc, more bodies
   # ============================================================
 
   - name: gliders-into-pulsers-torus
-    # 2 fast translators + 3 dense pulsers. Slightly larger grid for translator
-    # run-up. Static side wants tight, gliders close on their own.
+    # 3 gliders + 4 pulsers (was 2+3). Larger crew = more collision events.
     grid: [320, 512]
-    steps: 12000
-    snapshot_every: 48
+    steps: 20000
+    snapshot_every: 80
     border: torus
     output_format: gif
-    spawn: {min_dist: 90, patch: 64, seed: 3}
+    spawn: {min_dist: 130, patch: 64, seed: 3}
     sources:
-      - {run: 20260415-030240-noble-fjord, cell: [31, 20, 15], n: 2}
-      - {run: 20260415-031303-wry-spire,   cell: [25, 27, 0], n: 3}
+      - {run: 20260415-030240-noble-fjord, cell: [31, 20, 15], n: 3}
+      - {run: 20260415-031303-wry-spire,   cell: [25, 27, 0], n: 4}
 
   - name: gliders-into-diamonds-torus
-    # Asymmetric translator vs structured diamonds. Tests whether diamond's
-    # internal structure absorbs or deflects incoming flow.
+    # 3 gliders + 4 diamonds.
     grid: [320, 512]
-    steps: 12000
-    snapshot_every: 48
+    steps: 20000
+    snapshot_every: 80
     border: torus
     output_format: gif
-    spawn: {min_dist: 90, patch: 64, seed: 4}
+    spawn: {min_dist: 130, patch: 64, seed: 4}
     sources:
-      - {run: 20260415-030240-noble-fjord,  cell: [31, 18, 15], n: 2}
-      - {run: 20260415-014216-frost-creek,  cell: [19, 21, 9],  n: 3}
+      - {run: 20260415-030240-noble-fjord,  cell: [31, 18, 15], n: 3}
+      - {run: 20260415-014216-frost-creek,  cell: [19, 21, 9],  n: 4}
 
   - name: square-vs-splat-torus
-    # wry-spire crystalline square + frost-creek tendril splat. Both static,
-    # very different morphology. Dense to force kernel-reach overlap at init.
+    # 3+3 square vs splat. Both static, want clear establishment shot.
     grid: 256
-    steps: 10000
-    snapshot_every: 40
+    steps: 20000
+    snapshot_every: 80
     border: torus
     output_format: gif
-    spawn: {min_dist: 80, patch: 64, seed: 5}
+    spawn: {min_dist: 130, patch: 64, seed: 5}
     sources:
-      - {run: 20260415-031303-wry-spire,   cell: [21, 21, 0],  n: 2}
-      - {run: 20260415-014216-frost-creek, cell: [21, 12, 10], n: 2}
+      - {run: 20260415-031303-wry-spire,   cell: [21, 21, 0],  n: 3}
+      - {run: 20260415-014216-frost-creek, cell: [21, 12, 10], n: 3}
 
   - name: triple-faceoff-torus
-    # Translator + structured static + diffuse colony. Three playstyles, denser.
+    # 3 species × 2-3 each. 384² has the room.
     grid: 384
-    steps: 12000
-    snapshot_every: 48
+    steps: 20000
+    snapshot_every: 80
     border: torus
     output_format: gif
-    spawn: {min_dist: 90, patch: 64, seed: 6}
+    spawn: {min_dist: 130, patch: 64, seed: 6}
     sources:
-      - {run: 20260415-030240-noble-fjord, cell: [26, 19, 15], n: 2}
-      - {run: 20260415-014216-frost-creek, cell: [23, 20, 10], n: 2}
+      - {run: 20260415-030240-noble-fjord, cell: [26, 19, 15], n: 3}
+      - {run: 20260415-014216-frost-creek, cell: [23, 20, 10], n: 3}
       - {run: 20260415-014216-frost-creek, cell: [24, 15, 11], n: 2}
 
   - name: dense-mixed-long-torus
-    # 4 species x 2 each. Stress test: very dense, long, who outlasts.
-    # min_dist=75 deliberately tight to force interaction immediately.
+    # 4 species. Stress test: density + longest run.
     grid: 384
-    steps: 15000
-    snapshot_every: 60
+    steps: 20000
+    snapshot_every: 80
     border: torus
     output_format: gif
-    spawn: {min_dist: 75, patch: 64, seed: 7}
+    spawn: {min_dist: 120, patch: 64, seed: 7}
     sources:
       - {run: 20260415-031303-wry-spire,    cell: [25, 27, 0],  n: 2}
       - {run: 20260415-030240-noble-fjord,  cell: [31, 20, 15], n: 2}
@@ -132,43 +128,41 @@ experiments:
       - {run: 20260415-014216-frost-creek,  cell: [24, 15, 11], n: 2}
 
   # ============================================================
-  # WALL RUNS: quiet-cinder creatures evolved under wall dynamics
+  # WALL RUNS
   # ============================================================
 
   - name: chaotic-blob-wall
-    # quiet-cinder (8,24,13): high spectral entropy 0.819, low velocity 0.268.
-    # Internally chaotic, doesn't translate. Wall border + dense spacing.
+    # quiet-cinder (8,24,13): high spec.ent 0.819, low velocity.
     grid: 256
     steps: 10000
     snapshot_every: 40
     border: wall
     output_format: gif
-    spawn: {min_dist: 85, patch: 64, seed: 10}
+    spawn: {min_dist: 130, patch: 64, seed: 10}
     sources:
       - {run: 20260413-155501-quiet-cinder, cell: [8, 24, 13], n: 3}
 
   - name: spider-vs-maze-wall
-    # quiet-cinder (6,20,13) radial spider vs (6,17,13) maze-square. Both static
-    # and wall-evolved. Dense layout so they have to share territory.
+    # quiet-cinder spider vs maze-square. Both static, wall-evolved.
+    # 20k for hetero arc.
     grid: 256
-    steps: 12000
-    snapshot_every: 48
+    steps: 20000
+    snapshot_every: 80
     border: wall
     output_format: gif
-    spawn: {min_dist: 80, patch: 64, seed: 11}
+    spawn: {min_dist: 130, patch: 64, seed: 11}
     sources:
-      - {run: 20260413-155501-quiet-cinder, cell: [6, 20, 13], n: 2}
-      - {run: 20260413-155501-quiet-cinder, cell: [6, 17, 13], n: 2}
+      - {run: 20260413-155501-quiet-cinder, cell: [6, 20, 13], n: 3}
+      - {run: 20260413-155501-quiet-cinder, cell: [6, 17, 13], n: 3}
 
   - name: wall-stress-trio
-    # 3 quiet-cinder species, 2 each. Wall analog of dense-mixed-long-torus.
-    # Tests wall-evolved creatures in dense wall conditions.
+    # 3 quiet-cinder species, dense wall.
     grid: 384
-    steps: 15000
-    snapshot_every: 60
+    steps: 20000
+    snapshot_every: 80
     border: wall
     output_format: gif
-    spawn: {min_dist: 80, patch: 64, seed: 12}
+    spawn: {min_dist: 125, patch: 64, seed: 12}
     sources:
       - {run: 20260413-155501-quiet-cinder, cell: [8, 24, 13], n: 2}
       - {run: 20260413-155501-quiet-cinder, cell: [6, 20, 13], n: 2}
