@@ -69,8 +69,8 @@ def run_experiments_parallel(
         )
     if workers < 1:
         raise ValueError(f"workers must be >= 1, got {workers}")
-    if gpu_fraction <= 0:
-        raise ValueError(f"gpu_fraction must be > 0, got {gpu_fraction}")
+    if gpu_fraction < 0:
+        raise ValueError(f"gpu_fraction must be >= 0, got {gpu_fraction}")
 
     import ray
 

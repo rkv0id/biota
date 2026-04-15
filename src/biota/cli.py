@@ -383,7 +383,8 @@ def ecosystem(
         help=(
             "Fraction of a GPU each worker reserves. Default 1.0 = one worker "
             "per GPU. Set to 0.5 to pack two workers per GPU when individual "
-            "experiments leave the GPU underutilized. Ignored without Ray."
+            "experiments leave the GPU underutilized. Set to 0 for CPU-only "
+            "scheduling (no GPU resource reservation). Ignored without Ray."
         ),
     ),
 ) -> None:
@@ -396,9 +397,9 @@ def ecosystem(
             "--local-ray and --ray-address are mutually exclusive; pass one or the other",
             param_hint="--local-ray / --ray-address",
         )
-    if gpu_fraction <= 0:
+    if gpu_fraction < 0:
         raise typer.BadParameter(
-            f"--gpu-fraction must be > 0, got {gpu_fraction}",
+            f"--gpu-fraction must be >= 0, got {gpu_fraction}",
             param_hint="--gpu-fraction",
         )
 

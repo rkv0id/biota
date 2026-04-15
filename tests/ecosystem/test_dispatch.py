@@ -90,9 +90,9 @@ def test_run_experiments_parallel_rejects_zero_workers() -> None:
         run_experiments_parallel((), Path("/tmp"), workers=0, gpu_fraction=1.0, local_ray=True)
 
 
-def test_run_experiments_parallel_rejects_zero_gpu_fraction() -> None:
-    with pytest.raises(ValueError, match="gpu_fraction must be > 0"):
-        run_experiments_parallel((), Path("/tmp"), workers=1, gpu_fraction=0.0, local_ray=True)
+def test_run_experiments_parallel_rejects_negative_gpu_fraction() -> None:
+    with pytest.raises(ValueError, match="gpu_fraction must be >= 0"):
+        run_experiments_parallel((), Path("/tmp"), workers=1, gpu_fraction=-0.5, local_ray=True)
 
 
 def test_detect_gpu_count_returns_nonnegative_int() -> None:
@@ -125,11 +125,9 @@ def test_run_experiments_parallel_local_ray_smoke() -> None:
         )
         output_root = tmp / "ecosystem"
 
-        # CPU-only smoke: gpu_fraction=0 would be invalid, but we can pass a
-        # nominal fraction and the tasks will run on CPU since no CUDA is
-        # required by the synthetic creatures and config.device='cpu'.
-        # Ray's num_gpus=0 means CPU-only scheduling, which is what we want
-        # for a no-GPU CI machine.
+        # CPU-only smoke: gpu_fraction=0 means no GPU resource reservation,
+        # so Ray schedules tasks anywhere. Works on CI machines without CUDA
+        # since config.device='cpu' on the experiments themselves.
         successes, failures = run_experiments_parallel(
             experiments,
             output_root,

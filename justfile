@@ -65,6 +65,13 @@ smoke-ray-search:
 # wiring regressions in the ecosystem path that unit tests can't reach
 # (ObjectRef serialization of EcosystemConfig, run_ecosystem-as-task
 # round trip, failure isolation across tasks).
+#
+# Seeds the archive deterministically by pickling a hand-crafted creature
+# rather than running a real search. A real search of 8 dev rollouts is
+# stochastic and frequently produces 0 archive cells (every rollout filtered
+# out as exploded/unstable), which then makes the smoke test flaky for
+# reasons unrelated to Ray dispatch. The hand-crafted creature is the same
+# one used by tests/ecosystem/test_dispatch.py.
 smoke-ray-ecosystem:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -79,20 +86,42 @@ smoke-ray-ecosystem:
     echo "[smoke-ray-ecosystem] wheel: $WHEEL"
     uv venv --python 3.12 "$SMOKE_VENV" >/dev/null
     uv pip install --python "$SMOKE_VENV/bin/python" --quiet "$WHEEL"
-    # Seed an archive with one cell so the ecosystem run has something to
-    # spawn from. Cheapest way: run a tiny dev search, capture the archive.
-    mkdir -p "$SMOKE_DATA"
-    echo "[smoke-ray-ecosystem] seeding archive..."
-    cd "$SMOKE_DATA" && "$SMOKE_VENV/bin/biota" search \
-        --preset dev --budget 8 --random-phase 4 \
-        --batch-size 2 --grid 32 --steps 80 \
-        --output-dir archive >/dev/null
-    SEED_RUN=$(ls -1 "$SMOKE_DATA/archive" | head -n 1)
-    SEED_CELL=$("$SMOKE_VENV/bin/python" -c \
-        "import pickle; a=pickle.load(open('$SMOKE_DATA/archive/$SEED_RUN/archive.pkl','rb')); print(*list(a._cells.keys())[0], sep=',')")
-    echo "[smoke-ray-ecosystem] seed run=$SEED_RUN cell=$SEED_CELL"
-    # Build a 2-experiment config that uses that cell.
-    cat > "$SMOKE_DATA/experiments.yaml" <<EOF
+    mkdir -p "$SMOKE_DATA/archive/seed-run"
+    echo "[smoke-ray-ecosystem] seeding archive deterministically..."
+    "$SMOKE_VENV/bin/python" - <<'PYEOF'
+    import pickle
+    import numpy as np
+    from biota.search.archive import Archive
+    from biota.search.result import RolloutResult
+
+    k = 3
+    creature = RolloutResult(
+        params={
+            "R": 8.0,
+            "r": [0.5] * k,
+            "m": [0.15] * k,
+            "s": [0.015] * k,
+            "h": [0.5] * k,
+            "a": [[0.5, 0.5, 0.5]] * k,
+            "b": [[0.5, 0.5, 0.5]] * k,
+            "w": [[0.5, 0.5, 0.5]] * k,
+        },
+        seed=0,
+        descriptors=(0.3, 0.5, 0.6),
+        quality=0.8,
+        rejection_reason=None,
+        thumbnail=np.zeros((16, 32, 32), dtype=np.uint8),
+        parent_cell=None,
+        created_at=0.0,
+        compute_seconds=1.0,
+    )
+    arc = Archive()
+    arc._cells[(5, 8, 3)] = creature
+    with open("/tmp/biota-smoke-eco/archive/seed-run/archive.pkl", "wb") as f:
+        pickle.dump(arc, f)
+    print("[smoke-ray-ecosystem] seeded cell (5, 8, 3) in seed-run")
+    PYEOF
+    cat > "$SMOKE_DATA/experiments.yaml" <<'YAMLEOF'
     experiments:
       - name: alpha
         grid: 64
@@ -102,7 +131,7 @@ smoke-ray-ecosystem:
         output_format: gif
         spawn: {min_dist: 20, patch: 8, seed: 0}
         sources:
-          - {run: $SEED_RUN, cell: [$SEED_CELL], n: 2}
+          - {run: seed-run, cell: [5, 8, 3], n: 2}
       - name: beta
         grid: 64
         steps: 10
@@ -111,8 +140,8 @@ smoke-ray-ecosystem:
         output_format: gif
         spawn: {min_dist: 20, patch: 8, seed: 1}
         sources:
-          - {run: $SEED_RUN, cell: [$SEED_CELL], n: 2}
-    EOF
+          - {run: seed-run, cell: [5, 8, 3], n: 2}
+    YAMLEOF
     echo "[smoke-ray-ecosystem] running 2-experiment local-Ray ecosystem..."
     cd "$SMOKE_DATA" && "$SMOKE_VENV/bin/biota" ecosystem \
         --config experiments.yaml \
