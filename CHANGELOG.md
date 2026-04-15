@@ -36,8 +36,11 @@ Failures isolate per experiment: one bad run does not abort the others. Failed e
 ### Smoke tests
 
 - `just smoke-ray` (existing) renamed to `just smoke-ray-search` for clarity.
-- New `just smoke-ray-ecosystem` exercises the parallel ecosystem dispatch end-to-end against a freshly seeded archive.
-- New `just smoke-ray` umbrella runs both.
+- New `just smoke-ray-ecosystem` exercises the parallel ecosystem dispatch end-to-end against a freshly seeded archive (CPU local Ray).
+- New `just smoke-ray-mps-ecosystem` and `just smoke-ray-cuda-ecosystem` cover MPS and CUDA local-Ray ecosystem dispatch respectively. Catch device-handoff bugs inside Ray tasks (CUDA_VISIBLE_DEVICES masking, per-task GPU memory accumulation) that unit tests cannot reach.
+- New `just smoke-cluster-ecosystem HEAD_ADDR` and `just smoke-cluster-cuda-ecosystem HEAD_ADDR` cover cluster-attached ecosystem dispatch. Catch cross-node EcosystemConfig serialization, cluster ObjectRef round-trips, and cluster bringup wiring that local-Ray cannot exercise.
+- New `just smoke-ray` umbrella runs the local-Ray smoke tests verifiable on a single dev machine (search + CPU ecosystem + MPS ecosystem). On Linux nodes without MPS, run the recipes individually.
+- All five ecosystem smoke variants share `scripts/smoke_ecosystem.sh`, so each justfile recipe is a 5-line env-var-setting wrapper rather than 80 lines of duplicated shell.
 
 ### Test count
 

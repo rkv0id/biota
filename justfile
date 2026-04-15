@@ -72,92 +72,40 @@ smoke-ray-search:
 # out as exploded/unstable), which then makes the smoke test flaky for
 # reasons unrelated to Ray dispatch. The hand-crafted creature is the same
 # one used by tests/ecosystem/test_dispatch.py.
+#
+# All four ecosystem smoke variants share scripts/smoke_ecosystem.sh; this
+# recipe sets device=cpu and lets --gpu-fraction derive (= 0 for cpu).
 smoke-ray-ecosystem:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    SMOKE_VENV=/tmp/biota-smoke-venv
-    SMOKE_DATA=/tmp/biota-smoke-eco
-    echo "[smoke-ray-ecosystem] cleaning previous smoke venv and data (if any)..."
-    rm -rf "$SMOKE_VENV" "$SMOKE_DATA"
-    echo "[smoke-ray-ecosystem] building wheel..."
-    rm -f dist/biota-*.whl
-    uv build --wheel >/dev/null
-    WHEEL=$(find dist -maxdepth 1 -name 'biota-*.whl' -type f | head -n 1)
-    echo "[smoke-ray-ecosystem] wheel: $WHEEL"
-    uv venv --python 3.12 "$SMOKE_VENV" >/dev/null
-    uv pip install --python "$SMOKE_VENV/bin/python" --quiet "$WHEEL"
-    mkdir -p "$SMOKE_DATA/archive/seed-run"
-    echo "[smoke-ray-ecosystem] seeding archive deterministically..."
-    "$SMOKE_VENV/bin/python" - <<'PYEOF'
-    import pickle
-    import numpy as np
-    from biota.search.archive import Archive
-    from biota.search.result import RolloutResult
+    SMOKE_LABEL=smoke-ray-ecosystem \
+    SMOKE_DEVICE=cpu \
+    SMOKE_RAY_MODE=local \
+    ./scripts/smoke_ecosystem.sh
 
-    k = 3
-    creature = RolloutResult(
-        params={
-            "R": 8.0,
-            "r": [0.5] * k,
-            "m": [0.15] * k,
-            "s": [0.015] * k,
-            "h": [0.5] * k,
-            "a": [[0.5, 0.5, 0.5]] * k,
-            "b": [[0.5, 0.5, 0.5]] * k,
-            "w": [[0.5, 0.5, 0.5]] * k,
-        },
-        seed=0,
-        descriptors=(0.3, 0.5, 0.6),
-        quality=0.8,
-        rejection_reason=None,
-        thumbnail=np.zeros((16, 32, 32), dtype=np.uint8),
-        parent_cell=None,
-        created_at=0.0,
-        compute_seconds=1.0,
-    )
-    arc = Archive()
-    arc._cells[(5, 8, 3)] = creature
-    with open("/tmp/biota-smoke-eco/archive/seed-run/archive.pkl", "wb") as f:
-        pickle.dump(arc, f)
-    print("[smoke-ray-ecosystem] seeded cell (5, 8, 3) in seed-run")
-    PYEOF
-    cat > "$SMOKE_DATA/experiments.yaml" <<'YAMLEOF'
-    experiments:
-      - name: alpha
-        grid: 64
-        steps: 10
-        snapshot_every: 5
-        border: torus
-        output_format: gif
-        spawn: {min_dist: 20, patch: 8, seed: 0}
-        sources:
-          - {run: seed-run, cell: [5, 8, 3], n: 2}
-      - name: beta
-        grid: 64
-        steps: 10
-        snapshot_every: 5
-        border: wall
-        output_format: gif
-        spawn: {min_dist: 20, patch: 8, seed: 1}
-        sources:
-          - {run: seed-run, cell: [5, 8, 3], n: 2}
-    YAMLEOF
-    echo "[smoke-ray-ecosystem] running 2-experiment local-Ray ecosystem..."
-    cd "$SMOKE_DATA" && "$SMOKE_VENV/bin/biota" ecosystem \
-        --config experiments.yaml \
-        --archive-dir archive \
-        --output-dir ecosystem \
-        --local-ray --workers 2 --gpu-fraction 0
-    test -d "$SMOKE_DATA/ecosystem"
-    echo "[smoke-ray-ecosystem] runs produced:"
-    ls -1 "$SMOKE_DATA/ecosystem"
-    test "$(ls -1 "$SMOKE_DATA/ecosystem" | wc -l)" -eq 2
-    echo "[smoke-ray-ecosystem] cleaning up smoke venv and data..."
-    rm -rf "$SMOKE_VENV" "$SMOKE_DATA"
-    echo "[smoke-ray-ecosystem] done."
+# MPS ecosystem smoke. Apple Silicon variant: device=mps, local Ray. Like
+# smoke-ray-ecosystem but exercises the MPS code path inside a Ray task.
+# --gpu-fraction derives to 0 (Ray doesn't know about MPS).
+smoke-ray-mps-ecosystem:
+    SMOKE_LABEL=smoke-ray-mps-ecosystem \
+    SMOKE_DEVICE=mps \
+    SMOKE_RAY_MODE=local \
+    ./scripts/smoke_ecosystem.sh
 
-# Umbrella: run both Ray-backed smoke tests. Useful before tagging a release.
-smoke-ray: smoke-ray-search smoke-ray-ecosystem
+# CUDA local-Ray ecosystem smoke. Single-host CUDA: device=cuda, local Ray,
+# --gpu-fraction derives to 1.0. Catches CUDA device handoff bugs inside
+# Ray tasks (CUDA_VISIBLE_DEVICES masking, per-task memory accumulation).
+# Run on a node with at least one CUDA GPU.
+smoke-ray-cuda-ecosystem:
+    SMOKE_LABEL=smoke-ray-cuda-ecosystem \
+    SMOKE_DEVICE=cuda \
+    SMOKE_RAY_MODE=local \
+    ./scripts/smoke_ecosystem.sh
+
+# Umbrella: run all local-Ray smoke tests verifiable on a single dev machine
+# (search + CPU ecosystem + MPS ecosystem). Useful before tagging a release
+# from a Mac. On Linux nodes without MPS, run smoke-ray-search and
+# smoke-ray-ecosystem (and smoke-ray-cuda-ecosystem if CUDA is available)
+# individually rather than this umbrella.
+smoke-ray: smoke-ray-search smoke-ray-ecosystem smoke-ray-mps-ecosystem
 
 # MPS variant of the smoke test. Same hermetic wheel setup; passes --device mps
 # and a meaningful batch size to exercise the GPU code path on Apple Silicon.
@@ -267,6 +215,36 @@ smoke-cluster-cuda HEAD_ADDR:
     echo "[smoke-cluster-cuda] cleaning up smoke venv..."
     rm -rf "$SMOKE_VENV"
     echo "[smoke-cluster-cuda] done."
+
+# CPU cluster ecosystem smoke. Runs the parallel ecosystem dispatch against
+# an already-running Ray cluster with --device cpu. Catches cross-node
+# EcosystemConfig serialization, cluster ObjectRef round-trip, and any
+# bringup-time wiring that local-Ray doesn't exercise. Mirrors smoke-cluster
+# (search) but invokes the ecosystem command.
+#
+#   just smoke-cluster-ecosystem 10.10.12.1:6379
+smoke-cluster-ecosystem HEAD_ADDR:
+    SMOKE_LABEL=smoke-cluster-ecosystem \
+    SMOKE_DEVICE=cpu \
+    SMOKE_RAY_MODE=cluster \
+    SMOKE_RAY_ADDRESS={{HEAD_ADDR}} \
+    SMOKE_WORKERS=2 \
+    ./scripts/smoke_ecosystem.sh
+
+# CUDA cluster ecosystem smoke. Same as smoke-cluster-ecosystem but with
+# --device cuda and --gpu-fraction 1.0 (one ecosystem run per GPU). Run
+# after smoke-cluster-ecosystem confirms CPU works. Requires GPUs powered
+# on and declared in the Ray cluster (--num-gpus=1 in ray start on each
+# node).
+#
+#   just smoke-cluster-cuda-ecosystem 10.10.12.1:6379
+smoke-cluster-cuda-ecosystem HEAD_ADDR:
+    SMOKE_LABEL=smoke-cluster-cuda-ecosystem \
+    SMOKE_DEVICE=cuda \
+    SMOKE_RAY_MODE=cluster \
+    SMOKE_RAY_ADDRESS={{HEAD_ADDR}} \
+    SMOKE_WORKERS=2 \
+    ./scripts/smoke_ecosystem.sh
 
 # Before/after benchmark against the v0.3.0 baseline (341s for 500 rollouts
 # standard preset on the cluster). Run post-v0.4.0 to record the actual
