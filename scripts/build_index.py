@@ -657,6 +657,81 @@ def _mass_svg_paths(
     return area, line
 
 
+def _extract_primary_source(summary: dict[str, Any]) -> tuple[str, list[int], int]:
+    """Pull the first source's run_id, coords, and n from a summary dict.
+
+    Handles both the v2.2.0 sources-list shape and the legacy v2.0.x shape
+    where source_run_id and source_coords were top-level scalars and n lived
+    under spawn. Returns (run_id, coords, n_for_first_source).
+    """
+    sources = summary.get("sources")
+    if isinstance(sources, list) and sources:
+        first = sources[0]
+        if isinstance(first, dict):
+            return (
+                str(first.get("run", "")),
+                list(first.get("cell", [])),
+                int(first.get("n", 0)),
+            )
+    # Legacy v2.0.x shape
+    legacy_n = summary.get("spawn", {}).get("n_creatures", summary.get("spawn", {}).get("n", 0))
+    return (
+        str(summary.get("source_run_id", "")),
+        list(summary.get("source_coords", [])),
+        int(legacy_n) if legacy_n != "" else 0,
+    )
+
+
+def _build_sources_context(summary: dict[str, Any]) -> list[dict[str, Any]]:
+    """Build the per-source list passed to ecosystem.html.
+
+    Each entry has run_id, coords_str ("(y, x, z)" parenthesized for display),
+    coords_hash (joined with '-' for archive viewer deep links), and n.
+    Falls back to a single-source list reconstructed from legacy fields when
+    a v2.0.x summary doesn't have a sources list.
+    """
+    sources_raw = summary.get("sources")
+    if isinstance(sources_raw, list) and sources_raw:
+        out: list[dict[str, Any]] = []
+        for s in sources_raw:
+            if not isinstance(s, dict):
+                continue
+            cell = s.get("cell", [])
+            out.append(
+                {
+                    "run_id": s.get("run", ""),
+                    "coords_str": f"({', '.join(str(c) for c in cell)})",
+                    "coords_hash": "-".join(str(c) for c in cell),
+                    "n": s.get("n", ""),
+                }
+            )
+        return out
+    # Legacy fallback: synthesize a single entry from top-level scalars.
+    legacy_run, legacy_coords, legacy_n = _extract_primary_source(summary)
+    if not legacy_run:
+        return []
+    return [
+        {
+            "run_id": legacy_run,
+            "coords_str": f"({', '.join(str(c) for c in legacy_coords)})",
+            "coords_hash": "-".join(str(c) for c in legacy_coords),
+            "n": legacy_n,
+        }
+    ]
+
+
+def _resolve_mode(summary: dict[str, Any]) -> str:
+    """Read or infer the ecosystem run mode.
+
+    v2.2.0 summaries carry an explicit 'mode' field. Legacy summaries are
+    by definition single-source homogeneous.
+    """
+    mode = summary.get("mode")
+    if isinstance(mode, str) and mode in ("homogeneous", "heterogeneous"):
+        return mode
+    return "homogeneous"
+
+
 def _render_ecosystem_run(run_dir: Path, publish: bool = False) -> str:
     """Render an ecosystem run as a self-contained HTML page."""
     import base64
@@ -669,14 +744,12 @@ def _render_ecosystem_run(run_dir: Path, publish: bool = False) -> str:
         raise ValueError(f"no summary.json in {run_dir}")
 
     run_id = summary.get("run_id", run_dir.name)
-    source_run_id = summary.get("source_run_id", "")
-    source_coords = summary.get("source_coords", [])
+    source_run_id, source_coords, n_creatures = _extract_primary_source(summary)
     grid_h = summary.get("grid_h", summary.get("grid", ""))
     grid_w = summary.get("grid_w", summary.get("grid", ""))
     steps = summary.get("steps", "")
     border = summary.get("border", "wall")
     spawn = summary.get("spawn", {})
-    n_creatures = spawn.get("n_creatures", spawn.get("n", ""))
     min_dist = spawn.get("min_dist", "")
     measures = summary.get("measures", {})
     mass_history: list[float] = measures.get("mass_history", [])
@@ -693,8 +766,6 @@ def _render_ecosystem_run(run_dir: Path, publish: bool = False) -> str:
     final_mass_fmt = f"{final_mass:.1f}"
     peak_mass_fmt = f"{peak_mass:.1f}"
     mass_turnover_pct = f"{mass_turnover * 100:.3f}"
-    source_coords_str = f"({', '.join(str(c) for c in source_coords)})"
-    source_coords_hash = "-".join(str(c) for c in source_coords)
 
     # Build mass chart paths
     mass_area_path, mass_line_path = _mass_svg_paths(mass_history)
@@ -748,16 +819,25 @@ def _render_ecosystem_run(run_dir: Path, publish: bool = False) -> str:
     # Use snapshot count from summary.json as ground truth - frames may not
     # exist on disk (gif mode only writes ecosystem.gif, not individual frames)
     n_snapshots = len(snapshot_steps) if snapshot_steps else len(frames)
+    mode = _resolve_mode(summary)
+    sources_ctx = _build_sources_context(summary)
+    # n_creatures is the total across all sources for the header summary line.
+    total_creatures = sum(int(s.get("n", 0)) for s in sources_ctx) if sources_ctx else n_creatures
+
     template = _ENV.get_template("ecosystem.html")
     return template.render(
         run_id=run_id,
+        mode=mode,
+        sources=sources_ctx,
+        # Legacy single-source vars kept for the template's else-branch fallback
+        # in case a future code path renders without a sources list.
         source_run_id=source_run_id,
-        source_coords=source_coords_str,
-        source_coords_hash=source_coords_hash,
+        source_coords=", ".join(str(c) for c in source_coords),
+        source_coords_hash="-".join(str(c) for c in source_coords),
         grid=f"{grid_h}x{grid_w}",
         steps=steps,
         border=border,
-        n_creatures=n_creatures,
+        n_creatures=total_creatures,
         min_dist=min_dist,
         n_snapshots=n_snapshots,
         elapsed=elapsed,
@@ -794,15 +874,24 @@ def _build_eco_card_context(run_dir: Path) -> dict[str, Any]:
     summary = _load_summary(run_dir)
     spawn = summary.get("spawn", {})
     measures = summary.get("measures", {})
+    source_run_id, source_coords, n_creatures = _extract_primary_source(summary)
+    sources = summary.get("sources", []) if isinstance(summary.get("sources"), list) else []
+    mode = summary.get("mode")
+    if mode is None:
+        # Legacy summaries without 'mode' are by definition single-source homogeneous.
+        mode = "homogeneous"
     return {
         "run_id": run_dir.name,
-        "source_run_id": summary.get("source_run_id", ""),
-        "source_coords": summary.get("source_coords", []),
+        "name": summary.get("name", ""),
+        "mode": mode,
+        "source_run_id": source_run_id,
+        "source_coords": source_coords,
+        "n_sources": len(sources) if sources else 1,
         "grid_h": summary.get("grid_h", summary.get("grid", "")),
         "grid_w": summary.get("grid_w", summary.get("grid", "")),
         "steps": summary.get("steps", ""),
         "border": summary.get("border", "wall"),
-        "n_creatures": spawn.get("n_creatures", spawn.get("n", "")),
+        "n_creatures": n_creatures,
         "min_dist": spawn.get("min_dist", ""),
         "initial_mass": f"{measures.get('initial_mass', 0.0):.1f}",
         "mass_turnover": f"{measures.get('mass_turnover', 0.0) * 100:.3f}",

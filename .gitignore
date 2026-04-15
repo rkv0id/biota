@@ -15,11 +15,11 @@ wheels/
 
 # biota run output
 /index.html
-runs/
-exports/
-creature_render/
-ecosystem/
-archive/
+/runs/
+/exports/
+/creature_render/
+/ecosystem/
+/archive/
 
 # OS noise
 .DS_Store

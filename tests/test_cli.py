@@ -200,117 +200,64 @@ def test_search_grid_steps_override_applies(tmp_path: Path) -> None:
 # === ecosystem --help ===
 
 
-def test_ecosystem_help_lists_all_flags() -> None:
+def test_ecosystem_help_lists_infra_flags_only() -> None:
     result = runner.invoke(app, ["ecosystem", "--help"])
     assert result.exit_code == 0
     output = _strip_ansi(result.stdout)
+    # Infrastructure flags that should be present.
     for flag in (
-        "--run",
-        "--cell",
-        "--n",
-        "--grid",
-        "--steps",
-        "--snapshot-every",
-        "--device",
+        "--config",
         "--archive-dir",
         "--output-dir",
-        "--patch",
-        "--min-dist",
-        "--seed",
-        "--border",
-        "--output-format",
+        "--device",
+        "--local-ray",
+        "--ray-address",
     ):
         assert flag in output, f"missing flag {flag} in ecosystem --help output"
+    # Old inline-flag interface is gone.
+    for flag in ("--run", "--cell", "--n", "--snapshot-every", "--patch", "--min-dist"):
+        assert flag not in output, f"old inline flag {flag} unexpectedly still present"
 
 
 # === ecosystem error cases ===
 
 
-def test_ecosystem_bad_cell_format_errors_cleanly() -> None:
+def test_ecosystem_missing_config_errors_cleanly(tmp_path: Path) -> None:
     result = runner.invoke(
         app,
-        [
-            "ecosystem",
-            "--run",
-            "some-run",
-            "--cell",
-            "not,a,valid,coord",
-            "--n",
-            "2",
-            "--grid",
-            "64",
-            "--steps",
-            "5",
-            "--snapshot-every",
-            "5",
-            "--patch",
-            "8",
-            "--min-dist",
-            "20",
-        ],
+        ["ecosystem", "--config", str(tmp_path / "no-such-file.yaml")],
     )
     assert result.exit_code != 0
-    assert "cell" in _strip_ansi(result.output).lower()
+    assert "config file not found" in _strip_ansi(result.output).lower()
 
 
-def test_ecosystem_bad_cell_non_integer_errors_cleanly() -> None:
-    result = runner.invoke(
-        app,
-        [
-            "ecosystem",
-            "--run",
-            "some-run",
-            "--cell",
-            "1,2,x",
-            "--n",
-            "2",
-            "--grid",
-            "64",
-            "--steps",
-            "5",
-            "--snapshot-every",
-            "5",
-            "--patch",
-            "8",
-            "--min-dist",
-            "20",
-        ],
-    )
+def test_ecosystem_bad_yaml_references_parser_error(tmp_path: Path) -> None:
+    bad = tmp_path / "bad.yaml"
+    bad.write_text("experiments:\n  - name: [unclosed\n")
+    result = runner.invoke(app, ["ecosystem", "--config", str(bad)])
     assert result.exit_code != 0
+    assert "yaml" in _strip_ansi(result.output).lower()
 
 
-def test_ecosystem_missing_run_dir_errors_cleanly(tmp_path: Path) -> None:
-    result = runner.invoke(
-        app,
-        [
-            "ecosystem",
-            "--run",
-            "nonexistent-run",
-            "--cell",
-            "1,2,3",
-            "--n",
-            "2",
-            "--grid",
-            "64",
-            "--steps",
-            "5",
-            "--snapshot-every",
-            "5",
-            "--patch",
-            "8",
-            "--min-dist",
-            "20",
-            "--archive-dir",
-            str(tmp_path),
-        ],
+def test_ecosystem_missing_name_surfaces_error(tmp_path: Path) -> None:
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text(
+        "experiments:\n"
+        "  - grid: 64\n"
+        "    steps: 5\n"
+        "    snapshot_every: 5\n"
+        "    border: wall\n"
+        "    output_format: gif\n"
+        "    spawn: {min_dist: 20, patch: 8, seed: 0}\n"
+        "    sources: [{run: r, cell: [0, 0, 0], n: 1}]\n"
     )
+    result = runner.invoke(app, ["ecosystem", "--config", str(cfg)])
     assert result.exit_code != 0
-    output = _strip_ansi(result.output).lower()
-    assert "not found" in output or "run" in output
+    assert "name" in _strip_ansi(result.output).lower()
 
 
 def test_ecosystem_end_to_end(tmp_path: Path) -> None:
-    """Full ecosystem run from a search-produced archive."""
+    """Full config-driven ecosystem run from a search-produced archive."""
     import pickle
 
     import numpy as np
@@ -347,29 +294,33 @@ def test_ecosystem_end_to_end(tmp_path: Path) -> None:
     with open(archive_dir / "archive.pkl", "wb") as f:
         pickle.dump(archive, f)
 
+    # Write a valid ecosystem config pointing at that archive
     ecosystem_dir = tmp_path / "ecosystem"
+    cfg_path = tmp_path / "experiments.yaml"
+    cfg_path.write_text(
+        "experiments:\n"
+        "  - name: smoke-run\n"
+        "    grid: 64\n"
+        "    steps: 5\n"
+        "    snapshot_every: 5\n"
+        "    border: wall\n"
+        "    output_format: frames\n"
+        "    spawn:\n"
+        "      min_dist: 20\n"
+        "      patch: 8\n"
+        "      seed: 0\n"
+        "    sources:\n"
+        "      - run: test-run\n"
+        "        cell: [5, 8, 3]\n"
+        "        n: 2\n"
+    )
+
     result = runner.invoke(
         app,
         [
             "ecosystem",
-            "--run",
-            "test-run",
-            "--cell",
-            "5,8,3",
-            "--n",
-            "2",
-            "--grid",
-            "64",
-            "--steps",
-            "5",
-            "--snapshot-every",
-            "5",
-            "--patch",
-            "8",
-            "--min-dist",
-            "20",
-            "--output-format",
-            "frames",
+            "--config",
+            str(cfg_path),
             "--archive-dir",
             str(tmp_path / "archive"),
             "--output-dir",
@@ -382,6 +333,9 @@ def test_ecosystem_end_to_end(tmp_path: Path) -> None:
     eco_runs = list(ecosystem_dir.iterdir())
     assert len(eco_runs) == 1
     run_dir = eco_runs[0]
+    assert run_dir.name.endswith("-smoke-run"), (
+        f"expected run dir to end with experiment name, got {run_dir.name}"
+    )
     assert (run_dir / "summary.json").exists()
     assert (run_dir / "config.json").exists()
     assert (run_dir / "trajectory.npy").exists()

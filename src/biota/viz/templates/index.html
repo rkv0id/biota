@@ -583,18 +583,29 @@
             {% for card in eco_cards %}
             <a class="run-card" href="ecosystem/{{ card.run_id }}/view.html">
                 <div class="card-body" style="padding-top:16px">
-                    <div class="card-id">{{ card.run_id }}</div>
+                    <div class="card-id">
+                        {{ card.run_id }}
+                        {% if card.mode == "heterogeneous" %}<span style="margin-left:8px;font-size:9px;letter-spacing:0.05em;text-transform:uppercase;padding:1px 6px;border-radius:8px;background:rgba(192,132,252,0.1);color:#c084fc;border:1px solid rgba(192,132,252,0.25)">het</span>{% endif %}
+                    </div>
                     <div class="card-stats">
                         <span class="card-stat"><span class="card-stat-v">{{ card.n_creatures }}</span> creatures</span>
+                        {% if card.n_sources > 1 %}
                         <span class="card-sep">&middot;</span>
-                        <span class="card-stat"><span class="card-stat-v">{{ card.grid }}x{{ card.grid }}</span> grid</span>
+                        <span class="card-stat"><span class="card-stat-v">{{ card.n_sources }}</span> species</span>
+                        {% endif %}
+                        <span class="card-sep">&middot;</span>
+                        <span class="card-stat"><span class="card-stat-v">{{ card.grid_h }}x{{ card.grid_w }}</span> grid</span>
                         <span class="card-sep">&middot;</span>
                         <span class="card-stat"><span class="card-stat-v">{{ card.steps }}</span> steps</span>
                     </div>
                     <div class="card-rollouts">{{ card.elapsed }}</div>
                     <div class="card-config">
+                        {% if card.n_sources > 1 %}
+                        <span class="card-cfg-item">{{ card.n_sources }} archives</span>
+                        {% else %}
                         <span class="card-cfg-item">{{ card.source_run_id }}</span>
                         <span class="card-cfg-item">cell {{ card.source_coords | join(',') }}</span>
+                        {% endif %}
                         {% if card.border and card.border != "wall" %}<span class="card-cfg-item" style="color:#fbbf77">{{ card.border }}</span>{% endif %}
                     </div>
                     <div class="card-descriptors">mass turnover {{ card.mass_turnover }}%/step</div>
@@ -605,10 +616,11 @@
         {% else %}
         <div class="prose">
             <h2>Ecosystem runs</h2>
-            <p>Spawn creatures from selected archive cells together on a large shared grid and observe what happens: do they interact, ignore each other, or destabilize? The behavioral descriptor space lets you make deliberate choices about which creatures to seed together.</p>
-            <p>Homogeneous first (v2.0.0): one archive cell, multiple copies, global parameters. Then heterogeneous (v2.1.0): creatures from descriptor-space-distant cells, parameter localization.</p>
+            <p>Take creatures discovered by the search and put them on a shared grid. Two modes are available.</p>
+            <p><strong>Homogeneous</strong>: one archive cell, multiple copies. All instances share global parameters, so the run shows what a single creature does at population scale: stable colonies, oscillation, mutual annihilation.</p>
+            <p><strong>Heterogeneous</strong>: two or more cells, one species per source. Each species keeps its full parameter set (R, kernel radii, growth windows, weights). Per-cell species ownership tracks which lineage owns the local mass, blends growth fields by ownership, and advects with the flow. Species do not interbreed in v2.2.0; each one persists or dies on its own.</p>
             <div class="pill-row">
-                <a class="pill amber" href="https://github.com/rkv0id/biota" target="_blank">track progress on GitHub</a>
+                <a class="pill amber" href="https://github.com/rkv0id/biota" target="_blank">source on GitHub</a>
             </div>
         </div>
         {% endif %}

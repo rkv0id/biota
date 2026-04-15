@@ -1,68 +1,22 @@
-"""Data structures for ecosystem simulation configuration and output.
+"""Data structures produced by a completed ecosystem run.
 
-EcosystemConfig is the complete, serializable specification of one ecosystem
-run. EcosystemResult is what comes back after the simulation completes.
-Both are plain-Python dataclasses with no torch tensors or archive objects,
-so they serialize cleanly to JSON.
+EcosystemMeasures holds the time-series measures captured during the run.
+EcosystemResult wraps the config, run id, output directory, measures, and
+wall-clock timing into one object that serializes cleanly to summary.json.
+
+Config-side dataclasses (EcosystemConfig, CreatureSource, SpawnConfig) live
+in biota/ecosystem/config.py since they are parsed from YAML and validated
+before a run starts.
 """
 
 from dataclasses import dataclass
 
-
-@dataclass(frozen=True)
-class SpawnConfig:
-    """How creatures are placed on the shared grid.
-
-    Positions are generated via Poisson disk sampling: no two creatures
-    start closer than min_dist pixels. This gives naturalistic initial
-    separation while remaining fully reproducible from the seed.
-
-    Attributes:
-        n:        Number of creatures to spawn.
-        min_dist: Minimum pixel distance between any two spawn centers.
-                  Should be at least 2x the creature's typical radius.
-        patch:    Side length of the initial random patch placed at each
-                  spawn position, in ecosystem grid pixels.
-        seed:     Base RNG seed. Position sampling uses this seed;
-                  patch initialization uses seed + 1000 + i per creature.
-    """
-
-    n: int
-    min_dist: int
-    patch: int
-    seed: int
-
-
-@dataclass(frozen=True)
-class EcosystemConfig:
-    """Complete specification of one ecosystem run.
-
-    Attributes:
-        source_run_id:  The archive run this creature came from.
-        source_coords:  The (y, x, z) archive cell coordinate.
-        grid:           Side length of the shared ecosystem grid.
-        steps:          Number of simulation steps to run.
-        snapshot_every: Capture a full state snapshot every N steps.
-                        Snapshots are stored in trajectory.npy.
-        spawn:          Spawn layout configuration.
-        device:         Torch device for the simulation.
-    """
-
-    source_run_id: str
-    source_coords: tuple[int, int, int]
-    grid_h: int
-    grid_w: int
-    steps: int
-    snapshot_every: int
-    spawn: SpawnConfig
-    device: str = "cpu"
-    border: str = "torus"
-    output_format: str = "gif"
+from biota.ecosystem.config import EcosystemConfig
 
 
 @dataclass
 class EcosystemMeasures:
-    """Per-step and summary measures from the ecosystem run.
+    """Per-step and summary measures from one ecosystem run.
 
     Attributes:
         initial_mass:   Total mass at step 0 (sum of all spawn patches).
@@ -89,10 +43,10 @@ class EcosystemResult:
     """Output of one ecosystem simulation run.
 
     Attributes:
-        config:     The EcosystemConfig that produced this result.
-        run_id:     Unique identifier for this ecosystem run.
-        run_dir:    Path to the output directory as a string.
-        measures:   Quantitative measures from the simulation.
+        config:          The EcosystemConfig that produced this result.
+        run_id:          Unique identifier for this ecosystem run.
+        run_dir:         Path to the output directory as a string.
+        measures:        Quantitative measures from the simulation.
         elapsed_seconds: Wall-clock time for the simulation.
     """
 
@@ -103,14 +57,17 @@ class EcosystemResult:
     elapsed_seconds: float
 
     def to_summary_dict(self) -> dict[str, object]:
-        """Produce a JSON-serializable summary dict for summary.json."""
+        """JSON-serializable summary dict for summary.json.
+
+        The sources list preserves insertion order; species index in downstream
+        tooling (viz, species weight tensor) follows the same ordering.
+        """
         cfg = self.config
         sp = cfg.spawn
         m = self.measures
         return {
             "run_id": self.run_id,
-            "source_run_id": cfg.source_run_id,
-            "source_coords": list(cfg.source_coords),
+            "name": cfg.name,
             "grid_h": cfg.grid_h,
             "grid_w": cfg.grid_w,
             "steps": cfg.steps,
@@ -118,8 +75,17 @@ class EcosystemResult:
             "device": cfg.device,
             "border": cfg.border,
             "output_format": cfg.output_format,
+            "mode": "heterogeneous" if cfg.is_heterogeneous else "homogeneous",
+            "sources": [
+                {
+                    "archive_dir": s.archive_dir,
+                    "run": s.run_id,
+                    "cell": list(s.coords),
+                    "n": s.n,
+                }
+                for s in cfg.sources
+            ],
             "spawn": {
-                "n": sp.n,
                 "min_dist": sp.min_dist,
                 "patch": sp.patch,
                 "seed": sp.seed,

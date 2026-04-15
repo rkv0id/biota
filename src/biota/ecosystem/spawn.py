@@ -16,12 +16,16 @@ The algorithm is Bridson's dart-throwing variant (O(n)):
 If Poisson disk sampling fails to place n creatures (grid too small for the
 requested n and min_dist), the function falls back to a jittered grid so the
 run still proceeds rather than crashing.
+
+Per-creature count (n) is passed separately from SpawnConfig because in v2.2.0
+different sources in a heterogeneous run contribute different numbers of
+creatures. SpawnConfig only carries values shared across all sources.
 """
 
 import numpy as np
 import torch
 
-from biota.ecosystem.result import SpawnConfig
+from biota.ecosystem.config import SpawnConfig
 
 
 def _poisson_disk_sample(
@@ -123,13 +127,14 @@ def _jittered_grid_fallback(
 
 def compute_spawn_positions(
     spawn: SpawnConfig,
+    n: int,
     grid_h: int,
     grid_w: int,
 ) -> list[tuple[int, int]]:
     """Return (y, x) spawn center coordinates using Poisson disk sampling.
 
     Falls back to jittered grid if Poisson disk cannot place all n creatures.
-    Always returns exactly spawn.n positions.
+    Always returns exactly n positions.
     """
     rng = np.random.default_rng(spawn.seed)
     margin = spawn.patch + 2  # keep patches off the wall border
@@ -137,15 +142,15 @@ def compute_spawn_positions(
     grid_min = min(grid_h, grid_w)
 
     positions = _poisson_disk_sample(
-        n=spawn.n,
+        n=n,
         grid=grid_min,
         min_dist=float(spawn.min_dist),
         margin=margin,
         rng=rng,
     )
 
-    if len(positions) < spawn.n:
-        positions = _jittered_grid_fallback(spawn.n, grid_min, margin, rng)
+    if len(positions) < n:
+        positions = _jittered_grid_fallback(n, grid_min, margin, rng)
 
     # Scale positions to actual grid_h x grid_w if rectangular
     if grid_h != grid_w:
@@ -156,6 +161,7 @@ def compute_spawn_positions(
 
 def build_initial_state(
     spawn: SpawnConfig,
+    n: int,
     grid_h: int,
     grid_w: int,
     device: str,
@@ -168,14 +174,16 @@ def build_initial_state(
     sampling and patch initialization use independent random streams.
 
     Args:
-        spawn:   Spawn configuration (n, min_dist, patch, seed).
-        grid:    Ecosystem grid side length.
+        spawn:   Spawn layout parameters (min_dist, patch, seed).
+        n:       Number of creatures to place.
+        grid_h:  Ecosystem grid height.
+        grid_w:  Ecosystem grid width.
         device:  Torch device for the output tensor.
 
     Returns:
-        state:     (grid, grid, 1) float32 tensor on device.
+        state: (grid_h, grid_w, 1) float32 tensor on device.
     """
-    positions = compute_spawn_positions(spawn, grid_h, grid_w)
+    positions = compute_spawn_positions(spawn, n, grid_h, grid_w)
     state = torch.zeros((grid_h, grid_w, 1), dtype=torch.float32, device=device)
     patch = spawn.patch
 
@@ -194,3 +202,67 @@ def build_initial_state(
         state[y0:y1, x0:x1, 0] = patch_tensor
 
     return state
+
+
+def build_initial_state_multi_species(
+    spawn: SpawnConfig,
+    counts: list[int],
+    grid_h: int,
+    grid_w: int,
+    device: str,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Build mass and species-weight initial states for a heterogeneous run.
+
+    Total creature count is sum(counts). Spawn positions are generated in one
+    Poisson disk pass against the union, then sliced per-species in order
+    (species 0 takes the first counts[0] positions, species 1 the next
+    counts[1], and so on). This keeps spawn behaviour deterministic and
+    reproducible from a single seed regardless of how many species are
+    involved.
+
+    Each spawned patch sets the mass channel (uniform random in [0, 1) per
+    cell, same as build_initial_state) and pins species ownership to a
+    one-hot for that species' index in the counts list.
+
+    Returns:
+        mass:    (H, W, 1) float32 tensor on device.
+        weights: (H, W, S) float32 tensor on device, S = len(counts). Where
+                 mass > 0, the weight vector is one-hot for the owning
+                 species. Elsewhere it is all zeros.
+    """
+    if not counts:
+        raise ValueError("counts must contain at least one species count")
+    if any(c <= 0 for c in counts):
+        raise ValueError(f"counts must all be positive, got {counts}")
+
+    total_n = sum(counts)
+    s = len(counts)
+    positions = compute_spawn_positions(spawn, total_n, grid_h, grid_w)
+    mass = torch.zeros((grid_h, grid_w, 1), dtype=torch.float32, device=device)
+    weights = torch.zeros((grid_h, grid_w, s), dtype=torch.float32, device=device)
+    patch = spawn.patch
+
+    # Walk positions in order, assigning each to its species via the prefix
+    # sums of counts.
+    species_of: list[int] = []
+    for sp_idx, c in enumerate(counts):
+        species_of.extend([sp_idx] * c)
+
+    for i, ((cy, cx), sp_idx) in enumerate(zip(positions, species_of, strict=True)):
+        rng = np.random.default_rng(spawn.seed + 1000 + i)
+        patch_data = rng.random((patch, patch), dtype=np.float32)
+
+        y0 = max(0, cy - patch // 2)
+        x0 = max(0, cx - patch // 2)
+        y1 = min(grid_h, y0 + patch)
+        x1 = min(grid_w, x0 + patch)
+        ph = y1 - y0
+        pw = x1 - x0
+
+        patch_tensor = torch.from_numpy(patch_data[:ph, :pw]).to(device)
+        mass[y0:y1, x0:x1, 0] = patch_tensor
+        # One-hot weight for this species, but only where the patch deposited
+        # mass. This keeps weights at 0 in cells the patch didn't touch.
+        weights[y0:y1, x0:x1, sp_idx] = (patch_tensor > 0).to(torch.float32)
+
+    return mass, weights

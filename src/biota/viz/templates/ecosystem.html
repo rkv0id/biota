@@ -116,6 +116,49 @@
             color: #fbbf77;
             border: 1px solid rgba(251, 191, 119, 0.2);
         }
+        /* Mode badge mirrors the border badge visually but uses distinct
+           colors so the two sit side-by-side without ambiguity. */
+        .mode-badge {
+            display: inline-flex;
+            align-items: center;
+            font-size: 10px;
+            font-weight: 500;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            padding: 2px 7px;
+            border-radius: 10px;
+            margin-left: 6px;
+            vertical-align: middle;
+        }
+        .mode-badge.homogeneous {
+            background: rgba(160, 160, 160, 0.08);
+            color: #a1a1aa;
+            border: 1px solid rgba(160, 160, 160, 0.18);
+        }
+        .mode-badge.heterogeneous {
+            background: rgba(192, 132, 252, 0.1);
+            color: #c084fc;
+            border: 1px solid rgba(192, 132, 252, 0.25);
+        }
+
+        /* Multi-source list for heterogeneous runs. */
+        .source-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 4px;
+            margin-bottom: 2px;
+        }
+        .source-row .source-label {
+            color: #71717a;
+            font-size: 11px;
+            margin-right: 4px;
+        }
+        .source-row .source-count {
+            color: #71717a;
+            font-size: 11px;
+            margin-left: 2px;
+        }
 
         /* === main scroll area === */
         main {
@@ -296,10 +339,14 @@
     <header class="page-header">
     <div class="page-wrap">
         <h1 class="page-title">
-            <a class="title-home" href="../../index.html"><span class="title-prefix">biota</span></a>ecosystem<span class="title-sub">{{ run_id }}</span><span class="border-badge {{ border }}">{{ border }}</span>
+            <a class="title-home" href="../../index.html"><span class="title-prefix">biota</span></a>ecosystem<span class="title-sub">{{ run_id }}</span><span class="border-badge {{ border }}">{{ border }}</span><span class="mode-badge {{ mode }}">{{ mode }}</span>
         </h1>
         <div class="page-meta">
             <span class="meta-value">{{ n_creatures }}</span> creatures
+            {% if mode == "heterogeneous" %}
+            <span class="meta-sep">&middot;</span>
+            <span class="meta-value">{{ sources | length }}</span> species
+            {% endif %}
             <span class="meta-sep">&middot;</span>
             <span class="meta-value">{{ grid }}</span> grid
             <span class="meta-sep">&middot;</span>
@@ -310,12 +357,26 @@
             <span class="meta-value">{{ elapsed }}</span>
         </div>
         <div class="page-meta-row2">
+            {% if sources %}
+            {% for src in sources %}
+            <div class="source-row">
+                <span class="source-label">source{% if mode == "heterogeneous" %} {{ loop.index }}{% endif %}:</span>
+                <a class="source-link" href="../../archive/{{ src.run_id }}/view.html">{{ src.run_id }}</a>
+                <span class="meta-sep">&middot;</span>
+                <a class="source-link" href="../../archive/{{ src.run_id }}/view.html#cell-{{ src.coords_hash }}">cell {{ src.coords_str }}</a>
+                <span class="source-count">&middot; {{ src.n }} creatures</span>
+            </div>
+            {% endfor %}
+            {% else %}
             source:
             <a class="source-link" href="../../archive/{{ source_run_id }}/view.html">{{ source_run_id }}</a>
             <span class="meta-sep">&middot;</span>
             <a class="source-link" href="../../archive/{{ source_run_id }}/view.html#cell-{{ source_coords_hash }}">cell {{ source_coords }}</a>
-            <span class="meta-sep">&middot;</span>
-            min-dist {{ min_dist }}px
+            {% endif %}
+            <div class="source-row">
+                <span class="source-label">spawn:</span>
+                <span>min-dist {{ min_dist }}px</span>
+            </div>
         </div>
     </div>
     </header>

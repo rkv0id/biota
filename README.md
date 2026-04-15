@@ -71,18 +71,57 @@ Every creature is rendered as an animated magma-colorized thumbnail with hover t
 
 ## Ecosystem simulation
 
-Once you have an archive, seed a shared ecosystem grid from any archived creature:
+Once you have an archive, define one or more ecosystem experiments in a YAML config and run them:
 
 ```bash
-biota ecosystem \
-    --run 20260413-134355-hazy-creek \
-    --cell 5,23,13 \
-    --n 8 --grid 512 --steps 5000 --snapshot-every 35 \
-    --patch 32 --min-dist 55 \
-    --device cuda --border torus --output-format gif
+biota ecosystem --config experiments.yaml --device cuda
 ```
 
-The grid can be square (`--grid 512`) or rectangular (`--grid 192x512` for a landscape layout). Output is an animated GIF. After running, rebuild the index to include ecosystem results in the atlas:
+A minimal config defines what to spawn, on what grid, for how long:
+
+```yaml
+experiments:
+  - name: dense-population
+    grid: 512                     # 512 for square, [192, 512] for rectangular
+    steps: 5000
+    snapshot_every: 35
+    border: torus                 # 'torus' or 'wall'
+    output_format: gif            # 'gif' or 'frames'
+    spawn:
+      min_dist: 55                # min pixel distance between spawn centers
+      patch: 32                   # initial random patch side length
+      seed: 0
+    sources:
+      - run: 20260413-134355-hazy-creek
+        cell: [5, 23, 13]
+        n: 8
+```
+
+A heterogeneous experiment lists multiple sources. Each source contributes its own creature with its own full parameter set; species ownership is tracked per-cell and growth fields blend by ownership weight:
+
+```yaml
+experiments:
+  - name: predator-prey
+    grid: 512
+    steps: 8000
+    snapshot_every: 50
+    border: torus
+    output_format: gif
+    spawn:
+      min_dist: 60
+      patch: 28
+      seed: 42
+    sources:
+      - run: 20260413-134355-hazy-creek
+        cell: [5, 23, 13]
+        n: 6
+      - archive_dir: archive-secondary    # optional per-source override
+        run: 20260414-091122-still-pond
+        cell: [22, 8, 11]
+        n: 6
+```
+
+Multiple experiments in a single file run sequentially. After running, rebuild the index to include ecosystem results in the atlas:
 
 ```bash
 python scripts/build_index.py \
@@ -90,6 +129,16 @@ python scripts/build_index.py \
     --ecosystem-dir ecosystem \
     --publish
 ```
+
+## Relationship to related work
+
+The closest published work is Plantec et al. 2025, [Exploring Flow-Lenia Universes](https://arxiv.org/abs/2506.08569). Both efforts run multi-rule Flow-Lenia on a shared grid, but the framing and mechanism are different.
+
+Plantec's setup is a **universe search**: random P-field initialization, random kernel sets, and per-cell parameter embeddings that drift under the dynamics. Speciation emerges in-simulation because the P field itself evolves and can carve out distinct regions over time. Only the growth-window vector `h` is localized; kernel parameters (R, r, a, b, w) are shared across the grid because spatial variation in those would break the FFT factorization the step relies on.
+
+biota's heterogeneous mode is a **curated gene-pool ecosystem**. The creatures are not random; they come from a MAP-Elites archive built by the search loop, each one a behavioral variant validated by descriptors and quality. A heterogeneous run picks specific archive cells, treats each as a species, and gives every species its own complete parameter set: R, r, a, b, w, and the h vector. The cost is one FFT pass per species per step; the upshot is that the species in the run are interpretable, reproducible, and selectable from the same descriptor space the atlas exposes. Species ownership is tracked per cell as a simplex weight that advects with the mass; growth fields blend by ownership. There is no in-simulation speciation in v2.2.0: the species count is fixed at the start of the run.
+
+The two approaches answer different questions. Plantec asks "what kinds of universes does Flow-Lenia generate from random initial conditions?". biota asks "what happens when these specific creatures, found by search, are placed together?". The first is open-ended exploration of universe space; the second is hypothesis-driven study of the archive. They are complementary, and the heterogeneous code path here borrows the per-cell ownership idea from Plantec while keeping each species' parameters intact.
 
 ## Running on a cluster
 
@@ -139,24 +188,16 @@ Three presets: `dev` (64x64, 200 steps), `standard` (192x192, 300 steps), `prett
 
 ### `biota ecosystem`
 
-All positional flags are required.
+Experiment-level parameters (grid, steps, sources, spawn) live in the YAML config. CLI flags carry only infrastructure.
 
 | Flag | Description |
 |---|---|
-| `--run` | Source archive run id (directory name under `--archive-dir`) |
-| `--cell` | Archive cell coordinate as `y,x,z` |
-| `--n` | Number of creature copies to spawn |
-| `--grid` | Grid size: `512` for square, `192x512` for rectangular (HxW) |
-| `--steps` | Number of simulation steps |
-| `--snapshot-every` | Capture a state snapshot every N steps |
-| `--patch` | Side length of the initial random patch per creature |
-| `--min-dist` | Minimum pixel distance between spawn centers |
-| `--output-format` | `gif` (default) or `frames` |
-| `--border` | `torus` (default) or `wall` |
-| `--device` | `cpu`, `mps`, or `cuda` |
-| `--archive-dir` | `archive` |
-| `--output-dir` | `ecosystem` |
-| `--seed` | RNG seed for spawn positions |
+| `--config` | Path to a YAML file defining one or more experiments (required) |
+| `--archive-dir` | Default archive directory; sources may override per-entry. Default: `archive` |
+| `--output-dir` | Root directory for ecosystem run output. Default: `ecosystem` |
+| `--device` | `cpu`, `mps`, or `cuda`. Default: `cpu` |
+| `--local-ray` | Reserved for parallel multi-experiment dispatch. Accepted but not yet used; experiments run sequentially in v2.2.0 |
+| `--ray-address` | Reserved for cluster dispatch. Accepted but not yet used |
 
 `biota doctor` checks Python, torch, device availability, Ray, and module health (search, ray_compat, ecosystem).
 
@@ -176,19 +217,19 @@ archive/20260413-134355-hazy-creek/
 
 ### Ecosystem runs
 ```
-ecosystem/20260414-124443-700-eco-hazy-creek-5_23_13/
-├── config.json         # ecosystem configuration
-├── summary.json        # measures: mass history, turnover, snapshot steps
+ecosystem/20260415-104007-096-dense-population/
+├── config.json         # resolved experiment configuration
+├── summary.json        # mode, sources, measures (mass history, turnover)
 ├── ecosystem.gif       # animated GIF output (gif mode)
 ├── frames/             # individual PNG snapshots (frames mode)
-├── trajectory.npy      # raw float32 state snapshots (n_snapshots, H, W)
+├── trajectory.npy      # raw float32 mass snapshots (n_snapshots, H, W)
 └── view.html           # ecosystem viewer with mass chart and animation
 ```
 
 ## Development
 
 ```bash
-just check       # ruff + pyright + pytest (205 tests)
+just check       # ruff + pyright + pytest (273 tests)
 just smoke-ray   # local-Ray integration smoke test
 ```
 
@@ -202,9 +243,10 @@ The test suite runs entirely in no-Ray mode. `just smoke-ray` exercises the Ray 
 - [x] v0.4.0 - Batched rollout engine, 3.5x cluster speedup
 - [x] v1.0.0 - Lineage view, atlas site, public launch at [biota-atlas.pages.dev](https://biota-atlas.pages.dev)
 - [x] v1.1.0 - 9 built-in descriptors, `--descriptors` CLI, per-axis archive filtering, custom descriptor API
-- [x] v2.1.0 - 15 built-in descriptors (displacement ratio, angular velocity, growth gradient, morphological instability, activity, spatial entropy)
 - [x] v2.0.0 - Ecosystem simulation: spawn archive creatures on a shared grid, animated GIF output, rectangular grids
-- [ ] v2.1.0 - Heterogeneous ecosystems: multiple creature types from descriptor-distant cells
+- [x] v2.1.0 - 15 built-in descriptors (displacement ratio, angular velocity, growth gradient, morphological instability, activity, spatial entropy)
+- [x] v2.2.0 - Heterogeneous ecosystems: multi-source YAML configs, species-indexed parameter localization, per-cell ownership tracking
+- [ ] v2.3.0 - Parallel ecosystem dispatch via Ray (`--local-ray`, `--ray-address` wired through)
 - [ ] v3.0.0 - Learned descriptors (AURORA-style autoencoder)
 
 ## References

@@ -1,30 +1,39 @@
 """Tests for the ecosystem simulation module.
 
-Covers Poisson disk sampling, spawn state construction, and the full
-run_ecosystem pipeline with a synthetic creature.
+Covers Poisson disk sampling, spawn state construction, summary_dict
+serialization, and the full run_ecosystem pipeline end-to-end via a real
+on-disk archive pickle.
+
+run_ecosystem now loads its creatures from disk (per CreatureSource entries
+in the config) rather than taking a pre-loaded RolloutResult. To exercise it
+the tests build a tiny real Archive with one cell, pickle it, and point the
+config at that directory.
 """
 
 import json
 import math
+import pickle
 import tempfile
 from pathlib import Path
 
 import numpy as np
 
-from biota.ecosystem.result import EcosystemConfig, EcosystemMeasures, SpawnConfig
+from biota.ecosystem.config import CreatureSource, EcosystemConfig, SpawnConfig
+from biota.ecosystem.result import EcosystemMeasures, EcosystemResult
 from biota.ecosystem.spawn import (
     _jittered_grid_fallback,  # type: ignore[reportPrivateUsage]
     _poisson_disk_sample,  # type: ignore[reportPrivateUsage]
     build_initial_state,
     compute_spawn_positions,
 )
+from biota.search.archive import Archive
 from biota.search.result import RolloutResult
 
 # === helpers ===
 
 
-def _spawn(n: int = 4, min_dist: int = 60, patch: int = 16, seed: int = 0) -> SpawnConfig:
-    return SpawnConfig(n=n, min_dist=min_dist, patch=patch, seed=seed)
+def _spawn(min_dist: int = 60, patch: int = 16, seed: int = 0) -> SpawnConfig:
+    return SpawnConfig(min_dist=min_dist, patch=patch, seed=seed)
 
 
 def _synthetic_creature() -> RolloutResult:
@@ -49,6 +58,56 @@ def _synthetic_creature() -> RolloutResult:
         parent_cell=None,
         created_at=0.0,
         compute_seconds=1.0,
+    )
+
+
+def _write_archive_with_creature(
+    root: Path,
+    run_id: str,
+    coords: tuple[int, int, int],
+    creature: RolloutResult,
+) -> Path:
+    """Write a pickled Archive containing exactly one creature at coords.
+
+    The bin counts are chosen so that the creature's descriptors bin cleanly
+    into the requested coords. For the synthetic creature descriptors
+    (0.3, 0.5, 0.6) this just means the default (32, 32, 16) bins at
+    (9, 16, 9). Tests that need other coords should pass descriptors that
+    bin into those coords or use a different archive setup.
+    """
+    archive = Archive()
+    # Force the bin math by going directly at the dict; Archive's try_insert
+    # would bin on descriptors and we'd be tied to the default descriptors.
+    archive._cells[coords] = creature  # pyright: ignore[reportPrivateUsage]
+    run_dir = root / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    with open(run_dir / "archive.pkl", "wb") as f:
+        pickle.dump(archive, f)
+    return run_dir
+
+
+def _single_source_config(
+    archive_dir: Path,
+    run_id: str = "test-run",
+    coords: tuple[int, int, int] = (5, 8, 3),
+    n: int = 2,
+    grid_h: int = 64,
+    grid_w: int = 64,
+    steps: int = 5,
+    snapshot_every: int = 5,
+    output_format: str = "gif",
+) -> EcosystemConfig:
+    return EcosystemConfig(
+        name="test-experiment",
+        sources=(CreatureSource(archive_dir=str(archive_dir), run_id=run_id, coords=coords, n=n),),
+        grid_h=grid_h,
+        grid_w=grid_w,
+        steps=steps,
+        snapshot_every=snapshot_every,
+        spawn=SpawnConfig(min_dist=20, patch=6, seed=0),
+        device="cpu",
+        border="wall",
+        output_format=output_format,
     )
 
 
@@ -97,21 +156,20 @@ def test_jittered_grid_fallback_returns_exactly_n() -> None:
 
 
 def test_compute_spawn_positions_returns_n() -> None:
-    spawn = _spawn(n=4, min_dist=60)
-    pts = compute_spawn_positions(spawn, grid_h=512, grid_w=512)
+    pts = compute_spawn_positions(_spawn(min_dist=60), n=4, grid_h=512, grid_w=512)
     assert len(pts) == 4
 
 
 def test_compute_spawn_positions_reproducible() -> None:
-    spawn = _spawn(n=4, min_dist=60, seed=99)
-    pts1 = compute_spawn_positions(spawn, grid_h=512, grid_w=512)
-    pts2 = compute_spawn_positions(spawn, grid_h=512, grid_w=512)
+    spawn = _spawn(min_dist=60, seed=99)
+    pts1 = compute_spawn_positions(spawn, n=4, grid_h=512, grid_w=512)
+    pts2 = compute_spawn_positions(spawn, n=4, grid_h=512, grid_w=512)
     assert pts1 == pts2
 
 
 def test_compute_spawn_positions_seed_matters() -> None:
-    pts1 = compute_spawn_positions(_spawn(seed=0), grid_h=512, grid_w=512)
-    pts2 = compute_spawn_positions(_spawn(seed=1), grid_h=512, grid_w=512)
+    pts1 = compute_spawn_positions(_spawn(seed=0), n=4, grid_h=512, grid_w=512)
+    pts2 = compute_spawn_positions(_spawn(seed=1), n=4, grid_h=512, grid_w=512)
     assert pts1 != pts2
 
 
@@ -121,48 +179,107 @@ def test_compute_spawn_positions_seed_matters() -> None:
 def test_build_initial_state_shape() -> None:
     import torch
 
-    spawn = _spawn(n=4, patch=12)
-    state = build_initial_state(spawn, grid_h=256, grid_w=256, device="cpu")
+    state = build_initial_state(_spawn(patch=12), n=4, grid_h=256, grid_w=256, device="cpu")
     assert state.shape == (256, 256, 1)
     assert state.dtype == torch.float32
 
 
 def test_build_initial_state_has_nonzero_mass() -> None:
-    spawn = _spawn(n=4, patch=12)
-    state = build_initial_state(spawn, grid_h=256, grid_w=256, device="cpu")
+    state = build_initial_state(_spawn(patch=12), n=4, grid_h=256, grid_w=256, device="cpu")
     assert float(state.sum()) > 0.0
 
 
 def test_build_initial_state_mass_bounded() -> None:
     # Each patch is uniform [0, 1) so total mass <= n * patch^2
-    spawn = _spawn(n=4, patch=12)
-    state = build_initial_state(spawn, grid_h=256, grid_w=256, device="cpu")
+    state = build_initial_state(_spawn(patch=12), n=4, grid_h=256, grid_w=256, device="cpu")
     max_possible = 4 * 12 * 12
     assert float(state.sum()) <= max_possible
 
 
 def test_build_initial_state_reproducible() -> None:
-    spawn = _spawn(n=3, seed=42)
-    s1 = build_initial_state(spawn, grid_h=256, grid_w=256, device="cpu")
-    s2 = build_initial_state(spawn, grid_h=256, grid_w=256, device="cpu")
+    spawn = _spawn(seed=42)
+    s1 = build_initial_state(spawn, n=3, grid_h=256, grid_w=256, device="cpu")
+    s2 = build_initial_state(spawn, n=3, grid_h=256, grid_w=256, device="cpu")
     assert (s1 == s2).all()
+
+
+# === build_initial_state_multi_species ===
+
+
+def test_build_initial_state_multi_species_shapes() -> None:
+    import torch
+
+    from biota.ecosystem.spawn import build_initial_state_multi_species
+
+    mass, weights = build_initial_state_multi_species(
+        _spawn(min_dist=20, patch=8), counts=[3, 2], grid_h=128, grid_w=128, device="cpu"
+    )
+    assert mass.shape == (128, 128, 1)
+    assert weights.shape == (128, 128, 2)
+    assert mass.dtype == torch.float32
+    assert weights.dtype == torch.float32
+
+
+def test_build_initial_state_multi_species_weights_one_hot() -> None:
+    """Each cell with mass should be owned by exactly one species at init."""
+    from biota.ecosystem.spawn import build_initial_state_multi_species
+
+    mass, weights = build_initial_state_multi_species(
+        _spawn(min_dist=20, patch=8, seed=11),
+        counts=[2, 2],
+        grid_h=128,
+        grid_w=128,
+        device="cpu",
+    )
+    mass_present = mass[:, :, 0] > 0
+    if mass_present.any():
+        # At every mass-bearing cell, weights should sum to 1 and be one-hot.
+        sums = weights.sum(dim=-1)[mass_present]
+        assert (sums - 1.0).abs().max().item() < 1e-6
+        # One-hot means max value per cell is 1.0
+        max_per_cell = weights.max(dim=-1).values[mass_present]
+        assert (max_per_cell - 1.0).abs().max().item() < 1e-6
+
+
+def test_build_initial_state_multi_species_rejects_empty_counts() -> None:
+    from biota.ecosystem.spawn import build_initial_state_multi_species
+
+    try:
+        build_initial_state_multi_species(_spawn(), counts=[], grid_h=64, grid_w=64, device="cpu")
+    except ValueError as exc:
+        assert "at least one" in str(exc)
+        return
+    raise AssertionError("empty counts did not raise")
+
+
+def test_build_initial_state_multi_species_rejects_zero_count() -> None:
+    from biota.ecosystem.spawn import build_initial_state_multi_species
+
+    try:
+        build_initial_state_multi_species(
+            _spawn(), counts=[2, 0, 1], grid_h=64, grid_w=64, device="cpu"
+        )
+    except ValueError as exc:
+        assert "positive" in str(exc)
+        return
+    raise AssertionError("zero count did not raise")
 
 
 # === EcosystemResult.to_summary_dict ===
 
 
 def test_to_summary_dict_is_json_serializable() -> None:
-    from biota.ecosystem.result import EcosystemResult
-
-    spawn = _spawn(n=2)
     config = EcosystemConfig(
-        source_run_id="test-run",
-        source_coords=(5, 8, 3),
+        name="smoke",
+        sources=(CreatureSource(archive_dir="archive", run_id="test-run", coords=(5, 8, 3), n=2),),
         grid_h=128,
         grid_w=128,
         steps=10,
         snapshot_every=5,
-        spawn=spawn,
+        spawn=SpawnConfig(min_dist=40, patch=16, seed=0),
+        device="cpu",
+        border="wall",
+        output_format="gif",
     )
     measures = EcosystemMeasures(
         initial_mass=10.0,
@@ -181,33 +298,65 @@ def test_to_summary_dict_is_json_serializable() -> None:
         elapsed_seconds=1.0,
     )
     d = result.to_summary_dict()
-    json_str = json.dumps(d)
-    assert "test-run" in json_str
-    assert "eco-test" in json_str
+    # Round-trip through JSON to verify nothing non-serializable slipped in.
+    js = json.dumps(d)
+    roundtrip = json.loads(js)
+    assert roundtrip["run_id"] == "eco-test"
+    assert roundtrip["name"] == "smoke"
+    assert roundtrip["mode"] == "homogeneous"
+    assert roundtrip["sources"] == [
+        {"archive_dir": "archive", "run": "test-run", "cell": [5, 8, 3], "n": 2}
+    ]
 
 
-# === run_ecosystem integration ===
+def test_to_summary_dict_marks_heterogeneous_mode() -> None:
+    config = EcosystemConfig(
+        name="het",
+        sources=(
+            CreatureSource(archive_dir="archive", run_id="run-a", coords=(1, 2, 3), n=4),
+            CreatureSource(archive_dir="archive", run_id="run-b", coords=(4, 5, 6), n=4),
+        ),
+        grid_h=128,
+        grid_w=128,
+        steps=10,
+        snapshot_every=5,
+        spawn=SpawnConfig(min_dist=40, patch=16, seed=0),
+        device="cpu",
+        border="torus",
+        output_format="gif",
+    )
+    measures = EcosystemMeasures(
+        initial_mass=1.0,
+        final_mass=1.0,
+        mass_history=[1.0],
+        peak_mass=1.0,
+        min_mass=1.0,
+        mass_turnover=0.0,
+        snapshot_steps=[],
+    )
+    result = EcosystemResult(
+        config=config, run_id="het-test", run_dir="/tmp", measures=measures, elapsed_seconds=0.0
+    )
+    d = result.to_summary_dict()
+    assert d["mode"] == "heterogeneous"
+    assert len(d["sources"]) == 2  # pyright: ignore[reportArgumentType]
 
 
-def test_run_ecosystem_creates_output_files() -> None:
+# === run_ecosystem integration (homogeneous path) ===
+
+
+def test_run_ecosystem_creates_output_files_gif_mode() -> None:
     from biota.ecosystem.run import run_ecosystem
 
-    spawn = _spawn(n=2, min_dist=30, patch=8)
-
     with tempfile.TemporaryDirectory() as tmpdir:
-        # Test gif mode (default)
-        config_gif = EcosystemConfig(
-            source_run_id="test-run",
-            source_coords=(5, 8, 3),
-            grid_h=64,
-            grid_w=64,
-            steps=5,
-            snapshot_every=5,
-            spawn=spawn,
-            device="cpu",
-            output_format="gif",
-        )
-        result = run_ecosystem(config_gif, _synthetic_creature(), output_root=tmpdir)
+        tmp = Path(tmpdir)
+        archive_dir = tmp / "archive"
+        output_dir = tmp / "eco"
+        _write_archive_with_creature(archive_dir, "test-run", (5, 8, 3), _synthetic_creature())
+
+        config = _single_source_config(archive_dir, output_format="gif")
+        result = run_ecosystem(config, output_root=output_dir)
+
         run_dir = Path(result.run_dir)
         assert (run_dir / "summary.json").exists()
         assert (run_dir / "config.json").exists()
@@ -215,70 +364,61 @@ def test_run_ecosystem_creates_output_files() -> None:
         assert (run_dir / "ecosystem.gif").exists()
         assert not (run_dir / "frames").exists()
 
-        # Test frames mode
-        config_frames = EcosystemConfig(
-            source_run_id="test-run-2",
-            source_coords=(5, 8, 3),
-            grid_h=64,
-            grid_w=64,
-            steps=5,
-            snapshot_every=5,
-            spawn=spawn,
-            device="cpu",
-            output_format="frames",
-        )
-        result2 = run_ecosystem(config_frames, _synthetic_creature(), output_root=tmpdir)
-        run_dir2 = Path(result2.run_dir)
-        assert (run_dir2 / "summary.json").exists()
-        assert (run_dir2 / "frames").is_dir()
-        assert not (run_dir2 / "ecosystem.gif").exists()
+
+def test_run_ecosystem_creates_output_files_frames_mode() -> None:
+    from biota.ecosystem.run import run_ecosystem
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        archive_dir = tmp / "archive"
+        output_dir = tmp / "eco"
+        _write_archive_with_creature(archive_dir, "test-run-2", (5, 8, 3), _synthetic_creature())
+
+        config = _single_source_config(archive_dir, run_id="test-run-2", output_format="frames")
+        result = run_ecosystem(config, output_root=output_dir)
+
+        run_dir = Path(result.run_dir)
+        assert (run_dir / "summary.json").exists()
+        assert (run_dir / "frames").is_dir()
+        assert not (run_dir / "ecosystem.gif").exists()
 
 
 def test_run_ecosystem_trajectory_shape() -> None:
     from biota.ecosystem.run import run_ecosystem
 
-    spawn = _spawn(n=2, min_dist=20, patch=6)
-    config = EcosystemConfig(
-        source_run_id="test-run",
-        source_coords=(1, 2, 3),
-        grid_h=64,
-        grid_w=64,
-        steps=10,
-        snapshot_every=5,
-        spawn=spawn,
-        device="cpu",
-    )
-    creature = _synthetic_creature()
-
     with tempfile.TemporaryDirectory() as tmpdir:
-        result = run_ecosystem(config, creature, output_root=tmpdir)
+        tmp = Path(tmpdir)
+        archive_dir = tmp / "archive"
+        output_dir = tmp / "eco"
+        _write_archive_with_creature(archive_dir, "test-run", (1, 2, 3), _synthetic_creature())
+
+        config = _single_source_config(archive_dir, coords=(1, 2, 3), steps=10, snapshot_every=5)
+        result = run_ecosystem(config, output_root=output_dir)
+
         traj = np.load(Path(result.run_dir) / "trajectory.npy")
-        # 2 snapshots: step 5 and step 10
-        assert traj.shape == (2, 64, 64)
+        assert traj.shape == (2, 64, 64)  # snapshots at step 5 and 10
         assert traj.dtype == np.float32
 
 
 def test_run_ecosystem_summary_json_valid() -> None:
     from biota.ecosystem.run import run_ecosystem
 
-    spawn = _spawn(n=2, min_dist=20, patch=6)
-    config = EcosystemConfig(
-        source_run_id="my-run",
-        source_coords=(0, 1, 2),
-        grid_h=64,
-        grid_w=64,
-        steps=5,
-        snapshot_every=5,
-        spawn=spawn,
-        device="cpu",
-    )
-    creature = _synthetic_creature()
-
     with tempfile.TemporaryDirectory() as tmpdir:
-        result = run_ecosystem(config, creature, output_root=tmpdir)
+        tmp = Path(tmpdir)
+        archive_dir = tmp / "archive"
+        output_dir = tmp / "eco"
+        _write_archive_with_creature(archive_dir, "my-run", (0, 1, 2), _synthetic_creature())
+
+        config = _single_source_config(
+            archive_dir, run_id="my-run", coords=(0, 1, 2), steps=5, snapshot_every=5
+        )
+        result = run_ecosystem(config, output_root=output_dir)
+
         summary = json.loads((Path(result.run_dir) / "summary.json").read_text())
-        assert summary["source_run_id"] == "my-run"
-        assert summary["source_coords"] == [0, 1, 2]
+        assert summary["name"] == "test-experiment"
+        assert summary["mode"] == "homogeneous"
+        assert summary["sources"][0]["run"] == "my-run"
+        assert summary["sources"][0]["cell"] == [0, 1, 2]
         assert summary["measures"]["initial_mass"] >= 0.0
         assert len(summary["measures"]["snapshot_steps"]) == 1
 
@@ -286,24 +426,151 @@ def test_run_ecosystem_summary_json_valid() -> None:
 def test_run_ecosystem_measures_plausible() -> None:
     from biota.ecosystem.run import run_ecosystem
 
-    spawn = _spawn(n=2, min_dist=20, patch=8)
-    config = EcosystemConfig(
-        source_run_id="test-run",
-        source_coords=(3, 3, 3),
-        grid_h=64,
-        grid_w=64,
-        steps=10,
-        snapshot_every=10,
-        spawn=spawn,
-        device="cpu",
-    )
-    creature = _synthetic_creature()
-
     with tempfile.TemporaryDirectory() as tmpdir:
-        result = run_ecosystem(config, creature, output_root=tmpdir)
+        tmp = Path(tmpdir)
+        archive_dir = tmp / "archive"
+        output_dir = tmp / "eco"
+        _write_archive_with_creature(archive_dir, "test-run", (3, 3, 3), _synthetic_creature())
+
+        config = _single_source_config(
+            archive_dir,
+            coords=(3, 3, 3),
+            steps=10,
+            snapshot_every=10,
+            n=2,
+        )
+        result = run_ecosystem(config, output_root=output_dir)
+
         m = result.measures
         assert m.initial_mass > 0.0
         assert m.peak_mass >= m.initial_mass or m.peak_mass >= m.final_mass
         assert m.min_mass <= m.initial_mass
         assert m.mass_turnover >= 0.0
         assert len(m.mass_history) == config.steps + 1
+
+
+def test_run_ecosystem_heterogeneous_succeeds_end_to_end() -> None:
+    """Heterogeneous configs run via the species-indexed path, write outputs."""
+    from biota.ecosystem.run import run_ecosystem
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        archive_dir = tmp / "archive"
+        # Two distinct creatures in two separate archive runs.
+        _write_archive_with_creature(archive_dir, "run-a", (1, 1, 1), _synthetic_creature())
+        _write_archive_with_creature(archive_dir, "run-b", (2, 2, 2), _synthetic_creature())
+
+        config = EcosystemConfig(
+            name="hetero-smoke",
+            sources=(
+                CreatureSource(archive_dir=str(archive_dir), run_id="run-a", coords=(1, 1, 1), n=2),
+                CreatureSource(archive_dir=str(archive_dir), run_id="run-b", coords=(2, 2, 2), n=2),
+            ),
+            grid_h=64,
+            grid_w=64,
+            steps=10,
+            snapshot_every=5,
+            spawn=SpawnConfig(min_dist=15, patch=6, seed=0),
+            device="cpu",
+            border="wall",
+            output_format="gif",
+        )
+        result = run_ecosystem(config, output_root=tmp / "eco")
+        run_dir = Path(result.run_dir)
+        assert (run_dir / "summary.json").exists()
+        assert (run_dir / "ecosystem.gif").exists()
+        assert (run_dir / "trajectory.npy").exists()
+
+        summary = json.loads((run_dir / "summary.json").read_text())
+        assert summary["mode"] == "heterogeneous"
+        assert len(summary["sources"]) == 2
+        assert result.measures.initial_mass > 0.0
+
+
+def test_run_ecosystem_heterogeneous_kernel_count_mismatch_raises() -> None:
+    """All heterogeneous sources must have the same kernel count."""
+    from biota.ecosystem.run import run_ecosystem
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        archive_dir = tmp / "archive"
+
+        c1 = _synthetic_creature()  # k=3
+        # Build a creature with a different kernel count.
+        c2_params = dict(c1.params)
+        k2 = 5
+        c2_params["r"] = [0.5] * k2
+        c2_params["m"] = [0.15] * k2
+        c2_params["s"] = [0.015] * k2
+        c2_params["h"] = [0.5] * k2
+        c2_params["a"] = [[0.5, 0.5, 0.5]] * k2
+        c2_params["b"] = [[0.5, 0.5, 0.5]] * k2
+        c2_params["w"] = [[0.5, 0.5, 0.5]] * k2
+        c2 = RolloutResult(
+            params=c2_params,  # type: ignore[arg-type]
+            seed=1,
+            descriptors=(0.4, 0.5, 0.6),
+            quality=0.7,
+            rejection_reason=None,
+            thumbnail=np.zeros((16, 32, 32), dtype=np.uint8),
+            parent_cell=None,
+            created_at=0.0,
+            compute_seconds=1.0,
+        )
+        _write_archive_with_creature(archive_dir, "run-a", (1, 1, 1), c1)
+        _write_archive_with_creature(archive_dir, "run-b", (2, 2, 2), c2)
+
+        config = EcosystemConfig(
+            name="kernel-mismatch",
+            sources=(
+                CreatureSource(archive_dir=str(archive_dir), run_id="run-a", coords=(1, 1, 1), n=2),
+                CreatureSource(archive_dir=str(archive_dir), run_id="run-b", coords=(2, 2, 2), n=2),
+            ),
+            grid_h=64,
+            grid_w=64,
+            steps=5,
+            snapshot_every=5,
+            spawn=SpawnConfig(min_dist=15, patch=6, seed=0),
+            device="cpu",
+            border="wall",
+            output_format="gif",
+        )
+        try:
+            run_ecosystem(config, output_root=tmp / "eco")
+        except ValueError as exc:
+            assert "kernel count" in str(exc)
+            return
+    raise AssertionError("kernel count mismatch did not raise")
+
+
+def test_run_ecosystem_missing_archive_raises() -> None:
+    from biota.ecosystem.run import run_ecosystem
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        config = _single_source_config(
+            archive_dir=tmp / "does-not-exist", run_id="missing", coords=(1, 1, 1)
+        )
+        try:
+            run_ecosystem(config, output_root=tmp / "eco")
+        except FileNotFoundError as exc:
+            assert "missing" in str(exc)
+            return
+    raise AssertionError("run_ecosystem did not raise for missing archive")
+
+
+def test_run_ecosystem_missing_cell_raises() -> None:
+    from biota.ecosystem.run import run_ecosystem
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        archive_dir = tmp / "archive"
+        _write_archive_with_creature(archive_dir, "has-one-cell", (0, 0, 0), _synthetic_creature())
+
+        config = _single_source_config(archive_dir, run_id="has-one-cell", coords=(99, 99, 99))
+        try:
+            run_ecosystem(config, output_root=tmp / "eco")
+        except KeyError as exc:
+            assert "99" in str(exc)
+            return
+    raise AssertionError("run_ecosystem did not raise for missing cell")

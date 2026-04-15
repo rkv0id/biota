@@ -332,139 +332,77 @@ def search_cmd(
 
 @app.command()
 def ecosystem(
-    run: str = typer.Option(
-        ..., "--run", help="Source archive run id (directory name under --archive-dir)."
-    ),
-    cell: str = typer.Option(
+    config: Path = typer.Option(
         ...,
-        "--cell",
-        help="Archive cell coordinate as y,x,z (e.g. 10,15,8).",
+        "--config",
+        help="Path to a YAML file defining one or more ecosystem experiments.",
     ),
-    n: int = typer.Option(..., "--n", help="Number of creature copies to spawn."),
-    grid: str = typer.Option(
-        ...,
-        "--grid",
-        help="Grid dimensions. Square: 512. Rectangular: 768x512 (HxW).",
-    ),
-    steps: int = typer.Option(..., "--steps", help="Number of simulation steps."),
-    snapshot_every: int = typer.Option(
-        ..., "--snapshot-every", help="Capture a state snapshot every N steps."
-    ),
-    patch: int = typer.Option(
-        ..., "--patch", help="Side length of the initial random patch per creature."
-    ),
-    min_dist: int = typer.Option(
-        ...,
-        "--min-dist",
-        help="Minimum pixel distance between spawn centers (Poisson disk sampling).",
-    ),
-    output_format: str = typer.Option(
-        "gif",
-        "--output-format",
-        help="Output format for simulation frames: 'gif' (default) or 'frames' (individual PNGs).",
-    ),
-    device: str = typer.Option("cpu", "--device", help="Torch device: cpu, mps, or cuda."),
     archive_dir: Path = typer.Option(
         Path("archive"),
         "--archive-dir",
-        help="Directory containing archive run subdirectories.",
+        help=(
+            "Default archive directory. Individual sources in the config may "
+            "override this with their own archive_dir."
+        ),
     ),
     output_dir: Path = typer.Option(
         Path("ecosystem"),
         "--output-dir",
         help="Root directory for ecosystem run output.",
     ),
-    seed: int = typer.Option(0, "--seed", help="Base RNG seed for spawn positions and patches."),
-    border: str = typer.Option(
-        "torus",
-        "--border",
-        help="Grid border: 'wall' or 'torus' (default).",
+    device: str = typer.Option("cpu", "--device", help="Torch device: cpu, mps, or cuda."),
+    local_ray: bool = typer.Option(
+        False,
+        "--local-ray",
+        help=(
+            "Reserved for parallel dispatch of multi-experiment configs. "
+            "Accepted but not yet used; experiments run sequentially."
+        ),
+    ),
+    ray_address: str | None = typer.Option(
+        None,
+        "--ray-address",
+        help=(
+            "Reserved for parallel dispatch across a Ray cluster. "
+            "Accepted but not yet used; experiments run sequentially."
+        ),
     ),
 ) -> None:
-    """Run a homogeneous ecosystem simulation from a single archive creature."""
-    import pickle
-
-    from biota.ecosystem.result import EcosystemConfig, SpawnConfig
+    """Run one or more ecosystem experiments declared in a YAML config."""
+    from biota.ecosystem.config import ConfigError, load_config_file
     from biota.ecosystem.run import run_ecosystem
-    from biota.search.archive import Archive
 
-    # Parse --grid HxW or single integer
+    if local_ray or ray_address is not None:
+        print(
+            "[ecosystem] note: --local-ray and --ray-address are accepted but "
+            "not yet used; experiments will run sequentially.",
+            file=sys.stderr,
+        )
+
     try:
-        if "x" in grid.lower():
-            parts_g = grid.lower().split("x")
-            if len(parts_g) != 2:
-                raise ValueError
-            grid_h, grid_w = int(parts_g[0]), int(parts_g[1])
-        else:
-            grid_h = grid_w = int(grid)
-    except ValueError:
-        raise typer.BadParameter(
-            f"--grid must be an integer (512) or HxW (768x512). Got: {grid!r}",
-            param_hint="--grid",
-        ) from None
-
-    # Parse --cell coordinate
-    try:
-        cell_parts = [int(x.strip()) for x in cell.split(",")]
-        if len(cell_parts) != 3:
-            raise ValueError
-        coords: tuple[int, int, int] = (cell_parts[0], cell_parts[1], cell_parts[2])
-    except ValueError:
-        raise typer.BadParameter(
-            f"--cell must be three comma-separated integers, e.g. 10,15,8. Got: {cell!r}",
-            param_hint="--cell",
-        ) from None
-
-    if border not in ("wall", "torus"):
-        raise typer.BadParameter(
-            f"border must be 'wall' or 'torus', got {border!r}", param_hint="--border"
+        experiments = load_config_file(
+            config,
+            default_archive_dir=str(archive_dir),
+            default_device=device,
         )
+    except ConfigError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--config") from exc
 
-    if output_format not in ("gif", "frames"):
-        raise typer.BadParameter(
-            f"output-format must be 'gif' or 'frames', got {output_format!r}",
-            param_hint="--output-format",
-        )
-
-    # Load archive
-    run_dir = archive_dir / run
-    if not run_dir.exists():
-        raise typer.BadParameter(f"run directory not found: {run_dir}", param_hint="--run")
-
-    pkl_path = run_dir / "archive.pkl"
-    if not pkl_path.exists():
-        raise typer.BadParameter(f"no archive.pkl in {run_dir}", param_hint="--run")
-
-    with open(pkl_path, "rb") as f:
-        archive = pickle.load(f)
-
-    if not isinstance(archive, Archive):
-        raise typer.Exit(code=1)
-
-    if coords not in archive:
-        raise typer.BadParameter(
-            f"cell {coords} not in archive. Use build_index.py to inspect occupied cells.",
-            param_hint="--cell",
-        )
-
-    creature = archive[coords]
-
-    spawn = SpawnConfig(n=n, min_dist=min_dist, patch=patch, seed=seed)
-    config = EcosystemConfig(
-        source_run_id=run,
-        source_coords=coords,
-        grid_h=grid_h,
-        grid_w=grid_w,
-        steps=steps,
-        snapshot_every=snapshot_every,
-        spawn=spawn,
-        device=device,
-        border=border,
-        output_format=output_format,
+    print(
+        f"[ecosystem] loaded {len(experiments)} experiment"
+        f"{'s' if len(experiments) != 1 else ''} from {config}",
+        file=sys.stderr,
     )
 
-    result = run_ecosystem(config, creature, output_root=output_dir)
-    print(f"output={result.run_dir}")
+    for i, exp in enumerate(experiments):
+        print(
+            f"[ecosystem] running experiment {i + 1}/{len(experiments)}: {exp.name!r} "
+            f"({'heterogeneous' if exp.is_heterogeneous else 'homogeneous'}, "
+            f"{len(exp.sources)} source{'s' if len(exp.sources) != 1 else ''})",
+            file=sys.stderr,
+        )
+        result = run_ecosystem(exp, output_root=output_dir)
+        print(f"output={result.run_dir}")
 
 
 # === doctor command ===
