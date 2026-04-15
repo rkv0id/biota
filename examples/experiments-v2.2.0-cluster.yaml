@@ -1,0 +1,134 @@
+# biota v2.2.0 ecosystem experiments
+#
+# Eight runs designed to characterize: (1) baseline single-species behavior at
+# low density on the new high-res grids, (2) glider-vs-static interactions,
+# (3) 3-way species pile-ups, and (4) one stress test. All use 32px patches
+# (matches original archive scale) and density-scaled min-dist so spawn is
+# spread across the grid rather than packed into a corner.
+#
+# Density rule of thumb: n * (min_dist^2) <= 0.5 * grid_h * grid_w
+# Reach rule: min_dist between 80 and 140 px so kernels overlap but creatures
+# don't initialize on top of each other.
+
+experiments:
+
+  # === baselines: each interesting cell alone, to see homogeneous behavior ===
+
+  - name: baseline-orbital-pulser
+    # wry-spire (25,27,0): dense pulsing colony with internal sub-bodies.
+    # 6 copies on 512x512 to see whether colonies merge, repel, or coexist.
+    grid: 512
+    steps: 8000
+    snapshot_every: 32
+    border: torus
+    output_format: gif
+    spawn: {min_dist: 110, patch: 32, seed: 0}
+    sources:
+      - {run: 20260415-031303-wry-spire, cell: [25, 27, 0], n: 6}
+
+  - name: baseline-fast-glider
+    # noble-fjord (31,20,15): fast translator+rotator. DISPL 0.971, ANG.VEL 1.0.
+    # Sparse on landscape so they have room to move and meet in transit.
+    grid: [512, 768]
+    steps: 8000
+    snapshot_every: 32
+    border: torus
+    output_format: gif
+    spawn: {min_dist: 130, patch: 32, seed: 1}
+    sources:
+      - {run: 20260415-030240-noble-fjord, cell: [31, 20, 15], n: 5}
+
+  - name: baseline-woven-diamond
+    # frost-creek (19,21,9): structured diamond. Higher GRAD = sharp internal
+    # features. Worth seeing whether two of these annihilate or stack.
+    grid: 512
+    steps: 8000
+    snapshot_every: 32
+    border: torus
+    output_format: gif
+    spawn: {min_dist: 120, patch: 32, seed: 2}
+    sources:
+      - {run: 20260415-014216-frost-creek, cell: [19, 21, 9], n: 4}
+
+  # === pairwise: glider vs static ===
+
+  - name: gliders-meet-pulsers
+    # Fast translators (noble-fjord 31,20,15) into a field of dense pulsers
+    # (wry-spire 25,27,0). Hypothesis: gliders smash through and either
+    # absorb mass or get trapped in the pulser envelope.
+    grid: [512, 768]
+    steps: 10000
+    snapshot_every: 40
+    border: torus
+    output_format: gif
+    spawn: {min_dist: 110, patch: 32, seed: 3}
+    sources:
+      - {run: 20260415-030240-noble-fjord, cell: [31, 20, 15], n: 3}
+      - {run: 20260415-031303-wry-spire,   cell: [25, 27, 0], n: 4}
+
+  - name: gliders-meet-diamonds
+    # Different glider (noble-fjord 31,18,15: asymmetric blob translator)
+    # against the structured diamond. Tests whether the diamond's internal
+    # structure resists or absorbs incoming flow.
+    grid: [512, 768]
+    steps: 10000
+    snapshot_every: 40
+    border: torus
+    output_format: gif
+    spawn: {min_dist: 115, patch: 32, seed: 4}
+    sources:
+      - {run: 20260415-030240-noble-fjord,  cell: [31, 18, 15], n: 3}
+      - {run: 20260415-014216-frost-creek,  cell: [19, 21, 9],  n: 3}
+
+  # === pairwise: morphologically distant ===
+
+  - name: square-vs-splat
+    # wry-spire (21,21,0) crystalline square against frost-creek (21,12,10)
+    # tendril splat. Both stay roughly put but at very different scales of
+    # internal organization. Tests whether they ignore each other or
+    # destabilize on contact.
+    grid: 512
+    steps: 8000
+    snapshot_every: 32
+    border: torus
+    output_format: gif
+    spawn: {min_dist: 110, patch: 32, seed: 5}
+    sources:
+      - {run: 20260415-031303-wry-spire,   cell: [21, 21, 0],  n: 3}
+      - {run: 20260415-014216-frost-creek, cell: [21, 12, 10], n: 3}
+
+  # === three-way ===
+
+  - name: triple-faceoff
+    # One translator (noble-fjord 26,19,15: pure translator, ANG.VEL 0.819),
+    # one structured static (frost-creek 23,20,10: square w/ internal cells),
+    # one diffuse colony (frost-creek 24,15,11: scattered dots).
+    # Three different "playstyles" sharing a grid.
+    grid: [512, 768]
+    steps: 12000
+    snapshot_every: 48
+    border: torus
+    output_format: gif
+    spawn: {min_dist: 120, patch: 32, seed: 6}
+    sources:
+      - {run: 20260415-030240-noble-fjord, cell: [26, 19, 15], n: 3}
+      - {run: 20260415-014216-frost-creek, cell: [23, 20, 10], n: 3}
+      - {run: 20260415-014216-frost-creek, cell: [24, 15, 11], n: 3}
+
+  # === stress test: dense, mixed, long ===
+
+  - name: dense-mixed-long
+    # 4 species, 3 each, 12 total on 512x512. Higher density than the others
+    # to actually force interactions. Long run to see whether any species
+    # outlasts the others.
+    grid: 512
+    steps: 15000
+    snapshot_every: 60
+    border: torus
+    output_format: gif
+    spawn: {min_dist: 95, patch: 32, seed: 7}
+    sources:
+      - {run: 20260415-031303-wry-spire,    cell: [25, 27, 0],  n: 3}
+      - {run: 20260415-030240-noble-fjord,  cell: [31, 20, 15], n: 3}
+      - {run: 20260415-014216-frost-creek,  cell: [19, 20, 10], n: 3}
+      - {run: 20260415-014216-frost-creek,  cell: [24, 15, 11], n: 3}
