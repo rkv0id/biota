@@ -44,12 +44,18 @@ class CreatureSource:
         run_id: Archive run directory name under archive_dir.
         coords: (y, x, z) archive cell coordinate.
         n: Number of copies of this creature to spawn in the ecosystem.
+        patch: Optional per-source override for initial patch side length. When
+            None, falls back to the experiment's spawn.patch. Useful when one
+            species in a heterogeneous run has a substantially different
+            natural scale than the others (e.g. a small fast glider mixed with
+            a large dense colony).
     """
 
     archive_dir: str
     run_id: str
     coords: tuple[int, int, int]
     n: int
+    patch: int | None = None
 
 
 @dataclass(frozen=True)
@@ -312,7 +318,15 @@ def _parse_one_source(
     coords = _parse_coords(raw["cell"], index, name)
     n = _parse_positive_int(raw["n"], f"sources[{index}].n", name)
 
-    return CreatureSource(archive_dir=archive_dir, run_id=run_id, coords=coords, n=n)
+    # Optional per-source patch override.
+    patch_raw = raw.get("patch")
+    patch: int | None
+    if patch_raw is None:
+        patch = None
+    else:
+        patch = _parse_positive_int(patch_raw, f"sources[{index}].patch", name)
+
+    return CreatureSource(archive_dir=archive_dir, run_id=run_id, coords=coords, n=n, patch=patch)
 
 
 def _parse_coords(raw: Any, index: int, name: str) -> tuple[int, int, int]:  # pyright: ignore[reportAny]

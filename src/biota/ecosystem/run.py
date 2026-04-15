@@ -220,6 +220,7 @@ def _write_config_json(config: EcosystemConfig, run_dir: Path) -> None:
                 "run": s.run_id,
                 "cell": list(s.coords),
                 "n": s.n,
+                "patch": s.patch if s.patch is not None else config.spawn.patch,
             }
             for s in config.sources
         ],
@@ -244,7 +245,14 @@ def _run_homogeneous(
     sim_params = _params_from_creature(creature, config.device)
     fl = FlowLenia(sim_cfg, sim_params, device=config.device)
 
-    state = build_initial_state(config.spawn, source.n, config.grid_h, config.grid_w, config.device)
+    state = build_initial_state(
+        config.spawn,
+        source.n,
+        config.grid_h,
+        config.grid_w,
+        config.device,
+        patch_override=source.patch,
+    )
     initial_mass = float(state.sum().item())
 
     snapshots: list[np.ndarray] = []
@@ -289,8 +297,15 @@ def _run_heterogeneous(
     lfl = LocalizedFlowLenia(sim_cfg, species_params, device=config.device)
 
     counts = [s.n for s in config.sources]
+    # Per-species patch: source override if set, otherwise the experiment default.
+    patches = [s.patch if s.patch is not None else config.spawn.patch for s in config.sources]
     mass, weights = build_initial_state_multi_species(
-        config.spawn, counts, config.grid_h, config.grid_w, config.device
+        config.spawn,
+        counts,
+        config.grid_h,
+        config.grid_w,
+        config.device,
+        patches=patches,
     )
     state = LocalizedState(mass=mass, weights=weights)
     initial_mass = float(state.mass.sum().item())

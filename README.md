@@ -109,7 +109,7 @@ experiments:
     output_format: gif
     spawn:
       min_dist: 60
-      patch: 28
+      patch: 28              # default patch size for all sources
       seed: 42
     sources:
       - run: 20260413-134355-hazy-creek
@@ -119,7 +119,10 @@ experiments:
         run: 20260414-091122-still-pond
         cell: [22, 8, 11]
         n: 6
+        patch: 48            # this species spawns at a larger scale
 ```
+
+Each source can override the experiment's `spawn.patch` with its own value. Useful when species in a heterogeneous run have different natural scales; for example a small fast glider mixed with a large dense colony. The Poisson disk margin uses the largest patch in the run so creatures still fit safely inside the wall border. When omitted, sources fall back to the experiment's `spawn.patch`.
 
 Multiple experiments in a single file run sequentially. After running, rebuild the index to include ecosystem results in the atlas:
 

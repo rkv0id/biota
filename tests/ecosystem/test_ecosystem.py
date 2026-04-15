@@ -265,6 +265,128 @@ def test_build_initial_state_multi_species_rejects_zero_count() -> None:
     raise AssertionError("zero count did not raise")
 
 
+def test_build_initial_state_multi_species_per_species_patches() -> None:
+    """Per-species patches change initial mass per species proportional to area.
+
+    Two species, same count, but species 1 uses a 4x larger patch (16 vs 8).
+    Initial mass for species 1's region should be roughly (16/8)^2 = 4x larger
+    than species 0's, modulo random patch fill (uniform [0,1) per cell -> mean 0.5).
+    """
+    from biota.ecosystem.spawn import build_initial_state_multi_species
+
+    mass, weights = build_initial_state_multi_species(
+        _spawn(min_dist=30, patch=8, seed=42),
+        counts=[2, 2],
+        grid_h=128,
+        grid_w=128,
+        device="cpu",
+        patches=[8, 16],
+    )
+    # Mass owned by species 0 vs species 1.
+    species0_mass = float((mass[:, :, 0] * weights[:, :, 0]).sum())
+    species1_mass = float((mass[:, :, 0] * weights[:, :, 1]).sum())
+    ratio = species1_mass / species0_mass
+    # Expected ratio is 4 (area scales as patch^2). Allow wide tolerance for
+    # random fill noise: any value between 2 and 6 confirms the override took.
+    assert 2.0 < ratio < 6.0, (
+        f"expected species1/species0 mass ratio ~4 (patch area scaling), got {ratio:.2f}"
+    )
+    # Without the override, the ratio should be ~1 since both species would
+    # use the spawn-level patch=8.
+    mass_default, weights_default = build_initial_state_multi_species(
+        _spawn(min_dist=30, patch=8, seed=42),
+        counts=[2, 2],
+        grid_h=128,
+        grid_w=128,
+        device="cpu",
+    )
+    s0_default = float((mass_default[:, :, 0] * weights_default[:, :, 0]).sum())
+    s1_default = float((mass_default[:, :, 0] * weights_default[:, :, 1]).sum())
+    default_ratio = s1_default / s0_default
+    assert 0.5 < default_ratio < 2.0, (
+        f"without override, ratio should be ~1, got {default_ratio:.2f}"
+    )
+    # Sanity: shapes unchanged
+    assert mass.shape == mass_default.shape
+    assert weights.shape == weights_default.shape
+
+
+def test_build_initial_state_multi_species_rejects_patches_length_mismatch() -> None:
+    from biota.ecosystem.spawn import build_initial_state_multi_species
+
+    try:
+        build_initial_state_multi_species(
+            _spawn(),
+            counts=[2, 2],
+            grid_h=64,
+            grid_w=64,
+            device="cpu",
+            patches=[8, 16, 32],  # length 3 vs counts length 2
+        )
+    except ValueError as exc:
+        assert "length" in str(exc)
+        return
+    raise AssertionError("patches length mismatch did not raise")
+
+
+def test_run_ecosystem_homogeneous_respects_source_patch() -> None:
+    """A homogeneous run with source.patch override produces different initial
+    mass than the same run without override."""
+    import json
+    import tempfile
+    from pathlib import Path
+
+    from biota.ecosystem.run import run_ecosystem
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        archive_dir = tmp / "archive"
+        _write_archive_with_creature(archive_dir, "test-run", (5, 8, 3), _synthetic_creature())
+
+        # Baseline: no per-source patch
+        baseline_cfg = _single_source_config(
+            archive_dir, run_id="test-run", coords=(5, 8, 3), grid_h=128, grid_w=128
+        )
+        baseline_result = run_ecosystem(baseline_cfg, output_root=tmp / "eco-baseline")
+        baseline_mass = baseline_result.measures.initial_mass
+
+        # Override: same config but source has a doubled patch
+        override_cfg = EcosystemConfig(
+            name=baseline_cfg.name,
+            sources=(
+                CreatureSource(
+                    archive_dir=baseline_cfg.sources[0].archive_dir,
+                    run_id=baseline_cfg.sources[0].run_id,
+                    coords=baseline_cfg.sources[0].coords,
+                    n=baseline_cfg.sources[0].n,
+                    patch=baseline_cfg.spawn.patch * 2,
+                ),
+            ),
+            grid_h=baseline_cfg.grid_h,
+            grid_w=baseline_cfg.grid_w,
+            steps=baseline_cfg.steps,
+            snapshot_every=baseline_cfg.snapshot_every,
+            spawn=baseline_cfg.spawn,
+            device=baseline_cfg.device,
+            border=baseline_cfg.border,
+            output_format=baseline_cfg.output_format,
+        )
+        override_result = run_ecosystem(override_cfg, output_root=tmp / "eco-override")
+        override_mass = override_result.measures.initial_mass
+
+        # Doubled patch ~> 4x area -> ~4x mass (uniform random fill, mean 0.5)
+        ratio = override_mass / baseline_mass
+        assert 2.5 < ratio < 5.5, (
+            f"expected ~4x initial mass with doubled patch, got ratio {ratio:.2f}"
+        )
+
+        # config.json and summary.json should record the resolved patch
+        override_summary = json.loads((Path(override_result.run_dir) / "summary.json").read_text())
+        assert override_summary["sources"][0]["patch"] == baseline_cfg.spawn.patch * 2
+        baseline_summary = json.loads((Path(baseline_result.run_dir) / "summary.json").read_text())
+        assert baseline_summary["sources"][0]["patch"] == baseline_cfg.spawn.patch
+
+
 # === EcosystemResult.to_summary_dict ===
 
 
@@ -305,7 +427,13 @@ def test_to_summary_dict_is_json_serializable() -> None:
     assert roundtrip["name"] == "smoke"
     assert roundtrip["mode"] == "homogeneous"
     assert roundtrip["sources"] == [
-        {"archive_dir": "archive", "run": "test-run", "cell": [5, 8, 3], "n": 2}
+        {
+            "archive_dir": "archive",
+            "run": "test-run",
+            "cell": [5, 8, 3],
+            "n": 2,
+            "patch": 16,  # falls back to spawn.patch since CreatureSource.patch=None
+        }
     ]
 
 

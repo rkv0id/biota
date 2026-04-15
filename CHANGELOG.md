@@ -1,5 +1,28 @@
 # Changelog
 
+## v2.3.0 - 2026-04-15
+
+Per-source patch override for heterogeneous ecosystem runs. Each `CreatureSource` in an experiment YAML can now declare its own `patch` size, overriding the experiment-level `spawn.patch`. Useful when species in a single run have substantially different natural scales (small fast glider mixed with a large dense colony, etc.).
+
+### New features
+
+- `sources[].patch` is an optional integer field in the YAML schema. When omitted, falls back to `spawn.patch` (existing behaviour).
+- `build_initial_state_multi_species` now accepts a `patches: list[int]` parameter matching the counts list. The Poisson disk margin uses `max(patches)` so the largest creature still fits inside the wall border.
+- `build_initial_state` and `compute_spawn_positions` gain an optional `patch_override` parameter for the homogeneous path's per-source override (called transparently from `_run_homogeneous`).
+- `summary.json` and `config.json` per-source entries now include the resolved `patch` field, so inspecting a run dir tells you what was actually used per species.
+
+### Implementation notes
+
+- Additive change. Existing v2.2.0 configs without `patch:` overrides go through identical code paths because `patch_override=None` falls back to `spawn.patch` everywhere.
+- `min_dist` remains a global Poisson disk constraint; per-source override is not supported in v2.3.0 since it would break the deterministic single-pass spawn ordering. Save for v2.4.0 if anyone asks.
+- No auto-derivation of patch from creature parameters. Auto-from-R was considered and rejected: the calibration depends on the search preset's R distribution which the ecosystem layer shouldn't have to know about, and shipping a "smart default" would create user expectations that biota cannot reliably meet across custom presets.
+
+### Test count
+
+279 passing, 1 skipped (was 273 + 1). 6 new tests across YAML parser (3) and spawn/run integration (3).
+
+---
+
 ## v2.2.0 - 2026-04-15
 
 Heterogeneous ecosystem runs and a config-file-driven CLI. Multiple creatures from different archive cells share a grid; each species keeps its own complete parameter set. The ecosystem command is fully rewritten around YAML configs.

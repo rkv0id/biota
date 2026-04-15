@@ -140,6 +140,65 @@ def test_source_archive_dir_override() -> None:
     assert exp.sources[1].archive_dir == "other-archive"
 
 
+def test_source_patch_override_parsed() -> None:
+    """Per-source patch override is parsed when present, None when absent."""
+    yaml_text = textwrap.dedent("""
+        experiments:
+          - name: mixed-patches
+            grid: 64
+            steps: 10
+            snapshot_every: 5
+            border: wall
+            output_format: gif
+            spawn: {min_dist: 20, patch: 32, seed: 0}
+            sources:
+              - {run: a, cell: [0, 0, 0], n: 2}
+              - {run: b, cell: [1, 1, 1], n: 2, patch: 80}
+    """)
+    exp = _load(yaml_text)[0]
+    # Source 0 has no override; the parser leaves patch as None and the runner
+    # falls back to spawn.patch at execution time.
+    assert exp.sources[0].patch is None
+    # Source 1 explicitly overrides.
+    assert exp.sources[1].patch == 80
+    # Sanity: spawn-level default is preserved.
+    assert exp.spawn.patch == 32
+
+
+def test_source_patch_must_be_positive() -> None:
+    yaml_text = textwrap.dedent("""
+        experiments:
+          - name: bad-patch
+            grid: 64
+            steps: 10
+            snapshot_every: 5
+            border: wall
+            output_format: gif
+            spawn: {min_dist: 20, patch: 32, seed: 0}
+            sources:
+              - {run: a, cell: [0, 0, 0], n: 2, patch: 0}
+    """)
+    with pytest.raises(ConfigError, match=r"'sources\[0\]\.patch' must be positive"):
+        _load(yaml_text)
+
+
+def test_source_patch_must_be_integer() -> None:
+    yaml_text = textwrap.dedent("""
+        experiments:
+          - name: bad-patch-type
+            grid: 64
+            steps: 10
+            snapshot_every: 5
+            border: wall
+            output_format: gif
+            spawn: {min_dist: 20, patch: 32, seed: 0}
+            sources:
+              - {run: a, cell: [0, 0, 0], n: 2, patch: 64.5}
+    """)
+    with pytest.raises(ConfigError, match=r"'sources\[0\]\.patch' must be an integer"):
+        _load(yaml_text)
+
+
 def test_multiple_experiments_sequential() -> None:
     yaml_text = textwrap.dedent("""
         experiments:

@@ -82,6 +82,7 @@ class EcosystemResult:
                     "run": s.run_id,
                     "cell": list(s.coords),
                     "n": s.n,
+                    "patch": s.patch if s.patch is not None else sp.patch,
                 }
                 for s in cfg.sources
             ],

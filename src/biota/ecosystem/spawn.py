@@ -130,14 +130,20 @@ def compute_spawn_positions(
     n: int,
     grid_h: int,
     grid_w: int,
+    patch_override: int | None = None,
 ) -> list[tuple[int, int]]:
     """Return (y, x) spawn center coordinates using Poisson disk sampling.
 
     Falls back to jittered grid if Poisson disk cannot place all n creatures.
     Always returns exactly n positions.
+
+    patch_override is used by the multi-species spawn path to compute the
+    border margin from the largest per-species patch rather than spawn.patch.
+    Single-species callers leave it None.
     """
     rng = np.random.default_rng(spawn.seed)
-    margin = spawn.patch + 2  # keep patches off the wall border
+    effective_patch = patch_override if patch_override is not None else spawn.patch
+    margin = effective_patch + 2  # keep patches off the wall border
     # Use the smaller dimension for the Poisson disk to guarantee min_dist
     grid_min = min(grid_h, grid_w)
 
@@ -165,27 +171,33 @@ def build_initial_state(
     grid_h: int,
     grid_w: int,
     device: str,
+    patch_override: int | None = None,
 ) -> torch.Tensor:
     """Build a (grid_h, grid_w, 1) initial state with n creatures on a shared grid.
 
     Spawn positions are determined by Poisson disk sampling. Each creature gets
-    an independent random patch of size spawn.patch x spawn.patch centered at
-    its position. Patch i uses RNG seed spawn.seed + 1000 + i so position
+    an independent random patch (uniform random in [0, 1) per cell) centered
+    at its position. Patch i uses RNG seed spawn.seed + 1000 + i so position
     sampling and patch initialization use independent random streams.
 
+    patch_override lets callers supply a per-source patch size (used by the
+    homogeneous-run path when CreatureSource.patch is set) without mutating
+    SpawnConfig. When None, falls back to spawn.patch.
+
     Args:
-        spawn:   Spawn layout parameters (min_dist, patch, seed).
-        n:       Number of creatures to place.
-        grid_h:  Ecosystem grid height.
-        grid_w:  Ecosystem grid width.
-        device:  Torch device for the output tensor.
+        spawn:          Spawn layout parameters (min_dist, patch, seed).
+        n:              Number of creatures to place.
+        grid_h:         Ecosystem grid height.
+        grid_w:         Ecosystem grid width.
+        device:         Torch device for the output tensor.
+        patch_override: Optional override for per-creature patch side length.
 
     Returns:
         state: (grid_h, grid_w, 1) float32 tensor on device.
     """
-    positions = compute_spawn_positions(spawn, n, grid_h, grid_w)
+    patch = patch_override if patch_override is not None else spawn.patch
+    positions = compute_spawn_positions(spawn, n, grid_h, grid_w, patch_override=patch)
     state = torch.zeros((grid_h, grid_w, 1), dtype=torch.float32, device=device)
-    patch = spawn.patch
 
     for i, (cy, cx) in enumerate(positions):
         rng = np.random.default_rng(spawn.seed + 1000 + i)
@@ -210,6 +222,7 @@ def build_initial_state_multi_species(
     grid_h: int,
     grid_w: int,
     device: str,
+    patches: list[int] | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Build mass and species-weight initial states for a heterogeneous run.
 
@@ -224,6 +237,11 @@ def build_initial_state_multi_species(
     cell, same as build_initial_state) and pins species ownership to a
     one-hot for that species' index in the counts list.
 
+    patches is an optional per-species list of patch sizes; if omitted, every
+    species uses spawn.patch. The Poisson disk margin uses max(patches) so
+    the largest creature still fits inside the wall border. patches must be
+    the same length as counts.
+
     Returns:
         mass:    (H, W, 1) float32 tensor on device.
         weights: (H, W, S) float32 tensor on device, S = len(counts). Where
@@ -235,21 +253,34 @@ def build_initial_state_multi_species(
     if any(c <= 0 for c in counts):
         raise ValueError(f"counts must all be positive, got {counts}")
 
+    if patches is None:
+        patches = [spawn.patch] * len(counts)
+    if len(patches) != len(counts):
+        raise ValueError(
+            f"patches length {len(patches)} does not match counts length {len(counts)}"
+        )
+    if any(p <= 0 for p in patches):
+        raise ValueError(f"patches must all be positive, got {patches}")
+
     total_n = sum(counts)
     s = len(counts)
-    positions = compute_spawn_positions(spawn, total_n, grid_h, grid_w)
+    # Use the largest per-species patch for the Poisson disk margin so the
+    # biggest creature still fits inside the wall border. min_dist itself is
+    # not adjusted since it controls inter-creature spacing, not edge buffer.
+    max_patch = max(patches)
+    positions = compute_spawn_positions(spawn, total_n, grid_h, grid_w, patch_override=max_patch)
     mass = torch.zeros((grid_h, grid_w, 1), dtype=torch.float32, device=device)
     weights = torch.zeros((grid_h, grid_w, s), dtype=torch.float32, device=device)
-    patch = spawn.patch
 
     # Walk positions in order, assigning each to its species via the prefix
-    # sums of counts.
+    # sums of counts. species_of[i] is the species index for creature i.
     species_of: list[int] = []
     for sp_idx, c in enumerate(counts):
         species_of.extend([sp_idx] * c)
 
     for i, ((cy, cx), sp_idx) in enumerate(zip(positions, species_of, strict=True)):
         rng = np.random.default_rng(spawn.seed + 1000 + i)
+        patch = patches[sp_idx]
         patch_data = rng.random((patch, patch), dtype=np.float32)
 
         y0 = max(0, cy - patch // 2)
