@@ -252,7 +252,7 @@ The test suite runs entirely in no-Ray mode. `just smoke-ray` exercises the Ray 
 - [x] v2.1.0 - 15 built-in descriptors (displacement ratio, angular velocity, growth gradient, morphological instability, activity, spatial entropy)
 - [x] v2.2.0 - Heterogeneous ecosystems: multi-source YAML configs, species-indexed parameter localization, per-cell ownership tracking
 - [x] v2.3.0 - Per-source `patch` override; parallel ecosystem dispatch via Ray (`--local-ray`, `--ray-address`, `--workers`, `--gpu-fraction`); sidebar layout with pan/zoom canvas
-- [ ] v2.4.0 - Per-source `min_dist` override; ecosystem auto-fit polish from cluster runs
+- [x] v2.4.0 - Cluster-safe ecosystem dispatch: driver-side creature loading and driver-side output materialization; transport×device smoke test grid
 - [ ] v3.0.0 - Learned descriptors (AURORA-style autoencoder)
 
 ## References
