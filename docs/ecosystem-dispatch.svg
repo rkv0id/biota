@@ -1,0 +1,91 @@
+<svg width="100%" viewBox="0 0 680 440" role="img" xmlns="http://www.w3.org/2000/svg">
+  <title>biota ecosystem dispatch</title>
+  <desc>Data flow: the driver loads N experiments from YAML, resolves creatures from the local archive, and dispatches each experiment as a self-contained Ray task carrying configs and pre-loaded creatures. Workers simulate a shared-canvas ecosystem with species-indexed FlowLenia, render all outputs to bytes, and return (result, artifacts) as a single payload. The driver materializes the artifacts locally. No shared filesystem assumed between driver and workers.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+      .th     { font-size: 13px; font-weight: 500; fill: #e4e4e7; }
+      .ts     { font-size: 11px; font-weight: 400; fill: #a1a1aa; }
+      .tsa    { font-size: 10px; font-weight: 400; fill: #71717a; }
+      .tlabel { font-size: 10px; font-weight: 500; fill: #52525b; letter-spacing: 0.07em; }
+    </style>
+  </defs>
+
+  <!-- Driver process panel -->
+  <rect x="28" y="20" width="624" height="184" rx="8" fill="#16181f" stroke="#2e3044" stroke-width="1"/>
+  <text class="tlabel" x="44" y="38">DRIVER PROCESS</text>
+
+  <!-- YAML config box -->
+  <rect x="44" y="52" width="172" height="136" rx="6" fill="#1c1e27" stroke="#3e4160" stroke-width="0.5"/>
+  <text class="th" x="130" y="80" text-anchor="middle" dominant-baseline="central">experiments.yaml</text>
+  <text class="ts" x="130" y="102" text-anchor="middle" dominant-baseline="central">N experiment configs</text>
+  <text class="tsa" x="130" y="124" text-anchor="middle" dominant-baseline="central">species · grid · steps</text>
+  <text class="tsa" x="130" y="140" text-anchor="middle" dominant-baseline="central">spawn · border · patch</text>
+  <text class="tsa" x="130" y="164" text-anchor="middle" dominant-baseline="central">homo or heterogeneous</text>
+
+  <!-- Archive box (v2.4.0 driver-side creature load) -->
+  <rect x="256" y="52" width="148" height="136" rx="6" fill="#1f1a0e" stroke="#ba7517" stroke-width="0.5"/>
+  <text class="th" x="330" y="80" text-anchor="middle" dominant-baseline="central">archive</text>
+  <text class="ts" x="330" y="102" text-anchor="middle" dominant-baseline="central">resolve creatures</text>
+  <text class="tsa" x="330" y="124" text-anchor="middle" dominant-baseline="central">per-source cell lookup</text>
+  <text class="tsa" x="330" y="140" text-anchor="middle" dominant-baseline="central">RolloutResult objects</text>
+  <text class="tsa" x="330" y="164" text-anchor="middle" dominant-baseline="central">driver-local filesystem</text>
+
+  <!-- Output root box (v2.4.0 driver-side materialize) -->
+  <rect x="444" y="52" width="172" height="136" rx="6" fill="#1f1a0e" stroke="#ba7517" stroke-width="0.5"/>
+  <text class="th" x="530" y="80" text-anchor="middle" dominant-baseline="central">output_root</text>
+  <text class="ts" x="530" y="102" text-anchor="middle" dominant-baseline="central">materialize artifacts</text>
+  <text class="tsa" x="530" y="124" text-anchor="middle" dominant-baseline="central">config · summary · gif</text>
+  <text class="tsa" x="530" y="140" text-anchor="middle" dominant-baseline="central">trajectory · frames</text>
+  <text class="tsa" x="530" y="164" text-anchor="middle" dominant-baseline="central">driver-local filesystem</text>
+
+  <!-- Arrow: yaml -> archive (resolve) -->
+  <path d="M216 118 L254 118" fill="none" stroke="#ba7517" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+  <text class="tsa" x="235" y="110" text-anchor="middle">for each</text>
+
+  <!-- Arrow: archive -> output_root (completion loop) -->
+  <path d="M404 118 L442 118" fill="none" stroke="#4a4e6a" stroke-width="1" stroke-dasharray="4 3"/>
+
+  <!-- Workers panel -->
+  <rect x="28" y="252" width="624" height="172" rx="8" fill="#141820" stroke="#2e3044" stroke-width="1"/>
+  <text class="tlabel" x="44" y="270">RAY WORKERS — one task per experiment, self-contained payload, no shared filesystem</text>
+
+  <!-- Spawn worker box -->
+  <rect x="68"  y="282" width="168" height="124" rx="6" fill="#141a26" stroke="#185fa5" stroke-width="0.5"/>
+  <text class="th" x="152" y="312" text-anchor="middle" dominant-baseline="central">spawn</text>
+  <text class="ts" x="152" y="334" text-anchor="middle" dominant-baseline="central">Poisson disk placement</text>
+  <text class="tsa" x="152" y="354" text-anchor="middle" dominant-baseline="central">per-source patch</text>
+  <text class="tsa" x="152" y="370" text-anchor="middle" dominant-baseline="central">species ownership init</text>
+  <text class="tsa" x="152" y="390" text-anchor="middle" dominant-baseline="central">shared canvas tensor</text>
+
+  <!-- Simulate worker box -->
+  <rect x="256" y="282" width="168" height="124" rx="6" fill="#121e1c" stroke="#0f6e56" stroke-width="0.5"/>
+  <text class="th" x="340" y="312" text-anchor="middle" dominant-baseline="central">simulate</text>
+  <text class="ts" x="340" y="334" text-anchor="middle" dominant-baseline="central">species-indexed FlowLenia</text>
+  <text class="tsa" x="340" y="354" text-anchor="middle" dominant-baseline="central">localized kernels per species</text>
+  <text class="tsa" x="340" y="370" text-anchor="middle" dominant-baseline="central">ownership advects w/ mass</text>
+  <text class="tsa" x="340" y="390" text-anchor="middle" dominant-baseline="central">T steps · snapshots</text>
+
+  <!-- Render worker box -->
+  <rect x="444" y="282" width="168" height="124" rx="6" fill="#1a1626" stroke="#7c3aed" stroke-width="0.5"/>
+  <text class="th" x="528" y="312" text-anchor="middle" dominant-baseline="central">render</text>
+  <text class="ts" x="528" y="334" text-anchor="middle" dominant-baseline="central">bytes, no disk I/O</text>
+  <text class="tsa" x="528" y="354" text-anchor="middle" dominant-baseline="central">gif · per-frame PNG</text>
+  <text class="tsa" x="528" y="370" text-anchor="middle" dominant-baseline="central">trajectory.npy</text>
+  <text class="tsa" x="528" y="390" text-anchor="middle" dominant-baseline="central">summary.json</text>
+
+  <!-- Arrows between worker boxes -->
+  <path d="M236 344 L254 344" fill="none" stroke="#185fa5" stroke-width="1" marker-end="url(#arrow)"/>
+  <path d="M424 344 L442 344" fill="none" stroke="#0f6e56" stroke-width="1" marker-end="url(#arrow)"/>
+
+  <!-- Dispatch arrow: config+creatures -> spawn worker -->
+  <path d="M170 188 L170 242 L152 242 L152 280" fill="none" stroke="#185fa5" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+  <text class="tsa" x="98" y="238" text-anchor="middle">config + creatures</text>
+
+  <!-- Return arrow: render -> output_root (materialize) -->
+  <path d="M528 280 L528 242 L530 242 L530 190" fill="none" stroke="#ba7517" stroke-width="1" marker-end="url(#arrow)"/>
+  <text class="tsa" x="584" y="238" text-anchor="start">result + artifacts</text>
+</svg>

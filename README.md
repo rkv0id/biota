@@ -14,18 +14,21 @@ biota runs MAP-Elites searches across a Ray cluster, dispatching batches of [Flo
 
 [MAP-Elites](https://arxiv.org/abs/1504.04909) searches that parameter space for behavioral diversity rather than a single optimum. Instead of one best creature, it fills a grid where each cell holds the highest-quality creature with a particular phenotypic fingerprint: an atlas of qualitatively distinct life-forms.
 
+<p align="center"><img src="docs/archive-grid.svg" alt="MAP-Elites archive grid" width="85%"/></p>
+
 The driver owns the archive and the search loop. Each Ray task evaluates B creatures as a single `(B, H, W)` vectorized forward pass. One task fills one GPU. Workers are stateless; nothing persistent lives on the cluster between tasks.
 
-```
-driver (archive + loop)
-    └── submit batch of B params
-            ├── Ray worker 0: (B, H, W) → B results   [GPU 0]
-            ├── Ray worker 1: (B, H, W) → B results   [GPU 1]
-            └── Ray worker 2: (B, H, W) → B results   [GPU 2]
-    └── insert results → update archive → next batch
-```
+<p align="center"><img src="docs/search-loop.svg" alt="Search loop and Ray dispatch" width="95%"/></p>
 
 `--workers N` controls how many batches are in flight simultaneously. `--workers 1` is synchronous MAP-Elites (maximally fresh archive). Higher values trade freshness for throughput on multi-node setups.
+
+## Ecosystem simulation
+
+Once the archive is populated, `biota ecosystem` takes specific archive cells and runs them on a shared grid to see how creatures interact. A homogeneous run spawns `N` copies of one species. A heterogeneous run mixes two or more species, each with its own full parameter set (kernel radii, growth windows, weights), using species-indexed LocalizedFlowLenia: per-cell species ownership tracks which lineage owns the local mass, blends growth fields by ownership, and advects with the flow.
+
+Ecosystem dispatch is Ray-correct: each experiment is a self-contained payload. The driver loads creatures from its local archive and ships them with the config; workers simulate and render to bytes; the driver materializes outputs locally. No shared filesystem is assumed at any step, so experiments run correctly on real multi-node clusters without NFS or rsync setup.
+
+<p align="center"><img src="docs/ecosystem-dispatch.svg" alt="Ecosystem dispatch: driver loads creatures, workers simulate and render, driver materializes" width="95%"/></p>
 
 ## Behavioral descriptors
 

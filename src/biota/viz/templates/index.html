@@ -174,6 +174,17 @@
             color: #71717a;
         }
 
+        /* architecture diagram frames — wrapper around inline SVGs */
+        .diagram-frame {
+            margin: 28px 0 32px;
+        }
+        .diagram-frame svg {
+            width: 100%;
+            height: auto;
+            display: block;
+            border-radius: 6px;
+        }
+
         /* descriptor cards */
         .descriptor-grid {
             display: grid;
@@ -420,26 +431,22 @@
         </h1>
         <div class="page-tagline">quality-diversity search over Flow-Lenia creatures</div>
         <nav class="tabs">
-            <button class="tab-btn active" data-tab="about">About</button>
+            <button class="tab-btn active" data-tab="system">System</button>
             <button class="tab-btn" data-tab="runs">Archive runs</button>
             <button class="tab-btn" data-tab="ecosystem">Ecosystem runs</button>
             <button class="tab-btn" data-tab="reproduce">Reproduce</button>
+            <button class="tab-btn" data-tab="about">About</button>
             <button class="tab-btn" data-tab="contact">Contact</button>
         </nav>
     </div>
     </header>
 
-    <!-- === About === -->
-    <div class="tab-panel active" id="panel-about">
+    <!-- === System === -->
+    <div class="tab-panel active" id="panel-system">
     <div class="page-wrap">
         <div class="prose">
-            <h2>What is biota</h2>
-            <p>biota searches the parameter space of <a class="pill amber" href="https://arxiv.org/abs/2212.07906" target="_blank" style="display:inline;padding:2px 6px;border-radius:3px;font-size:inherit;">Flow-Lenia</a> - a continuous cellular automaton where matter is conserved by construction. Rather than finding a single best creature, it fills a behavioral grid where each cell holds the most compact creature with a particular phenotypic fingerprint. The result is a structured catalog of qualitatively distinct life-forms.</p>
-            <p>Each creature is a soliton: a stable, self-maintaining pattern that persists indefinitely given the right parameters. Mass conservation is what makes them viable across a wide parameter range - without it, most settings produce explosion or collapse within a few steps.</p>
-
-            <h2>The search algorithm</h2>
-            <p><a class="pill amber" href="https://arxiv.org/abs/1504.04909" target="_blank" style="display:inline;padding:2px 6px;border-radius:3px;font-size:inherit;">MAP-Elites</a> runs a loop: sample parameters, simulate a creature, measure its behavior, insert it into the matching archive cell if it beats whatever is already there. After thousands of rollouts the archive fills with creatures covering the behavioral space as broadly as possible - not optimizing toward one solution, but toward diversity.</p>
-            <p>Simulations run in parallel across a 3-node GPU cluster. One batch task evaluates B creatures as a single vectorized forward pass on one RTX 5060 Ti. The driver owns the archive and orchestrates the search; workers are stateless.</p>
+            <h2>Architecture</h2>
+            <p>biota is a distributed quality-diversity search platform for <a class="pill amber" href="https://arxiv.org/abs/2212.07906" target="_blank" style="display:inline;padding:2px 6px;border-radius:3px;font-size:inherit;">Flow-Lenia</a>. Two subsystems share the same vectorized PyTorch runtime and the same Ray cluster: a MAP-Elites <em>search</em> that fills a behavioral archive, and an <em>ecosystem</em> dispatch that runs selected archive creatures on shared canvases. Both run on consumer-grade hardware — a 3-node RTX 5060 Ti cluster with Thunderbolt OCuLink GPU attach.</p>
 
             <div class="stat-row">
                 <div class="stat">
@@ -456,8 +463,24 @@
                 </div>
             </div>
 
+            <h2>MAP-Elites search</h2>
+            <p><a class="pill amber" href="https://arxiv.org/abs/1504.04909" target="_blank" style="display:inline;padding:2px 6px;border-radius:3px;font-size:inherit;">MAP-Elites</a> runs a loop: sample parameters, simulate a creature, measure its behavior, insert it into the matching archive cell if it beats whatever is already there. After thousands of rollouts the archive fills with creatures covering the behavioral space as broadly as possible — not optimizing toward one solution, but toward diversity.</p>
+            <p>The archive is a three-dimensional behavioral grid. Each axis holds one descriptor chosen from a library of fifteen, all normalized to [0, 1] and empirically calibrated against real cluster runs. Each cell holds the highest-quality creature found with that behavioral fingerprint.</p>
+
+            <div class="diagram-frame">{{ svg_archive_grid | safe }}</div>
+
+            <p>The driver owns the archive and the search loop. Each Ray task evaluates B creatures as a single <code>(B, H, W)</code> vectorized forward pass on one GPU. Workers are stateless; nothing persistent lives on the cluster between tasks. <code>--workers N</code> controls how many batches are in flight simultaneously: one means synchronous MAP-Elites with a maximally fresh archive, higher values trade freshness for throughput.</p>
+
+            <div class="diagram-frame">{{ svg_search_loop | safe }}</div>
+
+            <h2>Ecosystem dispatch</h2>
+            <p>Once the archive is populated, <code>biota ecosystem</code> takes specific archive cells and runs them on a shared grid to see how creatures interact. A homogeneous run spawns N copies of one species. A heterogeneous run mixes two or more species, each with its own full parameter set — kernel radii, growth windows, weights — using species-indexed LocalizedFlowLenia: per-cell species ownership tracks which lineage owns the local mass, blends growth fields by ownership, and advects with the flow.</p>
+            <p>Ecosystem dispatch is Ray-correct in both directions: each experiment is a self-contained payload. The driver loads creatures from its local archive and ships them as part of the task input; workers simulate and render to bytes; the driver materializes outputs to its own local filesystem. No shared filesystem is assumed at any step, so experiments run correctly on real multi-node clusters without NFS or rsync setup.</p>
+
+            <div class="diagram-frame">{{ svg_ecosystem_dispatch | safe }}</div>
+
             <h2>Behavioral descriptors</h2>
-            <p>Three scalars measured from each rollout index the archive's three axes. The active set is chosen per run — any three from the built-in library of fifteen. All are normalized to [0, 1] and empirically calibrated against real cluster runs.</p>
+            <p>Three scalars measured from each rollout index the archive's three axes. The active set is chosen per run — any three from the built-in library of fifteen.</p>
             <div class="descriptor-grid">
                 <div class="descriptor-card">
                     <div class="descriptor-name">velocity</div>
@@ -520,6 +543,21 @@
                     <div class="descriptor-desc">Shannon entropy of mass distribution over a coarse spatial grid. Low = compact localized mass, high = diffuse or multi-body spread.</div>
                 </div>
             </div>
+        </div>
+    </div>
+    </div>
+
+    <!-- === About === -->
+    <div class="tab-panel" id="panel-about">
+    <div class="page-wrap">
+        <div class="prose">
+            <h2>What is biota</h2>
+            <p>biota searches the parameter space of <a class="pill amber" href="https://arxiv.org/abs/2212.07906" target="_blank" style="display:inline;padding:2px 6px;border-radius:3px;font-size:inherit;">Flow-Lenia</a> — a continuous cellular automaton where matter is conserved by construction. Rather than finding a single best creature, it fills a behavioral grid where each cell holds the most compact creature with a particular phenotypic fingerprint. The result is a structured catalog of qualitatively distinct life-forms.</p>
+            <p>Each creature is a soliton: a stable, self-maintaining pattern that persists indefinitely given the right parameters. Mass conservation is what makes them viable across a wide parameter range — without it, most settings produce explosion or collapse within a few steps.</p>
+
+            <h2>Why this project</h2>
+            <p>biota started as a side project to get hands-on with PyTorch and Ray without doing yet another deep learning thing, and grew into a full Flow-Lenia research platform with behavioral search, heterogeneous ecosystem simulation, and this static atlas. It runs on consumer-grade hardware in a home lab — nothing about the approach requires a data center.</p>
+            <p>If any of it is useful to you, or you want to point out something I got wrong, feel free to open an issue on <a class="pill amber" href="https://github.com/rkv0id/biota" target="_blank" style="display:inline;padding:2px 6px;border-radius:3px;font-size:inherit;">GitHub</a>.</p>
 
             <h2>Further reading</h2>
             <div class="pill-row">

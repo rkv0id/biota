@@ -560,8 +560,21 @@ def _build_index_html(
     cards: list[dict[str, Any]], eco_cards: list[dict[str, Any]] | None = None
 ) -> str:
     template = _ENV.get_template("index.html")
+    # Inline the architecture diagrams so the deployed site is self-contained
+    # (no assumption about whether docs/ gets shipped alongside index.html).
+    docs_dir = Path(__file__).resolve().parent.parent / "docs"
+    svgs: dict[str, str] = {}
+    for name in ("archive-grid", "search-loop", "ecosystem-dispatch"):
+        path = docs_dir / f"{name}.svg"
+        svgs[name.replace("-", "_")] = path.read_text(encoding="utf-8") if path.exists() else ""
     return template.render(
-        n_runs=len(cards), cards=cards, eco_cards=eco_cards or [], n_eco_runs=len(eco_cards or [])
+        n_runs=len(cards),
+        cards=cards,
+        eco_cards=eco_cards or [],
+        n_eco_runs=len(eco_cards or []),
+        svg_archive_grid=svgs["archive_grid"],
+        svg_search_loop=svgs["search_loop"],
+        svg_ecosystem_dispatch=svgs["ecosystem_dispatch"],
     )
 
 
