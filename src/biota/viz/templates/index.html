@@ -174,7 +174,12 @@
             color: #71717a;
         }
 
-        /* architecture diagram frames — wrapper around inline SVGs */
+        /* architecture diagram frames — wrapper around inline SVGs.
+           The atlas page is always dark regardless of user's system
+           color scheme preference, so we force the embedded SVG text
+           and axis colors to dark-mode values here. The SVG's own
+           @media (prefers-color-scheme) rules handle the standalone
+           README case. */
         .diagram-frame {
             margin: 28px 0 32px;
         }
@@ -184,6 +189,10 @@
             display: block;
             border-radius: 6px;
         }
+        .diagram-frame svg .tsh  { fill: #e4e4e7; }
+        .diagram-frame svg .tsa  { fill: #a1a1aa; }
+        .diagram-frame svg .tsax { fill: #71717a; }
+        .diagram-frame svg .axis-line { stroke: #52525b; }
 
         /* descriptor cards */
         .descriptor-grid {
