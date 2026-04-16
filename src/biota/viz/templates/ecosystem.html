@@ -522,12 +522,49 @@
             .page-wrap { padding: 0 20px; }
             .page-title { font-size: 20px; }
         }
-        @media (max-width: 600px) {
+
+        /* Small screens: drop the pan/zoom viewport entirely. The desktop
+           viewport uses flex:1 + overflow:hidden + transform-based pan/zoom,
+           which on a touchscreen hijacks the viewport (the whole GIF canvas
+           fills the screen and you can't scroll past it). Touch devices
+           don't fire wheel events, and pinch-zoom works better via native
+           browser gestures anyway, so we let the GIF display as a plain
+           inline image and let the page scroll normally.
+
+           The JS pan/zoom handlers still attach but their transform writes
+           are overridden here, and the touch events they don't listen for
+           don't fire. Safe to leave in place. */
+        @media (max-width: 700px) {
             .page-header { padding: 16px 0 12px 0; }
             main { padding: 12px 0 40px 0; }
             .page-wrap { padding: 0 16px; }
             .stats-row { gap: 24px; }
             .stat-value { font-size: 18px; }
+
+            .run-viz.has-gif { display: block; padding: 16px; }
+            .gif-viewport {
+                position: static;
+                width: 100%;
+                flex: none;
+                min-height: 0;
+                overflow: visible;
+                background: transparent;
+                cursor: default;
+                user-select: auto;
+                -webkit-user-select: auto;
+            }
+            .gif-viewport-inner {
+                position: static;
+                transform: none !important;
+                transition: none;
+            }
+            .eco-gif {
+                max-width: 100%;
+                height: auto;
+                width: 100%;
+                border-radius: 4px;
+            }
+            .gif-hud { display: none; }
         }
     </style>
 </head>
