@@ -553,6 +553,7 @@ def test_to_summary_dict_is_json_serializable() -> None:
         min_mass=9.8,
         mass_turnover=0.01,
         snapshot_steps=[5, 10],
+        species_mass_history=[[10.0, 9.9, 9.8]],
     )
     result = EcosystemResult(
         config=config,
@@ -603,6 +604,7 @@ def test_to_summary_dict_marks_heterogeneous_mode() -> None:
         min_mass=1.0,
         mass_turnover=0.0,
         snapshot_steps=[],
+        species_mass_history=[[1.0]],
     )
     result = EcosystemResult(
         config=config, run_id="het-test", run_dir="/tmp", measures=measures, elapsed_seconds=0.0

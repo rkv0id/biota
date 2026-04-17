@@ -160,6 +160,35 @@
             margin-top: 8px;
         }
 
+        /* species mass chart */
+        .species-chart {
+            width: 100%;
+            height: 80px;
+            margin-top: 8px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.02);
+        }
+        .species-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px 12px;
+            margin-top: 6px;
+        }
+        .species-legend-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 9px;
+            color: #71717a;
+        }
+        .species-swatch {
+            width: 8px;
+            height: 8px;
+            border-radius: 2px;
+            flex-shrink: 0;
+        }
+        .species-legend-name { white-space: nowrap; }
+
         /* Mobile: collapse to single column */
         @media (max-width: 900px) {
             .page-grid { grid-template-columns: 1fr; }
@@ -669,7 +698,20 @@
                 <path d="{{ mass_line_path }}" fill="none" stroke="#fbbf77" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
             {% else %}
-            <div class="meta-chart-empty">mass essentially flat across run</div>
+            <div class="meta-chart-empty">total mass conserved across run</div>
+            {% endif %}
+
+            {% if n_species > 1 and species_mass_history_json != '[]' %}
+            <div class="meta-section-label" style="margin-top: 16px;">species mass</div>
+            <div class="species-legend">
+                {% for src in sources %}
+                <span class="species-legend-item">
+                    <span class="species-swatch" style="background: {{ species_palette[loop.index0] }};"></span>
+                    <span class="species-legend-name">{{ src.run_id | truncate(12, True) }} {{ src.cell }}</span>
+                </span>
+                {% endfor %}
+            </div>
+            <canvas id="speciesChart" class="species-chart" width="800" height="160"></canvas>
             {% endif %}
         </div>
     </aside>
@@ -859,6 +901,56 @@
             apply(true);
         });
     }
+
+    // Species mass chart: multi-line canvas chart colored by species palette.
+    // Only present for heterogeneous runs (n_species > 1).
+    {% if n_species > 1 and species_mass_history_json != '[]' %}
+    var speciesCanvas = document.getElementById('speciesChart');
+    if (speciesCanvas) {
+        var speciesData = {{ species_mass_history_json | safe }};
+        var palette = {{ species_palette | tojson }};
+        var ctx = speciesCanvas.getContext('2d');
+        // Use CSS dimensions for the drawing surface so the chart is sharp
+        // on high-DPI screens without layout shift.
+        var dpr = window.devicePixelRatio || 1;
+        var cssW = speciesCanvas.clientWidth;
+        var cssH = speciesCanvas.clientHeight;
+        speciesCanvas.width = cssW * dpr;
+        speciesCanvas.height = cssH * dpr;
+        ctx.scale(dpr, dpr);
+        var W = cssW;
+        var H = cssH;
+
+        // Find global y range across all species.
+        var allVals = speciesData.flat();
+        var yMin = Math.min.apply(null, allVals);
+        var yMax = Math.max.apply(null, allVals);
+        if (yMax - yMin < 1e-6) yMax = yMin + 1;
+        var pad = (yMax - yMin) * 0.08;
+        yMin = Math.max(0, yMin - pad);
+        yMax += pad;
+
+        for (var s = 0; s < speciesData.length; s++) {
+            var series = speciesData[s];
+            var n = series.length;
+            if (n < 2) continue;
+            // Subsample to at most W points for performance on long runs.
+            var drawN = Math.min(n, W);
+            ctx.beginPath();
+            ctx.strokeStyle = palette[s % palette.length];
+            ctx.lineWidth = 1.5;
+            ctx.lineJoin = 'round';
+            for (var i = 0; i < drawN; i++) {
+                var idx = Math.round(i * (n - 1) / (drawN - 1));
+                var x = (idx / (n - 1)) * W;
+                var y = H - ((series[idx] - yMin) / (yMax - yMin)) * H;
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+        }
+    }
+    {% endif %}
     </script>
 </body>
 </html>

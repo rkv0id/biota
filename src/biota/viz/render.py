@@ -268,7 +268,7 @@ def _build_body_inner(
     return (
         f'<div class="grid-with-axes">'
         f'<div class="axis-vel-label">'
-        f'<div class="axis-arrow">&#8595; {d0_direction}</div>'
+        f'<div class="axis-arrow">&#8592; {d0_direction}</div>'
         f'<div class="axis-vel-ticks" style="{vel_label_style}">{vel_label_items}</div>'
         f"</div>"
         f'<div class="grid-column-wrap">'

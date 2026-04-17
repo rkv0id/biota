@@ -19,14 +19,22 @@ class EcosystemMeasures:
     """Per-step and summary measures from one ecosystem run.
 
     Attributes:
-        initial_mass:   Total mass at step 0 (sum of all spawn patches).
-        final_mass:     Total mass at the final step.
-        mass_history:   Total mass at each step. Length = steps + 1.
-        peak_mass:      Maximum total mass observed during the run.
-        min_mass:       Minimum total mass observed during the run.
-        mass_turnover:  Mean absolute per-step mass change, normalized
-                        by initial_mass. High = dynamic, low = stable.
-        snapshot_steps: Steps at which full state snapshots were captured.
+        initial_mass:         Total mass at step 0 (sum of all spawn patches).
+        final_mass:           Total mass at the final step.
+        mass_history:         Total mass at each step. Length = steps + 1.
+        peak_mass:            Maximum total mass observed during the run.
+        min_mass:             Minimum total mass observed during the run.
+        mass_turnover:        Mean absolute per-step mass change, normalized
+                              by initial_mass. High = dynamic, low = stable.
+        snapshot_steps:       Steps at which full state snapshots were captured.
+        species_mass_history: Per-species mass at each step.
+                              Outer list indexed by species (0..S-1), inner
+                              list indexed by step (length = steps + 1).
+                              For homogeneous runs, has one entry equal to
+                              mass_history. For heterogeneous runs, the S
+                              entries sum to mass_history at each step
+                              (mass conservation). These are the data behind
+                              the per-species mass chart in the viewer.
     """
 
     initial_mass: float
@@ -36,6 +44,7 @@ class EcosystemMeasures:
     min_mass: float
     mass_turnover: float
     snapshot_steps: list[int]
+    species_mass_history: list[list[float]]
 
 
 @dataclass
@@ -98,6 +107,7 @@ class EcosystemResult:
                 "min_mass": m.min_mass,
                 "mass_turnover": m.mass_turnover,
                 "snapshot_steps": m.snapshot_steps,
+                "species_mass_history": m.species_mass_history,
             },
             "elapsed_seconds": self.elapsed_seconds,
         }

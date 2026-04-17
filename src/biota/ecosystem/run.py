@@ -20,6 +20,7 @@ and per-cell weights track which species owns the local mass.
 import json
 import pickle
 import time
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
@@ -33,6 +34,40 @@ from biota.search.result import RolloutResult
 from biota.sim.flowlenia import Config as SimConfig
 from biota.sim.flowlenia import FlowLenia, Params
 from biota.sim.localized import LocalizedFlowLenia, LocalizedState
+
+
+@dataclass
+class SimOutput:
+    """Raw output from one simulation loop (homo or hetero).
+
+    Uniform shape so _compute_outputs doesn't need to know which path ran.
+    For homogeneous runs, ownership_snapshots is empty and
+    species_mass_history has one row equal to total mass_history.
+    """
+
+    snapshots: list[np.ndarray]  # (H, W) float32 mass at snapshot steps
+    snapshot_steps: list[int]
+    mass_history: list[float]  # total mass per step, length = steps + 1
+    initial_mass: float
+    n_species: int
+    species_mass_history: list[list[float]] = field(default_factory=list)
+    # (H, W, S) float32 ownership at each snapshot step; empty for homo runs
+    ownership_snapshots: list[np.ndarray] = field(default_factory=list)
+
+
+# Perceptually distinct hues for species coloring. Ordered so the first
+# few are maximally distinguishable. When ownership blends two species
+# the result is a weighted mix of these RGB triples.
+SPECIES_PALETTE: list[tuple[int, int, int]] = [
+    (255, 140, 50),  # warm orange
+    (80, 180, 255),  # sky blue
+    (180, 255, 80),  # lime green
+    (255, 90, 180),  # hot pink
+    (140, 100, 255),  # purple
+    (255, 220, 60),  # gold
+    (60, 220, 200),  # teal
+    (255, 100, 100),  # coral
+]
 
 
 def _make_run_id(name: str) -> str:
@@ -119,15 +154,49 @@ def _colorize_frame(state: np.ndarray, global_peak: float | None = None) -> np.n
     return apply_magma(normalized)
 
 
-def _render_frame_png_bytes(state: np.ndarray) -> bytes | None:
-    """Render a (H, W) float32 state to PNG bytes. Returns None on failure."""
+def _colorize_frame_species(
+    mass: np.ndarray,
+    ownership: np.ndarray,
+    global_peak: float,
+) -> np.ndarray:
+    """Colorize a frame by species ownership.
+
+    mass:      (H, W) float32 mass density.
+    ownership: (H, W, S) float32 species ownership weights (simplex).
+    global_peak: normalization ceiling for mass intensity.
+
+    Returns (H, W, 3) uint8 RGB. Each pixel's hue is a weighted blend
+    of the species palette colors by ownership, and brightness scales
+    with mass intensity. Background (no mass) is black.
+    """
+    h, w = mass.shape
+    n_species = ownership.shape[2]
+    intensity = np.clip(mass / max(global_peak, 1e-8), 0.0, 1.0)  # (H, W)
+
+    # Build per-pixel RGB by blending palette colors by ownership weight
+    rgb = np.zeros((h, w, 3), dtype=np.float32)
+    for s in range(n_species):
+        color_idx = s % len(SPECIES_PALETTE)
+        r, g, b = SPECIES_PALETTE[color_idx]
+        weight = ownership[:, :, s]  # (H, W)
+        rgb[:, :, 0] += weight * r
+        rgb[:, :, 1] += weight * g
+        rgb[:, :, 2] += weight * b
+
+    # Scale by mass intensity
+    rgb *= intensity[:, :, np.newaxis]
+    return rgb.clip(0, 255).astype(np.uint8)
+
+
+def _render_rgb_png_bytes(rgb: np.ndarray) -> bytes | None:
+    """Render an already-colorized (H, W, 3) uint8 frame to PNG bytes."""
     try:
         import io
 
         import imageio.v3 as iio
 
         buf = io.BytesIO()
-        iio.imwrite(buf, _colorize_frame(state), extension=".png")
+        iio.imwrite(buf, rgb, extension=".png")
         return buf.getvalue()
     except Exception:
         return None
@@ -169,10 +238,7 @@ def _compute_outputs(
     config: EcosystemConfig,
     run_id: str,
     run_dir: Path,
-    raw_snapshots: list[np.ndarray],
-    snapshot_steps: list[int],
-    mass_history: list[float],
-    initial_mass: float,
+    sim: SimOutput,
     elapsed: float,
 ) -> tuple[EcosystemResult, dict[str, bytes]]:
     """Compute the EcosystemResult and the artifact bytes dict.
@@ -185,13 +251,29 @@ def _compute_outputs(
     Per-frame PNG rendering for the 'frames' output_format is done here
     rather than streamed during the simulation loop, so cluster runs ship
     one bundled artifact dict rather than relying on per-step disk writes.
+
+    For heterogeneous runs with ownership data, frames are species-colored
+    (each species gets a distinct hue, blended by ownership weight, scaled
+    by mass intensity). For homogeneous runs, the standard magma colormap
+    is used.
     """
     artifacts: dict[str, bytes] = {}
+    has_ownership = len(sim.ownership_snapshots) > 0
 
+    global_peak = 0.0
+    if sim.snapshots:
+        global_peak = float(np.percentile(np.stack(sim.snapshots), 99.9))
+
+    # Build RGB frames: species-colored when ownership is available, magma otherwise.
     rgb_frames: list[np.ndarray] = []
-    if raw_snapshots:
-        global_peak = float(np.percentile(np.stack(raw_snapshots), 99.9))
-        rgb_frames = [_colorize_frame(f, global_peak) for f in raw_snapshots]
+    if sim.snapshots:
+        if has_ownership:
+            rgb_frames = [
+                _colorize_frame_species(mass, own, global_peak)
+                for mass, own in zip(sim.snapshots, sim.ownership_snapshots, strict=True)
+            ]
+        else:
+            rgb_frames = [_colorize_frame(f, global_peak) for f in sim.snapshots]
 
     if config.output_format == "gif" and rgb_frames:
         gif_bytes = _render_gif_bytes(rgb_frames)
@@ -199,36 +281,41 @@ def _compute_outputs(
             artifacts["ecosystem.gif"] = gif_bytes
 
     if config.output_format == "frames":
-        for frame, step in zip(raw_snapshots, snapshot_steps, strict=True):
-            png_bytes = _render_frame_png_bytes(frame)
+        for i, (frame, step) in enumerate(zip(sim.snapshots, sim.snapshot_steps, strict=True)):
+            if has_ownership:
+                rgb = _colorize_frame_species(frame, sim.ownership_snapshots[i], global_peak)
+            else:
+                rgb = _colorize_frame(frame)
+            png_bytes = _render_rgb_png_bytes(rgb)
             if png_bytes is not None:
                 artifacts[f"frames/step_{step:06d}.png"] = png_bytes
 
-    mass_arr = np.array(mass_history, dtype=np.float32)
-    final_mass = mass_history[-1] if mass_history else 0.0
+    mass_arr = np.array(sim.mass_history, dtype=np.float32)
+    final_mass = sim.mass_history[-1] if sim.mass_history else 0.0
     peak_mass = float(mass_arr.max()) if mass_arr.size else 0.0
     min_mass = float(mass_arr.min()) if mass_arr.size else 0.0
 
-    if initial_mass > 0 and len(mass_history) > 1:
+    if sim.initial_mass > 0 and len(sim.mass_history) > 1:
         diffs = np.abs(np.diff(mass_arr))
-        mass_turnover = float(diffs.mean() / initial_mass)
+        mass_turnover = float(diffs.mean() / sim.initial_mass)
     else:
         mass_turnover = 0.0
 
     measures = EcosystemMeasures(
-        initial_mass=initial_mass,
+        initial_mass=sim.initial_mass,
         final_mass=final_mass,
-        mass_history=mass_history,
+        mass_history=sim.mass_history,
         peak_mass=peak_mass,
         min_mass=min_mass,
         mass_turnover=mass_turnover,
-        snapshot_steps=snapshot_steps,
+        snapshot_steps=sim.snapshot_steps,
+        species_mass_history=sim.species_mass_history,
     )
 
-    if raw_snapshots:
+    if sim.snapshots:
         import io
 
-        trajectory = np.stack(raw_snapshots, axis=0)
+        trajectory = np.stack(sim.snapshots, axis=0)
         buf = io.BytesIO()
         np.save(buf, trajectory)
         artifacts["trajectory.npy"] = buf.getvalue()
@@ -299,8 +386,8 @@ def _write_config_json(config: EcosystemConfig, run_dir: Path) -> None:
 def _run_homogeneous(
     config: EcosystemConfig,
     creatures: list[RolloutResult] | None = None,
-) -> tuple[list[np.ndarray], list[int], list[float], float]:
-    """Scalar-path simulation loop. Returns (snapshots, snapshot_steps, mass_history, initial_mass)."""
+) -> SimOutput:
+    """Scalar-path simulation loop. Returns SimOutput with n_species=1."""
     source = config.sources[0]
     creature = creatures[0] if creatures is not None else load_creature(source)
     sim_cfg = _build_sim_config(creature, config)
@@ -330,13 +417,21 @@ def _run_homogeneous(
             snapshots.append(frame)
             steps_taken.append(step)
 
-    return snapshots, steps_taken, mass_history, initial_mass
+    return SimOutput(
+        snapshots=snapshots,
+        snapshot_steps=steps_taken,
+        mass_history=mass_history,
+        initial_mass=initial_mass,
+        n_species=1,
+        species_mass_history=[mass_history],
+        ownership_snapshots=[],
+    )
 
 
 def _run_heterogeneous(
     config: EcosystemConfig,
     creatures: list[RolloutResult] | None = None,
-) -> tuple[list[np.ndarray], list[int], list[float], float]:
+) -> SimOutput:
     """Species-indexed simulation loop via LocalizedFlowLenia."""
     if creatures is None:
         creatures = [load_creature(s) for s in config.sources]
@@ -369,21 +464,41 @@ def _run_heterogeneous(
     )
     state = LocalizedState(mass=mass, weights=weights)
     initial_mass = float(state.mass.sum().item())
+    n_species = len(creatures)
 
     snapshots: list[np.ndarray] = []
+    ownership_snapshots: list[np.ndarray] = []
     steps_taken: list[int] = []
     mass_history: list[float] = [initial_mass]
+    # Per-species mass: outer list indexed by species, inner by step.
+    species_mass: list[list[float]] = []
+    for s in range(n_species):
+        sp_mass = float((state.mass[:, :, 0] * state.weights[:, :, s]).sum().item())
+        species_mass.append([sp_mass])
 
     for step in range(1, config.steps + 1):
         state = lfl.step(state)
         mass_history.append(float(state.mass.sum().item()))
+        # Per-species mass at every step for smooth charts.
+        for s in range(n_species):
+            sp_mass = float((state.mass[:, :, 0] * state.weights[:, :, s]).sum().item())
+            species_mass[s].append(sp_mass)
 
         if step % config.snapshot_every == 0 or step == config.steps:
             frame = state.mass[:, :, 0].detach().cpu().numpy().astype(np.float32)
             snapshots.append(frame)
             steps_taken.append(step)
+            ownership_snapshots.append(state.weights.detach().cpu().numpy().astype(np.float32))
 
-    return snapshots, steps_taken, mass_history, initial_mass
+    return SimOutput(
+        snapshots=snapshots,
+        snapshot_steps=steps_taken,
+        mass_history=mass_history,
+        initial_mass=initial_mass,
+        n_species=n_species,
+        species_mass_history=species_mass,
+        ownership_snapshots=ownership_snapshots,
+    )
 
 
 def run_ecosystem(
@@ -446,23 +561,16 @@ def compute_ecosystem(
 
     started_at = time.time()
     if config.is_heterogeneous:
-        snapshots, steps_taken, mass_history, initial_mass = _run_heterogeneous(
-            config, creatures=creatures
-        )
+        sim = _run_heterogeneous(config, creatures=creatures)
     else:
-        snapshots, steps_taken, mass_history, initial_mass = _run_homogeneous(
-            config, creatures=creatures
-        )
+        sim = _run_homogeneous(config, creatures=creatures)
     elapsed = time.time() - started_at
 
     result, artifacts = _compute_outputs(
         config=config,
         run_id=run_id,
         run_dir=run_dir,
-        raw_snapshots=snapshots,
-        snapshot_steps=steps_taken,
-        mass_history=mass_history,
-        initial_mass=initial_mass,
+        sim=sim,
         elapsed=elapsed,
     )
     # config.json travels in the same artifact bundle so the driver

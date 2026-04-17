@@ -837,6 +837,21 @@ def _render_ecosystem_run(run_dir: Path, publish: bool = False) -> str:
     # n_creatures is the total across all sources for the header summary line.
     total_creatures = sum(int(s.get("n", 0)) for s in sources_ctx) if sources_ctx else n_creatures
 
+    # Per-species mass data for the species chart and color legend.
+    species_mass_history: list[list[float]] = measures.get("species_mass_history", [])
+    n_species = len(sources_ctx) if sources_ctx else 1
+    # Species palette as hex strings, matching SPECIES_PALETTE in run.py.
+    species_palette_hex = [
+        "#ff8c32",
+        "#50b4ff",
+        "#b4ff50",
+        "#ff5ab4",
+        "#8c64ff",
+        "#ffdc3c",
+        "#3cdcc8",
+        "#ff6464",
+    ]
+
     template = _ENV.get_template("ecosystem.html")
     return template.render(
         run_id=run_id,
@@ -864,6 +879,9 @@ def _render_ecosystem_run(run_dir: Path, publish: bool = False) -> str:
         thumb_px=THUMB_PX,
         output_format=output_format,
         gif_src=gif_src,
+        n_species=n_species,
+        species_mass_history_json=json.dumps(species_mass_history),
+        species_palette=species_palette_hex[:n_species],
     )
 
 
