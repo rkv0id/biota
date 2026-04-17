@@ -839,6 +839,7 @@ def _render_ecosystem_run(run_dir: Path, publish: bool = False) -> str:
 
     # Per-species mass data for the species chart and color legend.
     species_mass_history: list[list[float]] = measures.get("species_mass_history", [])
+    species_territory_history: list[list[float]] = measures.get("species_territory_history", [])
     n_species = len(sources_ctx) if sources_ctx else 1
     # Species palette as hex strings, matching SPECIES_PALETTE in run.py.
     species_palette_hex = [
@@ -881,6 +882,7 @@ def _render_ecosystem_run(run_dir: Path, publish: bool = False) -> str:
         gif_src=gif_src,
         n_species=n_species,
         species_mass_history_json=json.dumps(species_mass_history),
+        species_territory_history_json=json.dumps(species_territory_history),
         species_palette=species_palette_hex[:n_species],
     )
 

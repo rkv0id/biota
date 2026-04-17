@@ -45,6 +45,7 @@ class EcosystemMeasures:
     mass_turnover: float
     snapshot_steps: list[int]
     species_mass_history: list[list[float]]
+    species_territory_history: list[list[float]]
 
 
 @dataclass
@@ -108,6 +109,7 @@ class EcosystemResult:
                 "mass_turnover": m.mass_turnover,
                 "snapshot_steps": m.snapshot_steps,
                 "species_mass_history": m.species_mass_history,
+                "species_territory_history": m.species_territory_history,
             },
             "elapsed_seconds": self.elapsed_seconds,
         }

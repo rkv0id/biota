@@ -705,13 +705,18 @@
             <div class="meta-section-label" style="margin-top: 16px;">species mass</div>
             <div class="species-legend">
                 {% for src in sources %}
-                <span class="species-legend-item">
+                <span class="species-legend-item" title="{{ src.run_id }} cell {{ src.cell }}">
                     <span class="species-swatch" style="background: {{ species_palette[loop.index0] }};"></span>
-                    <span class="species-legend-name">{{ src.run_id | truncate(12, True) }} {{ src.cell }}</span>
+                    <span class="species-legend-name">s{{ loop.index }} {{ src.cell }}</span>
                 </span>
                 {% endfor %}
             </div>
             <canvas id="speciesChart" class="species-chart" width="800" height="160"></canvas>
+            {% endif %}
+
+            {% if n_species > 1 and species_territory_history_json != '[]' %}
+            <div class="meta-section-label" style="margin-top: 16px;">species territory</div>
+            <canvas id="territoryChart" class="species-chart" width="800" height="160"></canvas>
             {% endif %}
         </div>
     </aside>
@@ -902,27 +907,21 @@
         });
     }
 
-    // Species mass chart: multi-line canvas chart colored by species palette.
-    // Only present for heterogeneous runs (n_species > 1).
-    {% if n_species > 1 and species_mass_history_json != '[]' %}
-    var speciesCanvas = document.getElementById('speciesChart');
-    if (speciesCanvas) {
-        var speciesData = {{ species_mass_history_json | safe }};
-        var palette = {{ species_palette | tojson }};
-        var ctx = speciesCanvas.getContext('2d');
-        // Use CSS dimensions for the drawing surface so the chart is sharp
-        // on high-DPI screens without layout shift.
+    // Reusable multi-line chart renderer for species data.
+    function drawSpeciesChart(canvasId, data, palette) {
+        var canvas = document.getElementById(canvasId);
+        if (!canvas || !data || data.length === 0) return;
+        var ctx = canvas.getContext('2d');
         var dpr = window.devicePixelRatio || 1;
-        var cssW = speciesCanvas.clientWidth;
-        var cssH = speciesCanvas.clientHeight;
-        speciesCanvas.width = cssW * dpr;
-        speciesCanvas.height = cssH * dpr;
+        var cssW = canvas.clientWidth;
+        var cssH = canvas.clientHeight;
+        canvas.width = cssW * dpr;
+        canvas.height = cssH * dpr;
         ctx.scale(dpr, dpr);
         var W = cssW;
         var H = cssH;
 
-        // Find global y range across all species.
-        var allVals = speciesData.flat();
+        var allVals = data.flat();
         var yMin = Math.min.apply(null, allVals);
         var yMax = Math.max.apply(null, allVals);
         if (yMax - yMin < 1e-6) yMax = yMin + 1;
@@ -930,11 +929,10 @@
         yMin = Math.max(0, yMin - pad);
         yMax += pad;
 
-        for (var s = 0; s < speciesData.length; s++) {
-            var series = speciesData[s];
+        for (var s = 0; s < data.length; s++) {
+            var series = data[s];
             var n = series.length;
             if (n < 2) continue;
-            // Subsample to at most W points for performance on long runs.
             var drawN = Math.min(n, W);
             ctx.beginPath();
             ctx.strokeStyle = palette[s % palette.length];
@@ -950,6 +948,12 @@
             ctx.stroke();
         }
     }
+
+    {% if n_species > 1 and species_mass_history_json != '[]' %}
+    drawSpeciesChart('speciesChart', {{ species_mass_history_json | safe }}, {{ species_palette | tojson }});
+    {% endif %}
+    {% if n_species > 1 and species_territory_history_json != '[]' %}
+    drawSpeciesChart('territoryChart', {{ species_territory_history_json | safe }}, {{ species_palette | tojson }});
     {% endif %}
     </script>
 </body>

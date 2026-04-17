@@ -51,6 +51,10 @@ class SimOutput:
     initial_mass: float
     n_species: int
     species_mass_history: list[list[float]] = field(default_factory=list)
+    # Effective area per species at each step: sum of ownership weights
+    # across all cells. Measures territorial extent. For homo runs, has one
+    # entry that tracks the number of cells with nonzero mass.
+    species_territory_history: list[list[float]] = field(default_factory=list)
     # (H, W, S) float32 ownership at each snapshot step; empty for homo runs
     ownership_snapshots: list[np.ndarray] = field(default_factory=list)
 
@@ -310,6 +314,7 @@ def _compute_outputs(
         mass_turnover=mass_turnover,
         snapshot_steps=sim.snapshot_steps,
         species_mass_history=sim.species_mass_history,
+        species_territory_history=sim.species_territory_history,
     )
 
     if sim.snapshots:
@@ -424,6 +429,7 @@ def _run_homogeneous(
         initial_mass=initial_mass,
         n_species=1,
         species_mass_history=[mass_history],
+        species_territory_history=[],
         ownership_snapshots=[],
     )
 
@@ -472,17 +478,23 @@ def _run_heterogeneous(
     mass_history: list[float] = [initial_mass]
     # Per-species mass: outer list indexed by species, inner by step.
     species_mass: list[list[float]] = []
+    # Per-species territory: effective area = sum of ownership weights.
+    species_territory: list[list[float]] = []
     for s in range(n_species):
         sp_mass = float((state.mass[:, :, 0] * state.weights[:, :, s]).sum().item())
         species_mass.append([sp_mass])
+        sp_territory = float(state.weights[:, :, s].sum().item())
+        species_territory.append([sp_territory])
 
     for step in range(1, config.steps + 1):
         state = lfl.step(state)
         mass_history.append(float(state.mass.sum().item()))
-        # Per-species mass at every step for smooth charts.
+        # Per-species mass and territory at every step for smooth charts.
         for s in range(n_species):
             sp_mass = float((state.mass[:, :, 0] * state.weights[:, :, s]).sum().item())
             species_mass[s].append(sp_mass)
+            sp_territory = float(state.weights[:, :, s].sum().item())
+            species_territory[s].append(sp_territory)
 
         if step % config.snapshot_every == 0 or step == config.steps:
             frame = state.mass[:, :, 0].detach().cpu().numpy().astype(np.float32)
@@ -497,6 +509,7 @@ def _run_heterogeneous(
         initial_mass=initial_mass,
         n_species=n_species,
         species_mass_history=species_mass,
+        species_territory_history=species_territory,
         ownership_snapshots=ownership_snapshots,
     )
 
