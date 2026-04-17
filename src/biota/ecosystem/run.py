@@ -27,6 +27,7 @@ import numpy as np
 import torch
 
 from biota.ecosystem.config import CreatureSource, EcosystemConfig
+from biota.ecosystem.interaction import classify_outcome, compute_interaction_coefficients
 from biota.ecosystem.result import EcosystemMeasures, EcosystemResult
 from biota.ecosystem.spawn import build_initial_state, build_initial_state_multi_species
 from biota.search.archive import Archive
@@ -57,6 +58,11 @@ class SimOutput:
     species_territory_history: list[list[float]] = field(default_factory=list)
     # (H, W, S) float32 ownership at each snapshot step; empty for homo runs
     ownership_snapshots: list[np.ndarray] = field(default_factory=list)
+    # Per-species growth fields at snapshot steps. Outer list indexed by
+    # snapshot, inner list indexed by species: growth_snapshots[snap][s] is
+    # the (H, W) float32 G_s_total for species s before ownership blending.
+    # Empty for homo runs. Used to compute empirical interaction coefficients.
+    growth_snapshots: list[list[np.ndarray]] = field(default_factory=list)
 
 
 # Perceptually distinct hues for species coloring. Ordered so the first
@@ -305,6 +311,11 @@ def _compute_outputs(
     else:
         mass_turnover = 0.0
 
+    interaction_coefficients = compute_interaction_coefficients(
+        sim.ownership_snapshots, sim.growth_snapshots
+    )
+    outcome_label = classify_outcome(sim.species_territory_history, sim.ownership_snapshots)
+
     measures = EcosystemMeasures(
         initial_mass=sim.initial_mass,
         final_mass=final_mass,
@@ -315,6 +326,8 @@ def _compute_outputs(
         snapshot_steps=sim.snapshot_steps,
         species_mass_history=sim.species_mass_history,
         species_territory_history=sim.species_territory_history,
+        interaction_coefficients=interaction_coefficients,
+        outcome_label=outcome_label,
     )
 
     if sim.snapshots:
@@ -474,6 +487,9 @@ def _run_heterogeneous(
 
     snapshots: list[np.ndarray] = []
     ownership_snapshots: list[np.ndarray] = []
+    # Outer list: snapshot index. Inner list: species index. Each element is
+    # (H, W) float32 G_s_total for species s before ownership blending.
+    growth_snapshots: list[list[np.ndarray]] = []
     steps_taken: list[int] = []
     mass_history: list[float] = [initial_mass]
     # Per-species mass: outer list indexed by species, inner by step.
@@ -487,7 +503,12 @@ def _run_heterogeneous(
         species_territory.append([sp_territory])
 
     for step in range(1, config.steps + 1):
-        state = lfl.step(state)
+        is_snapshot = step % config.snapshot_every == 0 or step == config.steps
+        growth_tensors: list[torch.Tensor] = []
+        if is_snapshot:
+            state, growth_tensors = lfl.step_with_diagnostics(state)
+        else:
+            state = lfl.step(state)
         mass_history.append(float(state.mass.sum().item()))
         # Per-species mass and territory at every step for smooth charts.
         for s in range(n_species):
@@ -496,11 +517,12 @@ def _run_heterogeneous(
             sp_territory = float(state.weights[:, :, s].sum().item())
             species_territory[s].append(sp_territory)
 
-        if step % config.snapshot_every == 0 or step == config.steps:
+        if is_snapshot:
             frame = state.mass[:, :, 0].detach().cpu().numpy().astype(np.float32)
             snapshots.append(frame)
             steps_taken.append(step)
             ownership_snapshots.append(state.weights.detach().cpu().numpy().astype(np.float32))
+            growth_snapshots.append([g.numpy().astype(np.float32) for g in growth_tensors])
 
     return SimOutput(
         snapshots=snapshots,
@@ -511,6 +533,7 @@ def _run_heterogeneous(
         species_mass_history=species_mass,
         species_territory_history=species_territory,
         ownership_snapshots=ownership_snapshots,
+        growth_snapshots=growth_snapshots,
     )
 
 

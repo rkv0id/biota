@@ -12,6 +12,7 @@ Two tiers:
    targets in justfile pick it up.
 """
 
+import json
 import pickle
 import tempfile
 from pathlib import Path
@@ -145,6 +146,11 @@ def test_run_experiments_parallel_local_ray_smoke() -> None:
         for run_dir in eco_runs:
             assert (run_dir / "summary.json").exists()
             assert (run_dir / "config.json").exists()
+            summary = json.loads((run_dir / "summary.json").read_text())
+            assert "measures" in summary
+            # Homogeneous experiments: interaction fields present but empty.
+            assert summary["measures"]["interaction_coefficients"] == []
+            assert summary["measures"]["outcome_label"] == ""
 
         # Names should be preserved in the run_dir paths.
         names = {r.name.split("-", 4)[-1] for r in eco_runs}

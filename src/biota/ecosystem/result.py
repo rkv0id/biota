@@ -46,6 +46,14 @@ class EcosystemMeasures:
     snapshot_steps: list[int]
     species_mass_history: list[list[float]]
     species_territory_history: list[list[float]]
+    # Empirical interaction coefficients: S x S matrix where entry [A][B]
+    # is the mean effect of species B's presence on species A's growth field.
+    # Negative = B suppresses A, positive = B enhances A, near zero = neutral.
+    # Empty list for homogeneous runs or when growth snapshots are unavailable.
+    interaction_coefficients: list[list[float]]
+    # Ecosystem outcome class: "merger", "coexistence", "exclusion", or
+    # "fragmentation". Empty string for homogeneous runs.
+    outcome_label: str
 
 
 @dataclass
@@ -110,6 +118,8 @@ class EcosystemResult:
                 "snapshot_steps": m.snapshot_steps,
                 "species_mass_history": m.species_mass_history,
                 "species_territory_history": m.species_territory_history,
+                "interaction_coefficients": m.interaction_coefficients,
+                "outcome_label": m.outcome_label,
             },
             "elapsed_seconds": self.elapsed_seconds,
         }

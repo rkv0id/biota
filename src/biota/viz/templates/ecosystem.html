@@ -315,6 +315,40 @@
             border: 1px solid rgba(192, 132, 252, 0.25);
         }
 
+        /* Outcome badge: one of four labels produced by classify_outcome */
+        .outcome-badge {
+            display: inline-flex;
+            align-items: center;
+            font-size: 10px;
+            font-weight: 500;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            padding: 2px 7px;
+            border-radius: 10px;
+            margin-left: 6px;
+            vertical-align: middle;
+        }
+        .outcome-badge.merger {
+            background: rgba(99, 220, 200, 0.1);
+            color: #3cdcc8;
+            border: 1px solid rgba(99, 220, 200, 0.25);
+        }
+        .outcome-badge.coexistence {
+            background: rgba(180, 255, 80, 0.08);
+            color: #b4ff50;
+            border: 1px solid rgba(180, 255, 80, 0.2);
+        }
+        .outcome-badge.exclusion {
+            background: rgba(255, 90, 90, 0.1);
+            color: #ff6464;
+            border: 1px solid rgba(255, 90, 90, 0.25);
+        }
+        .outcome-badge.fragmentation {
+            background: rgba(251, 191, 119, 0.1);
+            color: #fbbf77;
+            border: 1px solid rgba(251, 191, 119, 0.25);
+        }
+
         /* Multi-source list for heterogeneous runs. */
         .source-row {
             display: flex;
@@ -590,13 +624,41 @@
            browser gestures anyway, so we let the GIF display as a plain
            inline image and let the page scroll normally.
 
+        /* Interaction heatmap: S x S canvas grid */
+        .interaction-heatmap-wrap {
+            margin-top: 8px;
+        }
+        .interaction-heatmap-canvas {
+            display: block;
+            width: 100%;
+            image-rendering: pixelated;
+        }
+        .interaction-legend {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .interaction-legend-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 9px;
+            color: #71717a;
+        }
+        .interaction-legend-swatch {
+            width: 10px;
+            height: 10px;
+            border-radius: 2px;
+        }
     </style>
 </head>
 <body>
     <header class="page-header">
     <div class="page-wrap">
         <h1 class="page-title">
-            <a class="title-home" href="../../index.html"><span class="title-prefix">biota</span></a>ecosystem<span class="title-sub">{{ run_id }}</span><span class="border-badge {{ border }}">{{ border }}</span><span class="mode-badge {{ mode }}">{{ mode }}</span>
+            <a class="title-home" href="../../index.html"><span class="title-prefix">biota</span></a>ecosystem<span class="title-sub">{{ run_id }}</span><span class="border-badge {{ border }}">{{ border }}</span><span class="mode-badge {{ mode }}">{{ mode }}</span>{% if outcome_label %}<span class="outcome-badge {{ outcome_label }}">{{ outcome_label }}</span>{% endif %}
         </h1>
         <div class="page-meta">
             <span class="meta-value">{{ n_creatures }}</span> creatures
@@ -717,6 +779,30 @@
             <canvas id="territoryChart" class="species-chart" width="800" height="160"></canvas>
             {% endif %}
         </div>
+
+        {% if n_species > 1 and interaction_coefficients %}
+        <div class="meta-section">
+            <div class="meta-section-title">interaction coefficients</div>
+            <div class="interaction-heatmap-wrap">
+                <canvas id="interactionHeatmap" class="interaction-heatmap-canvas"></canvas>
+            </div>
+            <div class="interaction-legend">
+                <span class="interaction-legend-item">
+                    <span class="interaction-legend-swatch" style="background:#3cdcc8;"></span>
+                    mutualism
+                </span>
+                <span class="interaction-legend-item">
+                    <span class="interaction-legend-swatch" style="background:#ff6464;"></span>
+                    competition
+                </span>
+                <span class="interaction-legend-item">
+                    <span class="interaction-legend-swatch" style="background:#3f3f46;"></span>
+                    neutral
+                </span>
+            </div>
+            <div style="font-size:9px;color:#52525b;margin-top:6px;">row A, col B: effect of B on A's growth</div>
+        </div>
+        {% endif %}
     </aside>
 
     <main class="run-viz{% if output_format == 'gif' and gif_src %} has-gif{% endif %}">
@@ -950,11 +1036,99 @@
         }
     }
 
+    requestAnimationFrame(function() {
     {% if n_species > 1 and species_mass_history_json != '[]' %}
     drawSpeciesChart('speciesChart', {{ species_mass_history_json | safe }}, {{ species_palette | tojson }});
     {% endif %}
     {% if n_species > 1 and species_territory_history_json != '[]' %}
     drawSpeciesChart('territoryChart', {{ species_territory_history_json | safe }}, {{ species_palette | tojson }});
+    {% endif %}
+    });
+
+    {% if n_species > 1 and interaction_coefficients %}
+    requestAnimationFrame(function() {
+        (function() {
+        var coeff = {{ interaction_coefficients | tojson }};
+        var palette = {{ species_palette | tojson }};
+        var canvas = document.getElementById('interactionHeatmap');
+        if (!canvas) return;
+
+        var S = coeff.length;
+        var labelH = 18;
+        // offsetWidth is the actual rendered CSS width of the canvas element,
+        // which CSS has already sized to 100% of the block container. This is
+        // reliable at rAF time on all viewport sizes without any DOM walking.
+        var availW = canvas.offsetWidth || 260;
+        var cellPx = Math.floor((availW - labelH) / S);
+        var totalW = S * cellPx + labelH;
+        var totalH = S * cellPx + labelH;
+
+        var dpr = window.devicePixelRatio || 1;
+        canvas.width = totalW * dpr;
+        canvas.height = totalH * dpr;
+        canvas.style.height = totalH + 'px';
+
+        var ctx = canvas.getContext('2d');
+        ctx.scale(dpr, dpr);
+
+        // Find max absolute coefficient for color scaling (ignoring NaN).
+        var maxAbs = 0;
+        for (var r = 0; r < S; r++) {
+            for (var c = 0; c < S; c++) {
+                var v = coeff[r][c];
+                if (!isNaN(v)) maxAbs = Math.max(maxAbs, Math.abs(v));
+            }
+        }
+        if (maxAbs < 1e-8) maxAbs = 1;
+
+        function coeffColor(v) {
+            if (isNaN(v)) return 'rgba(63,63,70,0.5)';
+            var t = v / maxAbs;  // [-1, 1]
+            if (t > 0) {
+                // Positive: neutral dark to teal (#3cdcc8)
+                var r = Math.round(26 + t * (60 - 26));
+                var g = Math.round(26 + t * (220 - 26));
+                var b = Math.round(31 + t * (200 - 31));
+                return 'rgb(' + r + ',' + g + ',' + b + ')';
+            } else {
+                // Negative: neutral dark to red (#ff6464)
+                var ta = -t;
+                var r2 = Math.round(26 + ta * (255 - 26));
+                var g2 = Math.round(26 + ta * (100 - 26));
+                var b2 = Math.round(31 + ta * (100 - 31));
+                return 'rgb(' + r2 + ',' + g2 + ',' + b2 + ')';
+            }
+        }
+
+        for (var row = 0; row < S; row++) {
+            for (var col = 0; col < S; col++) {
+                var val = coeff[row][col];
+                ctx.fillStyle = coeffColor(val);
+                ctx.fillRect(labelH + col * cellPx, row * cellPx, cellPx, cellPx);
+                ctx.strokeStyle = 'rgba(8,9,11,0.6)';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(labelH + col * cellPx + 0.5, row * cellPx + 0.5, cellPx - 1, cellPx - 1);
+                if (cellPx >= 36 && !isNaN(val)) {
+                    ctx.fillStyle = Math.abs(val / maxAbs) > 0.4 ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.5)';
+                    ctx.font = '9px -apple-system, BlinkMacSystemFont, sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(val.toFixed(2), labelH + col * cellPx + cellPx / 2, row * cellPx + cellPx / 2);
+                }
+            }
+        }
+
+        // Axis labels colored by species palette
+        ctx.font = '9px -apple-system, BlinkMacSystemFont, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        for (var i = 0; i < S; i++) {
+            ctx.fillStyle = palette[i % palette.length];
+            ctx.fillText('s' + (i + 1), labelH + i * cellPx + cellPx / 2, S * cellPx + labelH / 2);
+            ctx.fillText('s' + (i + 1), labelH / 2, i * cellPx + cellPx / 2);
+        }
+    })();
+    });
     {% endif %}
     </script>
 </body>

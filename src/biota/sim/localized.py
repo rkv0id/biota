@@ -80,6 +80,27 @@ class LocalizedFlowLenia:
 
     def step(self, state: LocalizedState) -> LocalizedState:
         """Advance one step. Returns a new LocalizedState."""
+        new_state, _ = self._step_inner(state, capture_growth=False)
+        return new_state
+
+    def step_with_diagnostics(
+        self, state: LocalizedState
+    ) -> tuple[LocalizedState, list[torch.Tensor]]:
+        """Advance one step and return per-species growth fields.
+
+        Returns (new_state, growth_fields) where growth_fields[s] is the
+        (H, W) float32 tensor G_s_total for species s before ownership blending.
+        These are the raw material for empirical interaction coefficient measurement.
+
+        More expensive than step() because it retains intermediate tensors.
+        Call only at snapshot steps; use step() for all other steps.
+        """
+        return self._step_inner(state, capture_growth=True)
+
+    def _step_inner(
+        self, state: LocalizedState, capture_growth: bool
+    ) -> tuple[LocalizedState, list[torch.Tensor]]:
+        """Shared implementation for step and step_with_diagnostics."""
         A = state.mass[:, :, 0]  # (H, W)
         W = state.weights  # (H, W, S)
         S = self.num_species
@@ -105,6 +126,7 @@ class LocalizedFlowLenia:
 
         fA = torch.fft.fft2(A)
         G_blend = torch.zeros_like(A)
+        growth_fields: list[torch.Tensor] = []
         for s, sp in enumerate(self._species):
             fK_s = sp._fK  # pyright: ignore[reportPrivateUsage] - intentional sharing
             U_s = torch.fft.ifft2(fK_s * fA.unsqueeze(0)).real  # (K, H, W)
@@ -114,6 +136,8 @@ class LocalizedFlowLenia:
             G_s = (torch.exp(-(((U_s - m) / sigma) ** 2) / 2.0) * 2.0 - 1.0) * h
             G_s_total = G_s.sum(dim=0)  # (H, W)
             G_blend = G_blend + W_eff[:, :, s] * G_s_total
+            if capture_growth:
+                growth_fields.append(G_s_total.detach().cpu())
 
         # Flow: same formulation as scalar path, applied to the blended growth.
         nabla_U = self._sobel(G_blend)
@@ -122,7 +146,7 @@ class LocalizedFlowLenia:
         F_flow = nabla_U * (1.0 - alpha) - nabla_A * alpha
 
         new_A, new_W = self._reintegrate(A, W, F_flow)
-        return LocalizedState(mass=new_A.unsqueeze(-1), weights=new_W)
+        return LocalizedState(mass=new_A.unsqueeze(-1), weights=new_W), growth_fields
 
     def _sobel(self, field: torch.Tensor) -> torch.Tensor:
         """Sobel gradients of a 2D field. Same code path as scalar FlowLenia."""

@@ -555,6 +555,8 @@ def test_to_summary_dict_is_json_serializable() -> None:
         snapshot_steps=[5, 10],
         species_mass_history=[[10.0, 9.9, 9.8]],
         species_territory_history=[[100.0, 99.0, 98.0]],
+        interaction_coefficients=[],
+        outcome_label="",
     )
     result = EcosystemResult(
         config=config,
@@ -607,6 +609,8 @@ def test_to_summary_dict_marks_heterogeneous_mode() -> None:
         snapshot_steps=[],
         species_mass_history=[[1.0]],
         species_territory_history=[[50.0]],
+        interaction_coefficients=[],
+        outcome_label="",
     )
     result = EcosystemResult(
         config=config, run_id="het-test", run_dir="/tmp", measures=measures, elapsed_seconds=0.0
@@ -695,6 +699,9 @@ def test_run_ecosystem_summary_json_valid() -> None:
         assert summary["sources"][0]["cell"] == [0, 1, 2]
         assert summary["measures"]["initial_mass"] >= 0.0
         assert len(summary["measures"]["snapshot_steps"]) == 1
+        # Homogeneous runs: interaction fields are present but empty.
+        assert summary["measures"]["interaction_coefficients"] == []
+        assert summary["measures"]["outcome_label"] == ""
 
 
 def test_run_ecosystem_measures_plausible() -> None:
@@ -759,6 +766,66 @@ def test_run_ecosystem_heterogeneous_succeeds_end_to_end() -> None:
         assert summary["mode"] == "heterogeneous"
         assert len(summary["sources"]) == 2
         assert result.measures.initial_mass > 0.0
+        # v3.0.0: interaction coefficients must be a 2x2 matrix of floats.
+        ic = summary["measures"]["interaction_coefficients"]
+        assert len(ic) == 2
+        assert all(len(row) == 2 for row in ic)
+        assert all(isinstance(v, float) for row in ic for v in row)
+        # Outcome label must be one of the four recognised categories.
+        label = summary["measures"]["outcome_label"]
+        assert label in {"merger", "coexistence", "exclusion", "fragmentation"}
+
+
+def test_run_ecosystem_heterogeneous_interaction_fields() -> None:
+    """Heterogeneous runs populate interaction_coefficients and outcome_label
+    on the result object and in summary.json. This test is the load-bearing
+    integration check: if growth field capture, interaction measurement, or
+    outcome classification break silently, the measures object will have
+    wrong shapes or an empty label.
+    """
+    from biota.ecosystem.run import run_ecosystem
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        archive_dir = tmp / "archive"
+        _write_archive_with_creature(archive_dir, "run-a", (0, 0, 0), _synthetic_creature())
+        _write_archive_with_creature(archive_dir, "run-b", (1, 1, 1), _synthetic_creature())
+
+        config = EcosystemConfig(
+            name="interaction-test",
+            sources=(
+                CreatureSource(archive_dir=str(archive_dir), run_id="run-a", coords=(0, 0, 0), n=1),
+                CreatureSource(archive_dir=str(archive_dir), run_id="run-b", coords=(1, 1, 1), n=1),
+            ),
+            grid_h=64,
+            grid_w=64,
+            # Enough steps and snapshots for interaction measurement to have data.
+            steps=20,
+            snapshot_every=10,
+            spawn=SpawnConfig(min_dist=20, patch=8, seed=0),
+            device="cpu",
+            border="torus",
+            output_format="gif",
+        )
+        result = run_ecosystem(config, output_root=tmp / "eco")
+
+        m = result.measures
+        # Interaction coefficients: S x S matrix (S=2 here).
+        assert len(m.interaction_coefficients) == 2, "expected 2x2 coefficient matrix"
+        assert all(len(row) == 2 for row in m.interaction_coefficients)
+        # Each entry is a float (may be NaN if species never co-occurred, but
+        # must not be None or the wrong type).
+        for row in m.interaction_coefficients:
+            for v in row:
+                assert isinstance(v, float), f"non-float coefficient: {v!r}"
+        # Outcome label is set and is one of the four valid values.
+        assert m.outcome_label in {"merger", "coexistence", "exclusion", "fragmentation"}, (
+            f"unexpected outcome label: {m.outcome_label!r}"
+        )
+        # Confirm the fields round-trip through summary.json.
+        summary = json.loads((tmp / "eco" / result.run_id / "summary.json").read_text())
+        assert summary["measures"]["interaction_coefficients"] == m.interaction_coefficients
+        assert summary["measures"]["outcome_label"] == m.outcome_label
 
 
 def test_run_ecosystem_heterogeneous_kernel_count_mismatch_raises() -> None:

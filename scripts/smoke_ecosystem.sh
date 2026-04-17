@@ -53,6 +53,7 @@ uv venv --python 3.12 "$SMOKE_VENV" >/dev/null
 uv pip install --python "$SMOKE_VENV/bin/python" --quiet "$WHEEL"
 
 mkdir -p "$SMOKE_DATA/archive/seed-run"
+mkdir -p "$SMOKE_DATA/archive/seed-run-b"
 log "seeding archive deterministically..."
 "$SMOKE_VENV/bin/python" - <<'PYEOF'
 import pickle
@@ -61,31 +62,36 @@ from biota.search.archive import Archive
 from biota.search.result import RolloutResult
 
 k = 3
-creature = RolloutResult(
-    params={
-        "R": 8.0,
-        "r": [0.5] * k,
-        "m": [0.15] * k,
-        "s": [0.015] * k,
-        "h": [0.5] * k,
-        "a": [[0.5, 0.5, 0.5]] * k,
-        "b": [[0.5, 0.5, 0.5]] * k,
-        "w": [[0.5, 0.5, 0.5]] * k,
-    },
-    seed=0,
-    descriptors=(0.3, 0.5, 0.6),
-    quality=0.8,
-    rejection_reason=None,
-    thumbnail=np.zeros((16, 32, 32), dtype=np.uint8),
-    parent_cell=None,
-    created_at=0.0,
-    compute_seconds=1.0,
-)
-arc = Archive()
-arc._cells[(5, 8, 3)] = creature
-with open("/tmp/biota-smoke-eco/archive/seed-run/archive.pkl", "wb") as f:
-    pickle.dump(arc, f)
-print("seeded cell (5, 8, 3) in seed-run")
+def make_creature(seed):
+    rng = __import__('numpy').random.default_rng(seed)
+    return RolloutResult(
+        params={
+            "R": float(rng.uniform(6.0, 12.0)),
+            "r": list(rng.uniform(0.3, 0.8, k).astype(float)),
+            "m": list(rng.uniform(0.1, 0.4, k).astype(float)),
+            "s": list(rng.uniform(0.01, 0.08, k).astype(float)),
+            "h": list(rng.uniform(0.2, 0.8, k).astype(float)),
+            "a": [list(rng.uniform(0.1, 0.9, 3).astype(float)) for _ in range(k)],
+            "b": [list(rng.uniform(0.1, 0.9, 3).astype(float)) for _ in range(k)],
+            "w": [list(rng.uniform(0.05, 0.3, 3).astype(float)) for _ in range(k)],
+        },
+        seed=int(seed),
+        descriptors=(0.3, 0.5, 0.6),
+        quality=0.8,
+        rejection_reason=None,
+        thumbnail=np.zeros((16, 32, 32), dtype=np.uint8),
+        parent_cell=None,
+        created_at=0.0,
+        compute_seconds=1.0,
+    )
+
+for run_id, seed, coords in [("seed-run", 1, (5, 8, 3)), ("seed-run-b", 2, (3, 4, 5))]:
+    arc = Archive()
+    arc._cells[coords] = make_creature(seed)
+    path = f"/tmp/biota-smoke-eco/archive/{run_id}/archive.pkl"
+    with open(path, "wb") as f:
+        pickle.dump(arc, f)
+    print(f"seeded cell {coords} in {run_id}")
 PYEOF
 
 cat > "$SMOKE_DATA/experiments.yaml" <<'YAMLEOF'
@@ -108,6 +114,16 @@ experiments:
     spawn: {min_dist: 20, patch: 8, seed: 1}
     sources:
       - {run: seed-run, cell: [5, 8, 3], n: 2}
+  - name: hetero
+    grid: 64
+    steps: 20
+    snapshot_every: 10
+    border: torus
+    output_format: gif
+    spawn: {min_dist: 20, patch: 8, seed: 0}
+    sources:
+      - {run: seed-run,   cell: [5, 8, 3], n: 1}
+      - {run: seed-run-b, cell: [3, 4, 5], n: 1}
 YAMLEOF
 
 # Build the CLI invocation. Transport selects Ray flag (or none); --workers
@@ -151,11 +167,44 @@ cd "$SMOKE_DATA" && ${ENV_ARGS[@]+"${ENV_ARGS[@]}"} "$SMOKE_VENV/bin/biota" ecos
     ${TRANSPORT_ARGS[@]+"${TRANSPORT_ARGS[@]}"} \
     ${GPU_ARGS[@]+"${GPU_ARGS[@]}"}
 
-# All transports now write outputs driver-local. Cluster mode used to land
-# outputs on the worker (broken, fixed in v2.4.0+ via materialize-on-driver),
-# so this verification is uniform across noray, local, and cluster.
+# All transports now write outputs driver-local.
 test -d "$SMOKE_DATA/ecosystem"
 log "runs produced:"
 ls -1 "$SMOKE_DATA/ecosystem"
-test "$(ls -1 "$SMOKE_DATA/ecosystem" | wc -l)" -eq 2
+test "$(ls -1 "$SMOKE_DATA/ecosystem" | wc -l)" -eq 3
+
+# Verify summary.json content for each run.
+log "verifying summary.json fields..."
+"$SMOKE_VENV/bin/python" - <<'PYEOF'
+import json, sys
+from pathlib import Path
+
+eco = Path("/tmp/biota-smoke-eco/ecosystem")
+runs = sorted(eco.iterdir())
+assert len(runs) == 3, f"expected 3 runs, got {len(runs)}"
+
+for run_dir in runs:
+    summary = json.loads((run_dir / "summary.json").read_text())
+    m = summary["measures"]
+    name = summary["name"]
+
+    # All runs must have the v3.0.0 keys present.
+    assert "interaction_coefficients" in m, f"{name}: missing interaction_coefficients"
+    assert "outcome_label" in m, f"{name}: missing outcome_label"
+
+    if summary["mode"] == "homogeneous":
+        assert m["interaction_coefficients"] == [], f"{name}: homo run should have empty coefficients"
+        assert m["outcome_label"] == "", f"{name}: homo run should have empty outcome_label"
+    else:
+        # Heterogeneous: coefficient matrix must be S x S (S=2 here).
+        ic = m["interaction_coefficients"]
+        assert len(ic) == 2, f"{name}: expected 2x2 coefficient matrix, got {len(ic)} rows"
+        assert all(len(row) == 2 for row in ic), f"{name}: coefficient rows wrong length"
+        assert m["outcome_label"] in {"merger", "coexistence", "exclusion", "fragmentation"}, \
+            f"{name}: unexpected outcome_label {m['outcome_label']!r}"
+        print(f"  {name}: outcome={m['outcome_label']}, coefficients={ic}")
+
+print("all summary.json checks passed")
+PYEOF
+
 log "done."
