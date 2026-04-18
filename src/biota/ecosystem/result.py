@@ -9,7 +9,7 @@ in biota/ecosystem/config.py since they are parsed from YAML and validated
 before a run starts.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from biota.ecosystem.config import EcosystemConfig
 
@@ -54,6 +54,39 @@ class EcosystemMeasures:
     # Ecosystem outcome class: "merger", "coexistence", "exclusion", or
     # "fragmentation". Empty string for homogeneous runs.
     outcome_label: str
+
+    # --- Spatial observables: heterogeneous runs ---
+    # Patch count per species per snapshot. Outer index = species (0..S-1),
+    # inner index = snapshot. Empty for homogeneous runs.
+    species_patch_count: list[list[int]] = field(default_factory=list)
+    # Interface area per species pair per snapshot: cells where both species
+    # exceed the ownership threshold simultaneously.
+    # Shape: (n_snapshots, S, S). Symmetric; diagonal is zero.
+    # Empty for homogeneous runs.
+    species_interface_area: list[list[list[int]]] = field(default_factory=list)
+    # Euclidean distance between centers of mass per species pair per snapshot.
+    # Same shape as species_interface_area. inf when either species has no mass.
+    species_com_distance: list[list[list[float]]] = field(default_factory=list)
+    # Spatial entropy of each species' ownership distribution over a coarse grid,
+    # per snapshot. Shape: (S, n_snapshots). Empty for homogeneous runs.
+    species_spatial_entropy: list[list[float]] = field(default_factory=list)
+    # contact_occurred[A][B]: True if any snapshot had interface_area[snap][A][B] > 0.
+    # Lets the viewer distinguish "no contact" (NaN coeff) from "neutral contact".
+    # Shape: (S, S). Empty for homogeneous runs.
+    contact_occurred: list[list[bool]] = field(default_factory=list)
+
+    # --- Spatial observables: homogeneous runs ---
+    # Patch count of the mass field at each snapshot. Empty for heterogeneous runs.
+    patch_count_history: list[int] = field(default_factory=list)
+    # Shannon entropy of the mass distribution over a coarse grid, per snapshot.
+    mass_spatial_entropy_history: list[float] = field(default_factory=list)
+    # Patch sizes (pixel counts, descending) at the first snapshot.
+    # Baseline for cannibalism detection: surviving patches that exceed their
+    # initial size indicate one copy growing at another's expense.
+    initial_patch_sizes: list[int] = field(default_factory=list)
+    # Patch sizes (descending) at each snapshot.
+    # Shape: (n_snapshots, n_patches_at_that_snapshot).
+    patch_size_history: list[list[int]] = field(default_factory=list)
 
 
 @dataclass
@@ -120,6 +153,24 @@ class EcosystemResult:
                 "species_territory_history": m.species_territory_history,
                 "interaction_coefficients": m.interaction_coefficients,
                 "outcome_label": m.outcome_label,
+                "species_patch_count": m.species_patch_count,
+                "species_interface_area": m.species_interface_area,
+                "species_com_distance": [
+                    [
+                        [
+                            v if not (isinstance(v, float) and v == float("inf")) else None
+                            for v in row
+                        ]
+                        for row in snap
+                    ]
+                    for snap in m.species_com_distance
+                ],
+                "species_spatial_entropy": m.species_spatial_entropy,
+                "contact_occurred": m.contact_occurred,
+                "patch_count_history": m.patch_count_history,
+                "mass_spatial_entropy_history": m.mass_spatial_entropy_history,
+                "initial_patch_sizes": m.initial_patch_sizes,
+                "patch_size_history": m.patch_size_history,
             },
             "elapsed_seconds": self.elapsed_seconds,
         }

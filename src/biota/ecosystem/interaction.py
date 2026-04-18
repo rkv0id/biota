@@ -25,6 +25,7 @@ def compute_interaction_coefficients(
     growth_snapshots: list[list[np.ndarray]],
     presence_threshold: float = 0.3,
     absence_threshold: float = 0.05,
+    interface_area: list[list[list[int]]] | None = None,
 ) -> list[list[float]]:
     """Compute empirical S x S interaction coefficient matrix.
 
@@ -43,6 +44,14 @@ def compute_interaction_coefficients(
     where A itself is present. This is a useful baseline but not an
     interaction coefficient in the ecological sense.
 
+    When interface_area is provided, measurement for pair (A, B) is restricted
+    to snapshot windows where interface_area[snap][A][B] > 0. This prevents
+    the coefficient from being dominated by snapshots where the species are
+    spatially separated: when they do not overlap, the presence mask barely
+    fires and the coefficient measures absence of contact, not a biological
+    signal. If no snapshot has interface area > 0 for a pair, NaN is reported
+    (same as the no-data case).
+
     Returns an S x S nested list of floats. Returns an empty list if
     ownership_snapshots or growth_snapshots are empty (homogeneous runs).
 
@@ -55,6 +64,10 @@ def compute_interaction_coefficients(
             considered "present" at a cell.
         absence_threshold: ownership weight below which a species is
             considered "absent" at a cell.
+        interface_area: optional (n_snapshots, S, S) nested list from
+            compute_spatial_observables_hetero. When given, snapshot windows
+            with interface_area[snap][A][B] == 0 are excluded from
+            accumulation for pair (A, B).
     """
     if not ownership_snapshots or not growth_snapshots:
         return []
@@ -89,6 +102,11 @@ def compute_interaction_coefficients(
         for a in range(s):
             g_a = growths[a].astype(np.float64)  # (H, W)
             for b in range(s):
+                # For off-diagonal pairs, skip snapshots with no interface when
+                # interface_area data is available. The coefficient is only
+                # meaningful where species actually co-occur.
+                if a != b and interface_area is not None and interface_area[snap_idx][a][b] == 0:
+                    continue
                 w_b = own[:, :, b].astype(np.float64)  # (H, W)
                 present_mask = w_b > presence_threshold
                 absent_mask = w_b < absence_threshold
@@ -124,6 +142,7 @@ def classify_outcome(
     ownership_snapshots: list[np.ndarray],
     exclusion_threshold: float = 0.05,
     merger_entropy_threshold: float = 0.85,
+    species_patch_count: list[list[int]] | None = None,
 ) -> str:
     """Classify an ecosystem run's outcome from territory history and ownership.
 
@@ -140,11 +159,10 @@ def classify_outcome(
                    (as a fraction of that species' initial territory) while at
                    least one other species retains territory.
 
-    fragmentation - one or more species' territory trajectory has a sustained
-                   split into isolated patches, detected by a large drop in
-                   contiguous territory that is not explained by exclusion.
-                   (Approximated here by high variance-to-mean ratio in the
-                   territory time series of a non-excluded species.)
+    fragmentation - one or more non-excluded species has patch count > 1 at
+                   any snapshot and remains fragmented at the final snapshot.
+                   When species_patch_count is not provided, falls back to a
+                   coarse CV heuristic on the territory time series.
 
     Returns an empty string if there is insufficient data (e.g., fewer than
     two species or empty history).
@@ -158,6 +176,10 @@ def classify_outcome(
             territory is below this fraction of its initial territory.
         merger_entropy_threshold: mean per-cell ownership entropy at the
             final snapshot above which species are considered merged.
+        species_patch_count: optional (S, n_snapshots) patch count data from
+            compute_spatial_observables_hetero. When provided, fragmentation
+            is detected directly: a species is fragmented if its patch count
+            exceeds 1 at any snapshot and is still > 1 at the final snapshot.
     """
     n_species = len(species_territory_history)
     if n_species < 2:
@@ -214,19 +236,26 @@ def classify_outcome(
             if max_deviation < 0.2:
                 return "merger"
 
-    # Fragmentation: a non-excluded species shows high territory variance
-    # relative to its mean, suggesting repeated splitting/merging of patches.
-    # This is a coarse proxy for connected-component counting, which would
-    # require image labeling on every snapshot.
-    for s_idx, hist in enumerate(species_territory_history):
-        if excluded[s_idx]:
-            continue
-        arr = np.array(hist, dtype=np.float64)
-        mean_t = float(arr.mean())
-        if mean_t > 0:
-            # Coefficient of variation; threshold at 0.5 is empirically coarse.
-            cv = float(arr.std()) / mean_t
-            if cv > 0.5:
+    # Fragmentation: a non-excluded species has patch count > 1 at any snapshot
+    # and is still fragmented (patch count > 1) at the final snapshot.
+    # Falls back to the territory CV heuristic when patch count data is absent.
+    if species_patch_count is not None:
+        for s_idx in range(n_species):
+            if excluded[s_idx]:
+                continue
+            counts = species_patch_count[s_idx]
+            if counts and counts[-1] > 1 and any(c > 1 for c in counts):
                 return "fragmentation"
+    else:
+        # CV heuristic: kept as fallback for callers without spatial data.
+        for s_idx, hist in enumerate(species_territory_history):
+            if excluded[s_idx]:
+                continue
+            arr = np.array(hist, dtype=np.float64)
+            mean_t = float(arr.mean())
+            if mean_t > 0:
+                cv = float(arr.std()) / mean_t
+                if cv > 0.5:
+                    return "fragmentation"
 
     return "coexistence"

@@ -26,6 +26,12 @@ from pathlib import Path
 import numpy as np
 import torch
 
+from biota.ecosystem.analytics import (
+    HeteroSpatial,
+    HomoSpatial,
+    compute_spatial_observables_hetero,
+    compute_spatial_observables_homo,
+)
 from biota.ecosystem.config import CreatureSource, EcosystemConfig
 from biota.ecosystem.interaction import classify_outcome, compute_interaction_coefficients
 from biota.ecosystem.result import EcosystemMeasures, EcosystemResult
@@ -311,10 +317,24 @@ def _compute_outputs(
     else:
         mass_turnover = 0.0
 
-    interaction_coefficients = compute_interaction_coefficients(
-        sim.ownership_snapshots, sim.growth_snapshots
-    )
-    outcome_label = classify_outcome(sim.species_territory_history, sim.ownership_snapshots)
+    if has_ownership:
+        hs: HeteroSpatial = compute_spatial_observables_hetero(sim.ownership_snapshots)
+        interaction_coefficients = compute_interaction_coefficients(
+            sim.ownership_snapshots,
+            sim.growth_snapshots,
+            interface_area=hs.species_interface_area,
+        )
+        outcome_label = classify_outcome(
+            sim.species_territory_history,
+            sim.ownership_snapshots,
+            species_patch_count=hs.species_patch_count,
+        )
+        ho: HomoSpatial | None = None
+    else:
+        hs = HeteroSpatial()
+        interaction_coefficients = []
+        outcome_label = ""
+        ho = compute_spatial_observables_homo(sim.snapshots)
 
     measures = EcosystemMeasures(
         initial_mass=sim.initial_mass,
@@ -328,6 +348,15 @@ def _compute_outputs(
         species_territory_history=sim.species_territory_history,
         interaction_coefficients=interaction_coefficients,
         outcome_label=outcome_label,
+        species_patch_count=hs.species_patch_count,
+        species_interface_area=hs.species_interface_area,
+        species_com_distance=hs.species_com_distance,
+        species_spatial_entropy=hs.species_spatial_entropy,
+        contact_occurred=hs.contact_occurred,
+        patch_count_history=ho.patch_count_history if ho else [],
+        mass_spatial_entropy_history=ho.mass_spatial_entropy_history if ho else [],
+        initial_patch_sizes=ho.initial_patch_sizes if ho else [],
+        patch_size_history=ho.patch_size_history if ho else [],
     )
 
     if sim.snapshots:

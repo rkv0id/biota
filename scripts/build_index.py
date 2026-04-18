@@ -842,6 +842,18 @@ def _render_ecosystem_run(run_dir: Path, publish: bool = False) -> str:
     species_territory_history: list[list[float]] = measures.get("species_territory_history", [])
     interaction_coefficients: list[list[float]] = measures.get("interaction_coefficients", [])
     outcome_label: str = measures.get("outcome_label", "")
+    # Spatial observables -- heterogeneous runs.
+    species_patch_count: list[list[int]] = measures.get("species_patch_count", [])
+    species_interface_area: list[list[list[int]]] = measures.get("species_interface_area", [])
+    # com_distance has null where distance is inf (serialized that way in to_summary_dict).
+    species_com_distance: list[list[list[float | None]]] = measures.get("species_com_distance", [])
+    species_spatial_entropy: list[list[float]] = measures.get("species_spatial_entropy", [])
+    contact_occurred: list[list[bool]] = measures.get("contact_occurred", [])
+    # Spatial observables -- homogeneous runs.
+    patch_count_history: list[int] = measures.get("patch_count_history", [])
+    mass_spatial_entropy_history: list[float] = measures.get("mass_spatial_entropy_history", [])
+    initial_patch_sizes: list[int] = measures.get("initial_patch_sizes", [])
+    patch_size_history: list[list[int]] = measures.get("patch_size_history", [])
     n_species = len(sources_ctx) if sources_ctx else 1
     # Species palette as hex strings, matching SPECIES_PALETTE in run.py.
     species_palette_hex = [
@@ -888,6 +900,16 @@ def _render_ecosystem_run(run_dir: Path, publish: bool = False) -> str:
         species_palette=species_palette_hex[:n_species],
         interaction_coefficients=interaction_coefficients,
         outcome_label=outcome_label,
+        species_patch_count_json=json.dumps(species_patch_count),
+        species_interface_area_json=json.dumps(species_interface_area),
+        species_com_distance_json=json.dumps(species_com_distance),
+        species_spatial_entropy_json=json.dumps(species_spatial_entropy),
+        contact_occurred_json=json.dumps(contact_occurred),
+        patch_count_history_json=json.dumps(patch_count_history),
+        mass_spatial_entropy_history_json=json.dumps(mass_spatial_entropy_history),
+        initial_patch_sizes_json=json.dumps(initial_patch_sizes),
+        patch_size_history_json=json.dumps(patch_size_history),
+        snapshot_steps_json=json.dumps(snapshot_steps),
     )
 
 

@@ -778,6 +778,41 @@
             <div class="meta-section-label" style="margin-top: 16px;">species territory</div>
             <canvas id="territoryChart" class="species-chart" width="800" height="160"></canvas>
             {% endif %}
+
+            {% if n_species > 1 and species_patch_count_json != '[]' %}
+            <div class="meta-section-label" style="margin-top: 16px;">patch count per species</div>
+            <canvas id="patchCountChart" class="species-chart" width="800" height="120"></canvas>
+            {% endif %}
+
+            {% if n_species > 1 and species_spatial_entropy_json != '[]' %}
+            <div class="meta-section-label" style="margin-top: 16px;">spatial entropy per species</div>
+            <canvas id="spatialEntropyChart" class="species-chart" width="800" height="120"></canvas>
+            {% endif %}
+
+            {% if n_species > 1 and species_interface_area_json != '[]' %}
+            <div class="meta-section-label" style="margin-top: 16px;">interface area per pair</div>
+            <canvas id="interfaceAreaChart" class="species-chart" width="800" height="120"></canvas>
+            {% endif %}
+
+            {% if n_species > 1 and species_com_distance_json != '[]' %}
+            <div class="meta-section-label" style="margin-top: 16px;">COM distance per pair</div>
+            <canvas id="comDistanceChart" class="species-chart" width="800" height="120"></canvas>
+            {% endif %}
+
+            {% if mode == 'homogeneous' and patch_count_history_json != '[]' %}
+            <div class="meta-section-label" style="margin-top: 16px;">patch count over time</div>
+            <canvas id="homoPathCountChart" class="species-chart" width="800" height="120"></canvas>
+            {% endif %}
+
+            {% if mode == 'homogeneous' and mass_spatial_entropy_history_json != '[]' %}
+            <div class="meta-section-label" style="margin-top: 16px;">spatial entropy over time</div>
+            <canvas id="homoEntropyChart" class="species-chart" width="800" height="120"></canvas>
+            {% endif %}
+
+            {% if mode == 'homogeneous' and patch_size_history_json != '[]' %}
+            <div class="meta-section-label" style="margin-top: 16px;">final patch sizes</div>
+            <canvas id="patchSizeChart" class="species-chart" width="800" height="100"></canvas>
+            {% endif %}
         </div>
 
         {% if n_species > 1 and interaction_coefficients %}
@@ -1045,10 +1080,114 @@
     {% endif %}
     });
 
+    {% if n_species > 1 and species_patch_count_json != '[]' %}
+    requestAnimationFrame(function() {
+        drawSpeciesChart('patchCountChart', {{ species_patch_count_json | safe }}, {{ species_palette | tojson }}, 0);
+    });
+    {% endif %}
+    {% if n_species > 1 and species_spatial_entropy_json != '[]' %}
+    requestAnimationFrame(function() {
+        drawSpeciesChart('spatialEntropyChart', {{ species_spatial_entropy_json | safe }}, {{ species_palette | tojson }}, 0);
+    });
+    {% endif %}
+
+    {% if n_species > 1 and species_interface_area_json != '[]' %}
+    requestAnimationFrame(function() {
+        // Build per-pair series from (n_snaps, S, S) array.
+        // Only upper-triangle pairs (a < b) to avoid duplicate lines.
+        (function() {
+        var raw = {{ species_interface_area_json | safe }};
+        var palette = {{ species_palette | tojson }};
+        var S = raw.length > 0 ? raw[0].length : 0;
+        if (S < 2) return;
+        var series = [];
+        var colors = [];
+        for (var a = 0; a < S; a++) {
+            for (var b = a + 1; b < S; b++) {
+                var vals = raw.map(function(snap) { return snap[a][b]; });
+                series.push(vals);
+                // Mix the two species colors for the pair line.
+                colors.push(palette[a % palette.length]);
+            }
+        }
+        drawSpeciesChart('interfaceAreaChart', series, colors, 0);
+        })();
+    });
+    {% endif %}
+
+    {% if n_species > 1 and species_com_distance_json != '[]' %}
+    requestAnimationFrame(function() {
+        (function() {
+        var raw = {{ species_com_distance_json | safe }};
+        var palette = {{ species_palette | tojson }};
+        var S = raw.length > 0 ? raw[0].length : 0;
+        if (S < 2) return;
+        var series = [];
+        var colors = [];
+        for (var a = 0; a < S; a++) {
+            for (var b = a + 1; b < S; b++) {
+                // null = inf (species absent that snapshot) -- skip those points
+                // by substituting the previous finite value or 0.
+                var vals = [];
+                var last = 0;
+                for (var i = 0; i < raw.length; i++) {
+                    var v = raw[i][a][b];
+                    if (v !== null && isFinite(v)) { last = v; vals.push(v); }
+                    else { vals.push(last); }
+                }
+                series.push(vals);
+                colors.push(palette[a % palette.length]);
+            }
+        }
+        drawSpeciesChart('comDistanceChart', series, colors, 0);
+        })();
+    });
+    {% endif %}
+
+    {% if mode == 'homogeneous' and patch_count_history_json != '[]' %}
+    requestAnimationFrame(function() {
+        drawSpeciesChart('homoPathCountChart', [{{ patch_count_history_json | safe }}], ['#a1a1aa'], 0);
+    });
+    {% endif %}
+    {% if mode == 'homogeneous' and mass_spatial_entropy_history_json != '[]' %}
+    requestAnimationFrame(function() {
+        drawSpeciesChart('homoEntropyChart', [{{ mass_spatial_entropy_history_json | safe }}], ['#a1a1aa'], 0);
+    });
+    {% endif %}
+    {% if mode == 'homogeneous' and patch_size_history_json != '[]' %}
+    requestAnimationFrame(function() {
+        // Bar chart of final snapshot patch sizes (descending order).
+        (function() {
+        var history = {{ patch_size_history_json | safe }};
+        var sizes = history.length > 0 ? history[history.length - 1] : [];
+        if (!sizes.length) return;
+        var canvas = document.getElementById('patchSizeChart');
+        if (!canvas) return;
+        var W = canvas.offsetWidth || 260;
+        var H = 80;
+        var dpr = window.devicePixelRatio || 1;
+        canvas.width = W * dpr;
+        canvas.height = H * dpr;
+        canvas.style.height = H + 'px';
+        var ctx = canvas.getContext('2d');
+        ctx.scale(dpr, dpr);
+        var n = sizes.length;
+        var maxV = sizes[0] || 1;
+        var barW = Math.max(2, Math.floor(W / n) - 1);
+        for (var i = 0; i < n; i++) {
+            var bh = Math.round((sizes[i] / maxV) * (H - 4));
+            ctx.fillStyle = '#a1a1aa';
+            ctx.fillRect(i * (barW + 1), H - 4 - bh, barW, bh);
+        }
+        })();
+    });
+    {% endif %}
+
     {% if n_species > 1 and interaction_coefficients %}
     requestAnimationFrame(function() {
         (function() {
         var coeff = {{ interaction_coefficients | tojson }};
+        var contact = {{ contact_occurred_json | safe }};
         var palette = {{ species_palette | tojson }};
         var canvas = document.getElementById('interactionHeatmap');
         if (!canvas) return;
@@ -1081,8 +1220,9 @@
         }
         if (maxAbs < 1e-8) maxAbs = 1;
 
-        function coeffColor(v) {
-            if (isNaN(v)) return 'rgba(63,63,70,0.5)';
+        function coeffColor(v, noContact) {
+            if (isNaN(v)) return noContact ? 'rgba(30,30,35,0.8)' : 'rgba(63,63,70,0.5)';
+
             var t = v / maxAbs;  // [-1, 1]
             if (t > 0) {
                 // Positive: neutral dark to teal (#3cdcc8)
@@ -1103,17 +1243,25 @@
         for (var row = 0; row < S; row++) {
             for (var col = 0; col < S; col++) {
                 var val = coeff[row][col];
-                ctx.fillStyle = coeffColor(val);
+                var noContact = contact.length > row && contact[row].length > col && !contact[row][col];
+                ctx.fillStyle = coeffColor(val, noContact);
                 ctx.fillRect(labelH + col * cellPx, row * cellPx, cellPx, cellPx);
                 ctx.strokeStyle = 'rgba(8,9,11,0.6)';
                 ctx.lineWidth = 1;
                 ctx.strokeRect(labelH + col * cellPx + 0.5, row * cellPx + 0.5, cellPx - 1, cellPx - 1);
-                if (cellPx >= 36 && !isNaN(val)) {
-                    ctx.fillStyle = Math.abs(val / maxAbs) > 0.4 ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.5)';
+                if (cellPx >= 36) {
                     ctx.font = '9px -apple-system, BlinkMacSystemFont, sans-serif';
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
-                    ctx.fillText(val.toFixed(2), labelH + col * cellPx + cellPx / 2, row * cellPx + cellPx / 2);
+                    var cx = labelH + col * cellPx + cellPx / 2;
+                    var cy = row * cellPx + cellPx / 2;
+                    if (!isNaN(val)) {
+                        ctx.fillStyle = Math.abs(val / maxAbs) > 0.4 ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.5)';
+                        ctx.fillText(val.toFixed(2), cx, cy);
+                    } else if (noContact) {
+                        ctx.fillStyle = 'rgba(82,82,91,0.8)';
+                        ctx.fillText('no contact', cx, cy);
+                    }
                 }
             }
         }
