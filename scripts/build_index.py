@@ -818,19 +818,29 @@ def _render_ecosystem_run(run_dir: Path, publish: bool = False) -> str:
 
     output_format = summary.get("output_format", "frames")
     gif_path = run_dir / "ecosystem.gif"
+    signal_gif_path = run_dir / "signal.gif"
 
     # For GIF output: embed the GIF directly instead of individual frames
     gif_src: str = ""
+    signal_gif_src: str = ""
     if output_format == "gif" and gif_path.exists():
         if publish:
-            # Reference by relative path
             gif_src = "ecosystem.gif"
         else:
-            # Embed as base64
             import base64 as _b64
 
             gif_data = gif_path.read_bytes()
             gif_src = "data:image/gif;base64," + _b64.b64encode(gif_data).decode("ascii")
+    if output_format == "gif" and signal_gif_path.exists():
+        if publish:
+            signal_gif_src = "signal.gif"
+        else:
+            import base64 as _b64
+
+            signal_gif_data = signal_gif_path.read_bytes()
+            signal_gif_src = "data:image/gif;base64," + _b64.b64encode(signal_gif_data).decode(
+                "ascii"
+            )
 
     # Use snapshot count from summary.json as ground truth - frames may not
     # exist on disk (gif mode only writes ecosystem.gif, not individual frames)
@@ -905,6 +915,7 @@ def _render_ecosystem_run(run_dir: Path, publish: bool = False) -> str:
         thumb_px=THUMB_PX,
         output_format=output_format,
         gif_src=gif_src,
+        signal_gif_src=signal_gif_src,
         n_species=n_species,
         species_mass_history_json=json.dumps(species_mass_history),
         species_territory_history_json=json.dumps(species_territory_history),

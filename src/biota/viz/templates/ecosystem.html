@@ -519,6 +519,37 @@
             color: #3f3f46;
         }
 
+        /* Mass / Signal view toggle */
+        .gif-view-tabs {
+            display: flex;
+            gap: 0;
+            position: absolute;
+            top: 10px;
+            left: 14px;
+            z-index: 10;
+            border-radius: 5px;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+        .gif-view-tab {
+            background: rgba(8,9,11,0.8);
+            border: none;
+            color: #52525b;
+            font-family: inherit;
+            font-size: 9px;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            padding: 5px 12px;
+            cursor: pointer;
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            transition: color 0.12s, background 0.12s;
+        }
+        .gif-view-tab:hover { color: #a1a1aa; }
+        .gif-view-tab.active { color: #3cdcc8; background: rgba(60,220,200,0.12); }
+        .gif-view-tab.signal-tab.active { color: #3cdcc8; }
+
         /* When viz column hosts the gif viewport, drop its padding so the
            canvas can bleed to the column edges. Filmstrip mode keeps padding. */
         .run-viz.has-gif {
@@ -791,7 +822,7 @@
                 <path d="{{ mass_line_path }}" fill="none" stroke="#fbbf77" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
             {% else %}
-            <div class="meta-chart-empty">{% if has_signal_data %}signal active: mass field may have transferred to signal field{% else %}total mass conserved across run{% endif %}</div>
+            <div class="meta-chart-empty">{% if has_signal_data %}mass field only &middot; signal tracked separately{% else %}total mass conserved across run{% endif %}</div>
             {% endif %}
 
             {% if n_species > 1 and species_mass_history_json != '[]' %}
@@ -913,14 +944,18 @@
             <div class="gif-viewport-inner" id="gifInner">
                 <img class="eco-gif" id="ecoGif" src="{{ gif_src }}" alt="ecosystem animation" />
             </div>
+            {% if signal_gif_src %}
+            <div class="gif-view-tabs" id="gifViewTabs">
+                <button class="gif-view-tab active" data-view="mass">MASS</button>
+                <button class="gif-view-tab signal-tab" data-view="signal">SIGNAL</button>
+            </div>
+            <img class="eco-gif" id="ecoGifSignal"
+                 src="{{ signal_gif_src }}"
+                 alt="signal field animation"
+                 style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;opacity:0;transition:opacity 0.2s;"/>
+            {% endif %}
             <div class="gif-hud">
                 <span class="gif-hud-hint">drag to pan · scroll to zoom · double-click to reset</span>
-                {% if has_signal_data %}
-                <label class="gif-hud-hint" style="cursor:pointer;user-select:none;">
-                    <input type="checkbox" id="signalOverlayToggle" style="vertical-align:middle;"> signal overlay
-                </label>
-                <canvas id="signalOverlayCanvas" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;opacity:0;transition:opacity 0.2s;mix-blend-mode:screen;"></canvas>
-                {% endif %}
                 <span class="gif-hud-zoom" id="gifZoom">100%</span>
             </div>
         </div>
@@ -1583,53 +1618,27 @@
     }
 
     // Signal overlay toggle on GIF
-    var toggle = document.getElementById('signalOverlayToggle');
-    var overlayCanvas = document.getElementById('signalOverlayCanvas');
-    if (toggle && overlayCanvas && channelSnaps.length) {
-        // Pre-render per-snapshot mean-signal magnitude as a heatmap into an offscreen canvas.
-        // We use the last snapshot for a static overlay (GIF is animated but overlay is static
-        // showing the final signal distribution).
-        var lastSnap = channelSnaps[channelSnaps.length - 1];
-        // lastSnap is (C,) mean per channel -- for overlay we show the channel-mean magnitude.
-        var sigMag = 0;
-        for (var c = 0; c < lastSnap.length; c++) sigMag += Math.abs(lastSnap[c]);
-        sigMag /= lastSnap.length;
-
-        // Draw a simple colorbar overlay showing the dominant channel magnitude.
-        // Since we don't have the spatial signal field (only per-species means), we render
-        // a HUD badge showing signal magnitude and dominant channel instead.
-        var domChan = 0, domVal = 0;
-        for (var c = 0; c < lastSnap.length; c++) {
-            if (Math.abs(lastSnap[c]) > domVal) { domVal = Math.abs(lastSnap[c]); domChan = c; }
-        }
-
-        toggle.addEventListener('change', function() {
-            overlayCanvas.style.opacity = this.checked ? '0.7' : '0';
-            if (this.checked) {
-                var ctx = overlayCanvas.getContext('2d');
-                var W = overlayCanvas.offsetWidth || 400;
-                var H = overlayCanvas.offsetHeight || 300;
-                overlayCanvas.width = W; overlayCanvas.height = H;
-                ctx.clearRect(0, 0, W, H);
-                // Show a signal info badge top-left.
-                ctx.fillStyle = 'rgba(30,30,46,0.75)';
-                ctx.roundRect ? ctx.roundRect(8, 8, 200, 52, 4) : ctx.fillRect(8, 8, 200, 52);
-                ctx.fill();
-                ctx.fillStyle = '#3cdcc8';
-                ctx.font = 'bold 11px monospace';
-                ctx.fillText('SIGNAL FIELD ACTIVE', 16, 26);
-                ctx.fillStyle = '#a1a1aa';
-                ctx.font = '10px monospace';
-                ctx.fillText('dominant ch: ' + domChan + '  mag: ' + sigMag.toFixed(4), 16, 44);
-                // Tint the viewport slightly with a teal gradient.
-                var grad = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, Math.max(W,H)/2);
-                grad.addColorStop(0, 'rgba(60,220,200,0.08)');
-                grad.addColorStop(1, 'rgba(60,220,200,0.0)');
-                ctx.fillStyle = grad;
-                ctx.fillRect(0, 0, W, H);
+    // Mass / Signal view toggle
+    (function() {
+    var tabs = document.querySelectorAll('.gif-view-tab');
+    var massGif = document.getElementById('ecoGif');
+    var signalGif = document.getElementById('ecoGifSignal');
+    if (!tabs.length || !signalGif) return;
+    tabs.forEach(function(tab) {
+        tab.addEventListener('click', function() {
+            tabs.forEach(function(t) { t.classList.remove('active'); });
+            this.classList.add('active');
+            var view = this.dataset.view;
+            if (view === 'signal') {
+                if (massGif) massGif.style.opacity = '0';
+                signalGif.style.opacity = '1';
+            } else {
+                if (massGif) massGif.style.opacity = '1';
+                signalGif.style.opacity = '0';
             }
         });
-    }
+    });
+    })();
     })();
     {% endif %}
     </script>

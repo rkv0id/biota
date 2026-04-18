@@ -86,6 +86,10 @@ class SimOutput:
     # Computed as mean signal per channel over species s territory. Empty for
     # non-signal or homo runs.
     species_signal_received: list[list[list[float]]] = field(default_factory=list)
+    # Downsampled spatial signal sum at each snapshot. Shape: (n_snapshots, H//4, W//4).
+    # signal.sum(dim=-1) downsampled 4x -- total signal magnitude per spatial cell.
+    # Used to generate the signal GIF. Empty when no signal field is active.
+    signal_sum_snapshots: list[np.ndarray] = field(default_factory=list)
 
 
 # Perceptually distinct hues for species coloring. Ordered so the first
@@ -263,6 +267,45 @@ def _colorize_frame_species(
     return rgb.clip(0, 255).astype(np.uint8)
 
 
+def _colorize_signal_frame(
+    signal_sum: np.ndarray,
+    global_peak: float,
+    ownership: np.ndarray | None = None,
+    n_species: int = 1,
+) -> np.ndarray:
+    """Colorize a downsampled (H, W) signal-sum frame.
+
+    For homogeneous runs: teal colormap scaled by signal magnitude.
+    For heterogeneous runs: species-colored by upsampled ownership blend.
+    Returns (H, W, 3) uint8 RGB.
+    """
+    h, w = signal_sum.shape
+    intensity = np.clip(signal_sum / max(global_peak, 1e-8), 0.0, 1.0)
+
+    if ownership is not None and n_species > 1:
+        # Downsample ownership to match signal_sum resolution.
+        own_ds = ownership[::4, ::4, :]  # (H//4, W//4, S) approx
+        own_ds = own_ds[:h, :w, :]  # clip to exact size
+        rgb = np.zeros((h, w, 3), dtype=np.float32)
+        for s in range(min(n_species, own_ds.shape[2])):
+            color_idx = s % len(SPECIES_PALETTE)
+            r, g, b = SPECIES_PALETTE[color_idx]
+            weight = own_ds[:, :, s]
+            rgb[:, :, 0] += weight * r
+            rgb[:, :, 1] += weight * g
+            rgb[:, :, 2] += weight * b
+        rgb *= intensity[:, :, np.newaxis]
+    else:
+        # Teal colormap: map intensity to teal (0,180,160) -> white (255,255,255)
+        t = intensity
+        rgb = np.zeros((h, w, 3), dtype=np.float32)
+        rgb[:, :, 0] = t * 80
+        rgb[:, :, 1] = t * 220
+        rgb[:, :, 2] = t * 200
+
+    return rgb.clip(0, 255).astype(np.uint8)
+
+
 def _render_rgb_png_bytes(rgb: np.ndarray) -> bytes | None:
     """Render an already-colorized (H, W, 3) uint8 frame to PNG bytes."""
     try:
@@ -355,6 +398,32 @@ def _compute_outputs(
         gif_bytes = _render_gif_bytes(rgb_frames)
         if gif_bytes is not None:
             artifacts["ecosystem.gif"] = gif_bytes
+
+    # Signal GIF: species-colored signal density, downsampled 4x.
+    if config.output_format == "gif" and sim.signal_sum_snapshots:
+        sig_peak = (
+            float(np.percentile(np.stack(sim.signal_sum_snapshots), 99.5))
+            if sim.signal_sum_snapshots
+            else 1.0
+        )
+        if sig_peak <= 0:
+            sig_peak = 1.0
+        # Upsample each downsampled frame back to match mass frame size for
+        # consistent GIF dimensions -- repeat pixels 4x.
+        h_full, w_full = sim.snapshots[0].shape if sim.snapshots else (64, 64)
+        sig_rgb_frames: list[np.ndarray] = []
+        for i, sig_ds in enumerate(sim.signal_sum_snapshots):
+            own = sim.ownership_snapshots[i] if sim.ownership_snapshots else None
+            rgb_ds = _colorize_signal_frame(
+                sig_ds, sig_peak, ownership=own, n_species=sim.n_species
+            )
+            # Upsample by 4x using repeat to match mass GIF dimensions.
+            rgb_up = np.repeat(np.repeat(rgb_ds, 4, axis=0), 4, axis=1)
+            rgb_up = rgb_up[:h_full, :w_full]
+            sig_rgb_frames.append(rgb_up)
+        sig_gif = _render_gif_bytes(sig_rgb_frames)
+        if sig_gif is not None:
+            artifacts["signal.gif"] = sig_gif
 
     if config.output_format == "frames":
         for i, (frame, step) in enumerate(zip(sim.snapshots, sim.snapshot_steps, strict=True)):
@@ -562,6 +631,7 @@ def _run_homogeneous(
     mass_history: list[float] = [initial_mass]
     signal_total_history: list[float] = [float(signal.sum().item()) if signal is not None else 0.0]
     signal_channel_snapshots: list[list[float]] = []
+    signal_sum_snapshots: list[np.ndarray] = []
 
     for step in range(1, config.steps + 1):
         state, signal = fl.step(state, signal)
@@ -573,9 +643,10 @@ def _run_homogeneous(
             snapshots.append(frame)
             steps_taken.append(step)
             if signal is not None:
-                # Mean per channel across all spatial positions.
                 ch_mean = signal.mean(dim=(0, 1)).detach().cpu().tolist()
                 signal_channel_snapshots.append(ch_mean)
+                sig_ds = signal.sum(dim=-1)[::4, ::4].detach().cpu().numpy().astype(np.float32)
+                signal_sum_snapshots.append(sig_ds)
 
     return SimOutput(
         snapshots=snapshots,
@@ -588,6 +659,7 @@ def _run_homogeneous(
         ownership_snapshots=[],
         signal_total_history=signal_total_history,
         signal_channel_snapshots=signal_channel_snapshots,
+        signal_sum_snapshots=signal_sum_snapshots,
     )
 
 
@@ -647,6 +719,7 @@ def _run_heterogeneous(
     signal_channel_snapshots: list[list[float]] = []
     # species_signal_received[s] = list of (C,) mean signal per snapshot
     species_signal_received: list[list[list[float]]] = [[] for _ in range(n_species)]
+    signal_sum_snapshots: list[np.ndarray] = []
     species_mass: list[list[float]] = []
     species_territory: list[list[float]] = []
     for s in range(n_species):
@@ -680,6 +753,9 @@ def _run_heterogeneous(
             if sig is not None:
                 ch_mean = sig.mean(dim=(0, 1)).detach().cpu().tolist()
                 signal_channel_snapshots.append(ch_mean)
+                # Spatial signal sum downsampled 4x for the signal GIF.
+                sig_ds = sig.sum(dim=-1)[::4, ::4].detach().cpu().numpy().astype(np.float32)
+                signal_sum_snapshots.append(sig_ds)
                 # Per-species: mean signal over cells where species has ownership > 0.1
                 for s in range(n_species):
                     w_s = state.weights[:, :, s]  # (H, W)
@@ -704,6 +780,7 @@ def _run_heterogeneous(
         signal_total_history=signal_total_history,
         signal_channel_snapshots=signal_channel_snapshots,
         species_signal_received=species_signal_received,
+        signal_sum_snapshots=signal_sum_snapshots,
     )
 
 
