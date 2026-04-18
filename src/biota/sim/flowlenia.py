@@ -258,7 +258,93 @@ class FlowLenia:
 
         return new_A2.unsqueeze(-1), new_signal
 
-    def step_batch(self, A: torch.Tensor) -> torch.Tensor:
+    def step_with_signal_diagnostics(
+        self, A: torch.Tensor, signal: torch.Tensor | None
+    ) -> tuple[torch.Tensor, torch.Tensor | None, float, float]:
+        """Like step(), but also returns per-step signal diagnostic scalars.
+
+        Used by the rollout loop to capture emission_activity and
+        receptor_sensitivity descriptor histories without re-running the sim.
+
+        Returns:
+            (new_A, new_signal, emission_activity, receptor_sensitivity)
+            emission_activity:    mean(G_pos * effective_rate) over the grid --
+                                  the actual per-cell emission scalar, averaged.
+                                  Proportional to how much signal was emitted this step.
+            receptor_sensitivity: mean(|receptor_response|) over the grid --
+                                  how strongly the creature responded to the convolved
+                                  signal field this step.
+            Both are 0.0 for non-signal creatures or when signal is None.
+        """
+        A2 = A[:, :, 0]
+
+        fA = torch.fft.fft2(A2)
+        U = torch.fft.ifft2(self._fK * fA.unsqueeze(0)).real
+        m = self.params.m.view(-1, 1, 1)
+        s = self.params.s.view(-1, 1, 1)
+        h = self.params.h.view(-1, 1, 1)
+        G = (torch.exp(-(((U - m) / s) ** 2) / 2.0) * 2.0 - 1.0) * h
+        U_sum = G.sum(dim=0)
+
+        emission_activity_scalar = 0.0
+        receptor_sensitivity_scalar = 0.0
+
+        if signal is not None and self.params.has_signal and self._fK_signal is not None:
+            assert self.params.emission_vector is not None
+            assert self.params.receptor_profile is not None
+
+            G_pos = U_sum.clamp(min=0.0)
+
+            sig_t = signal.permute(2, 0, 1)
+            fSig = torch.fft.fft2(sig_t)
+            convolved = torch.fft.ifft2(self._fK_signal * fSig).real
+            receptor_response = (convolved * self.params.receptor_profile.view(-1, 1, 1)).sum(dim=0)
+
+            # receptor_sensitivity: mean absolute reception response over the grid
+            receptor_sensitivity_scalar = float(receptor_response.abs().mean().item())
+
+            alpha_c = self.params.alpha_coupling if self.params.alpha_coupling is not None else 0.0
+            if alpha_c != 0.0:
+                growth_multiplier = (1.0 + alpha_c * receptor_response).clamp(min=0.0)
+                U_sum = U_sum * growth_multiplier
+                G_pos = U_sum.clamp(min=0.0)
+
+            base_rate = self.params.emission_rate if self.params.emission_rate is not None else 0.0
+            beta_m = self.params.beta_modulation if self.params.beta_modulation is not None else 0.0
+            if beta_m != 0.0:
+                received_mean = float(receptor_response.mean().item())
+                effective_rate = float(
+                    max(0.0, min(0.1, base_rate * (1.0 + beta_m * received_mean)))
+                )
+            else:
+                effective_rate = base_rate
+
+            # emission_activity: mean(G_pos * effective_rate) -- actual emission per cell
+            emission_activity_scalar = float((G_pos * effective_rate).mean().item())
+
+            emitted = G_pos * effective_rate
+            emitted = torch.minimum(emitted, A2.clamp(min=0.0))
+            emit_per_channel = emitted.unsqueeze(-1) * self.params.emission_vector
+            signal = signal + emit_per_channel
+            A2 = A2 - emitted
+
+        nabla_U = self._sobel(U_sum)
+        nabla_A = self._sobel(A2)
+        alpha = torch.clamp(A2**2, 0.0, 1.0)
+        F_flow = nabla_U * (1.0 - alpha) - nabla_A * alpha
+        new_A2 = self._reintegration(A2, F_flow)
+
+        if signal is not None and self.params.has_signal:
+            new_signal = signal * (1.0 - self._decay)
+        else:
+            new_signal = signal
+
+        return (
+            new_A2.unsqueeze(-1),
+            new_signal,
+            emission_activity_scalar,
+            receptor_sensitivity_scalar,
+        )
         """Vectorized step over a batch of states. Signal field not supported
         in batch mode (search rollouts don't use it; ecosystem uses single-step).
 

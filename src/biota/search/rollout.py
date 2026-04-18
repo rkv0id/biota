@@ -308,26 +308,19 @@ def rollout(
         com_x_np[step] = com_x
         bbox_np[step] = bbox
         gyradius_np[step] = gyr
-        if (
-            emission_np is not None
-            and signal is not None
-            and sim_params.receptor_profile is not None
-        ):
-            # Emission activity: mean positive-growth signal emission this step.
-            g_pos_mean = float(state[:, :, 0].clamp(min=0.0).mean().item())
-            rate = sim_params.emission_rate if sim_params.emission_rate is not None else 0.0
-            emission_np[step] = g_pos_mean * rate
-            # Reception: mean |dot(signal_sum, receptor)| as a scalar.
-            if reception_np is not None:
-                sig_mean = signal.mean(dim=(0, 1))  # (C,)
-                rec_resp = float((sig_mean * sim_params.receptor_profile).sum().abs().item())
-                reception_np[step] = rec_resp
         if step in frame_indices:
             thumb_buf.append(_downsample_frame(state, thumbnail_size))
         if step == midpoint_step:
             midpoint_state_np = state[:, :, 0].detach().cpu().numpy().astype(np.float32)
         if step < config.steps:
-            state, signal = fl.step(state, signal)
+            if is_signal_rollout and emission_np is not None and reception_np is not None:
+                # Use diagnostics variant to get accurate G_pos and receptor_response
+                # scalars from inside step() -- the only place where both are computed.
+                state, signal, emit_act, recep_sens = fl.step_with_signal_diagnostics(state, signal)
+                emission_np[step] = emit_act
+                reception_np[step] = recep_sens
+            else:
+                state, signal = fl.step(state, signal)
 
     final_mass = float(state.sum().item())
     final_signal_mass = float(signal.sum().item()) if signal is not None else 0.0

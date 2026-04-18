@@ -697,10 +697,10 @@ def compute_emission_activity(trace: RolloutTrace) -> float:
     if trace.signal_emission_history is None or len(trace.signal_emission_history) == 0:
         return 0.0
     mean_activity = float(trace.signal_emission_history.mean())
-    # Normalize: emission activity is bounded by emission_rate * G_peak.
-    # G_peak ~ 1.0, emission_rate max = 0.05, so peak activity ~ 0.05.
-    # Use 0.05 as normalizer to put typical values in [0, 1].
-    return float(np.clip(mean_activity / 0.05, 0.0, 1.0))
+    # Normalizer calibrated to mean(G_pos * rate): G_pos averaged over grid
+    # is typically 0.0-0.1; rate in [0.001, 0.05]. So mean(G_pos * rate)
+    # spans ~0.00005-0.003 in practice. 0.001 gives good spread.
+    return float(np.clip(mean_activity / 0.001, 0.0, 1.0))
 
 
 def compute_receptor_sensitivity(trace: RolloutTrace) -> float:
@@ -712,12 +712,14 @@ def compute_receptor_sensitivity(trace: RolloutTrace) -> float:
     produced strong growth modulation. Low = chemical mismatch or inert.
 
     Returns 0.0 for non-signal rollouts.
-    Normalized against a typical peak of 0.5.
+    Normalizer calibrated to mean|receptor_response|: convolved signal builds
+    from near-zero over 800 steps; typical mean response 0.00001-0.003.
+    0.005 gives good spread across the [0,1] range.
     """
     if trace.signal_reception_history is None or len(trace.signal_reception_history) == 0:
         return 0.0
     mean_response = float(np.abs(trace.signal_reception_history).mean())
-    return float(np.clip(mean_response / 0.5, 0.0, 1.0))
+    return float(np.clip(mean_response / 0.005, 0.0, 1.0))
 
 
 def compute_signal_retention(trace: RolloutTrace) -> float:
