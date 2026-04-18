@@ -499,13 +499,13 @@
                 </div>
                 <div class="stat">
                     <div class="stat-label">descriptor library</div>
-                    <div class="stat-value">15 <span class="stat-unit">built-in axes</span></div>
+                    <div class="stat-value">18 <span class="stat-unit">built-in axes</span></div>
                 </div>
             </div>
 
             <h2 id="sys-search">MAP-Elites search</h2>
             <p><a class="pill amber" href="https://arxiv.org/abs/1504.04909" target="_blank" style="display:inline;padding:2px 6px;border-radius:3px;font-size:inherit;">MAP-Elites</a> runs a loop: sample parameters, simulate a creature, measure its behavior, insert it into the matching archive cell if it beats whatever is already there. After thousands of rollouts the archive fills with creatures covering the behavioral space as broadly as possible — not optimizing toward one solution, but toward diversity.</p>
-            <p>The archive is a three-dimensional behavioral grid. Each axis holds one descriptor chosen from a library of fifteen, all normalized to [0, 1] and empirically calibrated against real cluster runs. Each cell holds the highest-quality creature found with that behavioral fingerprint.</p>
+            <p>The archive is a three-dimensional behavioral grid. Each axis holds one descriptor chosen from a library of eighteen, all normalized to [0, 1] and empirically calibrated against real cluster runs. Each cell holds the highest-quality creature found with that behavioral fingerprint.</p>
 
             <div class="diagram-frame">{{ svg_archive_grid | safe }}</div>
 
@@ -823,7 +823,7 @@
 <span class="cmd">    --signal-field</span></pre>
 
             <h2>Choosing descriptors</h2>
-            <p>Pass <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">--descriptors</code> with three comma-separated names to control which behavioral axes the archive uses. With 15 built-ins there are 455 possible configurations. You can also supply your own via <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">--descriptor-module path/to/file.py</code> — the file must define a list named <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">DESCRIPTORS</code> containing <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">Descriptor</code> objects.</p>
+            <p>Pass <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">--descriptors</code> with three comma-separated names to control which behavioral axes the archive uses. With 18 built-ins (15 general + 3 signal-only) there are 816 possible configurations. You can also supply your own via <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">--descriptor-module path/to/file.py</code> — the file must define a list named <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">DESCRIPTORS</code> containing <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">Descriptor</code> objects.</p>
             <pre class="code-block"><span class="comment"># Default axes</span>
 <span class="cmd">uv run biota search --descriptors velocity,gyradius,spectral_entropy</span>
 

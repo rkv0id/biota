@@ -314,7 +314,9 @@ The test suite runs entirely in no-Ray mode. `just smoke-ray` exercises the Ray 
   quality term; signal observables (total history, mass fraction, receptor alignment,
   emission-reception matrix); SIGNAL badge on archives; signal params in creature modal;
   signal overlay checkbox on ecosystem GIF; outcome label tooltips
-- [ ] v3.5.0 - Ecosystem viewer overhaul: all new charts, signal GIF overlay, mode-specific panels, temporal outcome sequence
+- [x] v3.5.0 - Chemical coupling (alpha_coupling [-1,1]: multiplicative growth, enables
+  cross-species predation) + adaptive emission (beta_modulation [-1,1]: quorum sensing /
+  feedback inhibition); 3 signal-only descriptors; descriptor library 15→18
 
 ## References
 

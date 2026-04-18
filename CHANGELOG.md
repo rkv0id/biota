@@ -1,5 +1,119 @@
 # Changelog
 
+## v3.5.0 - 2026-04-18
+
+Chemical coupling and adaptive signal. alpha_coupling and beta_modulation added as searchable
+signal parameters. Three signal-only behavioral descriptors. Descriptor library 15→18.
+
+### alpha_coupling [-1, 1]
+
+New Params field. Reception-to-growth coupling: G *= (1 + alpha * reception).clamp(min=0).
+Applied globally (no ownership gating) -- species B grows into species A's territory when B's
+receptor_profile aligns with A's emission_vector. Positive = chemotaxis (predation pathway).
+Negative = chemorepulsion. Zero = no coupling (previous behavior).
+
+### beta_modulation [-1, 1]
+
+New Params field. Adaptive emission: rate_eff = clip(emission_rate * (1 + beta * mean(reception)), 0, 0.1).
+Reception computed before emission each step. Positive = quorum sensing (amplify when stimulated).
+Negative = feedback inhibition (suppress when stimulated). Zero = static emission rate.
+
+### Signal-only descriptors
+
+Three new Descriptor objects with signal_only=True registered in REGISTRY:
+- emission_activity: mean G_pos * emission_rate over trace tail, normalized to [0,1]
+- receptor_sensitivity: mean |dot(convolved_signal, receptor_profile)| over trace tail, [0,1]
+- signal_retention: final_mass / initial_mass clipped to [0,1]; 1.0 for non-signal traces
+
+Descriptor dataclass gains signal_only: bool = False field. loop.py validates at search startup:
+raises ValueError if any signal_only descriptor is active without signal_field=True.
+RolloutTrace gains signal_emission_history, signal_reception_history, signal_retention fields.
+rollout.py captures these per-step during signal rollouts.
+
+### Quality metric adjustment
+
+Signal run weights: stability 0.3→0.2, retention 0.2→0.3. Non-signal unchanged (0.6/0.4).
+
+---
+
+## v3.4.0 - 2026-04-18
+
+Signal physics corrections, multi-component quality metric, signal observables, signal GIF,
+viewer improvements across archive and ecosystem pages.
+
+### Signal physics
+
+emission_rate and decay_rates made per-creature searchable (were hardcoded constants).
+standard_preset 300→500 steps. signal_preset auto-selects 800 steps with --signal-field.
+CREATURE_MASS_FLOOR raised 0.1→0.2. Reception moved before emission in localized.py.
+
+### Multi-component quality metric
+
+q = 0.6·min(compact(T/2), compact(T)) + 0.4·stability  (non-signal)
+q = 0.5·min(compact(T/2), compact(T)) + 0.2·stability + 0.3·retention  (signal)
+midpoint_state captured in rollout loop and stored on RolloutTrace.
+stability = clip(1 - drift/0.2, 0, 1) -- continuous version of persistent filter.
+
+### Signal observables
+
+SimOutput captures signal_total_history, signal_channel_snapshots, species_signal_received,
+signal_sum_snapshots (downsampled 4x spatial signal for GIF). EcosystemMeasures gains 6 new
+fields: signal_total_history, signal_mass_fraction, signal_channel_snapshots,
+dominant_channel_history, receptor_alignment, emission_reception_matrix. All in summary.json.
+
+### Signal GIF
+
+signal.gif generated alongside ecosystem.gif using species-colored teal colormap.
+Mass/Signal tab toggle in ecosystem viewer. signal.gif checked in smoke_ecosystem.sh.
+
+### Viewer improvements
+
+Archive: SIGNAL badge, alpha/beta in creature modal, per-channel bar charts for signal params.
+Ecosystem: SIGNAL badge, outcome tooltips, signal charts sidebar, corrected mass chart label.
+Index: System tab anchor nav, quality metric section with formula, signal field section with
+diagram, signal descriptors in descriptor grid, SIGNAL/TORUS badges on run cards.
+docs/signal-field.svg: new diagram showing one-step signal mechanics with alpha/beta.
+
+---
+
+## v3.3.0 - 2026-04-18
+
+Signal field: per-creature emission and sensing in a shared (H,W,16) chemical field.
+
+Per-creature parameters: emission_vector (C,), receptor_profile (C,), signal_kernel (ring),
+emission_rate scalar, decay_rates (C,). --signal-field flag in CLI. Archive tagged
+signal_field: true/false in manifest.json. Quality filter updated for mass+signal conservation.
+Both homogeneous and heterogeneous ecosystem paths signal-aware. validate_signal_consistency()
+enforces archive compatibility (signal and non-signal archives cannot be mixed).
+
+---
+
+## v3.2.0 - 2026-04-18
+
+Temporal outcome classifier with separate taxonomies per run mode.
+
+Heterogeneous: merger, coexistence, exclusion, fragmentation -- now as temporal label sequence
+(list of OutcomeWindow with from_step, to_step, label) per species. Fragmentation uses patch
+count from v3.1.0 HeteroSpatial. Homogeneous taxonomy: full_merger, stable_isolation,
+partial_clustering, cannibalism, fragmentation -- all measurable from patch count dynamics.
+Outcome timeline visualization in ecosystem viewer. outcome_sequence stored in summary.json.
+
+---
+
+## v3.1.0 - 2026-04-18
+
+Spatial observables for both run modes from existing snapshot data (no new simulation code).
+
+Heterogeneous: patch count per species per snapshot, interface area per pair per snapshot,
+Euclidean COM distance per pair per snapshot, spatial entropy per species per snapshot,
+contact_occurred S×S bool matrix. Interaction coefficients gated to windows where
+interface_area > 0. 4-connected component labeling via scipy.ndimage.label.
+Homogeneous: patch count over time, mass spatial entropy, initial patch sizes, patch size
+distribution per snapshot. scipy declared as explicit dependency. HeteroSpatial /
+HomoSpatial typed dataclasses in analytics.py.
+
+---
+
 ## v3.0.0 - 2026-04-17
 
 Growth field capture, empirical interaction coefficients, ecosystem outcome classification, interaction heatmap in viewer.
