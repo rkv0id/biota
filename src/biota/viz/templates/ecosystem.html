@@ -78,8 +78,23 @@
             border-bottom: 1px solid rgba(255, 255, 255, 0.03);
         }
 
-        /* Source entries in the sidebar: structured 2-line blocks */
-        .source-entry {
+        /* Outcome timeline */
+        .outcome-timeline { display: flex; flex-direction: column; gap: 5px; }
+        .outcome-timeline-row { display: flex; align-items: center; gap: 6px; }
+        .outcome-timeline-label {
+            font-size: 9px; color: #71717a; width: 18px; flex-shrink: 0;
+            text-align: right;
+        }
+        .outcome-timeline-track {
+            flex: 1; display: flex; height: 14px; border-radius: 3px;
+            overflow: hidden; background: rgba(255,255,255,0.04);
+        }
+        .outcome-timeline-seg {
+            height: 100%; cursor: default; transition: opacity 0.1s;
+        }
+        .outcome-timeline-seg:hover { opacity: 0.75; }
+
+
             margin-bottom: 14px;
             padding-left: 8px;
             border-left: 2px solid rgba(251, 191, 119, 0.15);
@@ -791,11 +806,13 @@
 
             {% if n_species > 1 and species_interface_area_json != '[]' %}
             <div class="meta-section-label" style="margin-top: 16px;">interface area per pair</div>
+            <div id="interfaceLegend" class="species-legend"></div>
             <canvas id="interfaceAreaChart" class="species-chart" width="800" height="120"></canvas>
             {% endif %}
 
             {% if n_species > 1 and species_com_distance_json != '[]' %}
             <div class="meta-section-label" style="margin-top: 16px;">COM distance per pair</div>
+            <div id="comLegend" class="species-legend"></div>
             <canvas id="comDistanceChart" class="species-chart" width="800" height="120"></canvas>
             {% endif %}
 
@@ -836,6 +853,13 @@
                 </span>
             </div>
             <div style="font-size:9px;color:#52525b;margin-top:6px;">row A, col B: effect of B on A's growth</div>
+        </div>
+        {% endif %}
+
+        {% if outcome_sequence_json is defined and outcome_sequence_json != '[]' %}
+        <div class="meta-section">
+            <div class="meta-section-title">outcome timeline</div>
+            <div class="outcome-timeline" id="outcomeTimeline"></div>
         </div>
         {% endif %}
     </aside>
@@ -1115,11 +1139,20 @@
         if (S < 2) return;
         var series = [];
         var colors = [];
+        var legend = document.getElementById('interfaceLegend');
         for (var a = 0; a < S; a++) {
             for (var b = a + 1; b < S; b++) {
                 var vals = raw.map(function(snap) { return snap[a][b]; });
                 series.push(vals);
-                colors.push(blendColors(palette[a % palette.length], palette[b % palette.length]));
+                var color = blendColors(palette[a % palette.length], palette[b % palette.length]);
+                colors.push(color);
+                if (legend) {
+                    var item = document.createElement('span');
+                    item.className = 'species-legend-item';
+                    item.innerHTML = '<span class="species-swatch" style="background:' + color + ';"></span>'
+                        + '<span class="species-legend-name">s' + (a+1) + '-s' + (b+1) + '</span>';
+                    legend.appendChild(item);
+                }
             }
         }
         drawSpeciesChart('interfaceAreaChart', series, colors, 0);
@@ -1136,10 +1169,9 @@
         if (S < 2) return;
         var series = [];
         var colors = [];
+        var legend = document.getElementById('comLegend');
         for (var a = 0; a < S; a++) {
             for (var b = a + 1; b < S; b++) {
-                // null = inf (species absent that snapshot) -- skip those points
-                // by substituting the previous finite value or 0.
                 var vals = [];
                 var last = 0;
                 for (var i = 0; i < raw.length; i++) {
@@ -1148,7 +1180,15 @@
                     else { vals.push(last); }
                 }
                 series.push(vals);
-                colors.push(blendColors(palette[a % palette.length], palette[b % palette.length]));
+                var color = blendColors(palette[a % palette.length], palette[b % palette.length]);
+                colors.push(color);
+                if (legend) {
+                    var item = document.createElement('span');
+                    item.className = 'species-legend-item';
+                    item.innerHTML = '<span class="species-swatch" style="background:' + color + ';"></span>'
+                        + '<span class="species-legend-name">s' + (a+1) + '-s' + (b+1) + '</span>';
+                    legend.appendChild(item);
+                }
             }
         }
         drawSpeciesChart('comDistanceChart', series, colors, 0);
@@ -1288,6 +1328,90 @@
             ctx.fillText('s' + (i + 1), labelH / 2, i * cellPx + cellPx / 2);
         }
     })();
+    });
+    {% endif %}
+
+    {% if outcome_sequence_json is defined and outcome_sequence_json != '[]' %}
+    requestAnimationFrame(function() {
+        (function() {
+        var seq = {{ outcome_sequence_json | safe }};
+        var container = document.getElementById('outcomeTimeline');
+        if (!container || !seq.length) return;
+
+        var COLORS = {
+            'coexistence':        '#3f3f46',
+            'merger':             '#3cdcc8',
+            'exclusion':          '#ff6464',
+            'fragmentation':      '#fbbf24',
+            'full_merger':        '#3cdcc8',
+            'stable_isolation':   '#3f3f46',
+            'partial_clustering': '#a78bfa',
+            'cannibalism':        '#f97316',
+        };
+
+        var minStep = Infinity, maxStep = -Infinity;
+        for (var si = 0; si < seq.length; si++) {
+            for (var wi = 0; wi < seq[si].length; wi++) {
+                var w = seq[si][wi];
+                if (w.from < minStep) minStep = w.from;
+                if (w.to > maxStep) maxStep = w.to;
+            }
+        }
+        var totalSpan = maxStep - minStep || 1;
+        var isHomo = seq.length === 1;
+
+        for (var si = 0; si < seq.length; si++) {
+            var row = document.createElement('div');
+            row.className = 'outcome-timeline-row';
+
+            var rowLabel = document.createElement('div');
+            rowLabel.className = 'outcome-timeline-label';
+            rowLabel.textContent = isHomo ? '' : 's' + (si + 1);
+            row.appendChild(rowLabel);
+
+            var track = document.createElement('div');
+            track.className = 'outcome-timeline-track';
+
+            for (var wi = 0; wi < seq[si].length; wi++) {
+                var win = seq[si][wi];
+                var pct = ((win.to - win.from) / totalSpan * 100).toFixed(2) + '%';
+                var seg = document.createElement('div');
+                seg.className = 'outcome-timeline-seg';
+                seg.style.width = pct;
+                seg.style.background = COLORS[win.label] || '#52525b';
+                seg.title = win.label.replace(/_/g, ' ') + ': step ' + win.from + ' \u2013 ' + win.to;
+                track.appendChild(seg);
+            }
+            row.appendChild(track);
+            container.appendChild(row);
+        }
+
+        // Legend: only labels actually present, in priority order.
+        var seen = {};
+        for (var si = 0; si < seq.length; si++)
+            for (var wi = 0; wi < seq[si].length; wi++)
+                seen[seq[si][wi].label] = true;
+
+        var orderedLabels = [
+            'exclusion', 'fragmentation', 'cannibalism', 'partial_clustering',
+            'merger', 'full_merger', 'stable_isolation', 'coexistence',
+        ];
+        var legend = document.createElement('div');
+        legend.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;';
+        for (var li = 0; li < orderedLabels.length; li++) {
+            var lbl = orderedLabels[li];
+            if (!seen[lbl]) continue;
+            var item = document.createElement('span');
+            item.style.cssText = 'display:flex;align-items:center;gap:4px;font-size:9px;color:#a1a1aa;';
+            var swatch = document.createElement('span');
+            swatch.style.cssText = 'width:8px;height:8px;border-radius:2px;flex-shrink:0;background:'
+                + (COLORS[lbl] || '#52525b') + ';';
+            item.appendChild(swatch);
+            item.appendChild(document.createTextNode(lbl.replace(/_/g, ' ')));
+            legend.appendChild(item);
+        }
+        container.appendChild(legend);
+        })();
     });
     {% endif %}
     </script>

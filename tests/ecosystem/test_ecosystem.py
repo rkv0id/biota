@@ -556,7 +556,7 @@ def test_to_summary_dict_is_json_serializable() -> None:
         species_mass_history=[[10.0, 9.9, 9.8]],
         species_territory_history=[[100.0, 99.0, 98.0]],
         interaction_coefficients=[],
-        outcome_label="",
+        outcome_label="stable_isolation",
     )
     result = EcosystemResult(
         config=config,
@@ -610,7 +610,7 @@ def test_to_summary_dict_marks_heterogeneous_mode() -> None:
         species_mass_history=[[1.0]],
         species_territory_history=[[50.0]],
         interaction_coefficients=[],
-        outcome_label="",
+        outcome_label="coexistence",
     )
     result = EcosystemResult(
         config=config, run_id="het-test", run_dir="/tmp", measures=measures, elapsed_seconds=0.0
@@ -701,7 +701,13 @@ def test_run_ecosystem_summary_json_valid() -> None:
         assert len(summary["measures"]["snapshot_steps"]) == 1
         # Homogeneous runs: interaction fields are present but empty.
         assert summary["measures"]["interaction_coefficients"] == []
-        assert summary["measures"]["outcome_label"] == ""
+        assert summary["measures"]["outcome_label"] in {
+            "stable_isolation",
+            "full_merger",
+            "partial_clustering",
+            "cannibalism",
+            "fragmentation",
+        }
 
 
 def test_run_ecosystem_measures_plausible() -> None:

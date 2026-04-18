@@ -194,7 +194,12 @@ for run_dir in runs:
 
     if summary["mode"] == "homogeneous":
         assert m["interaction_coefficients"] == [], f"{name}: homo run should have empty coefficients"
-        assert m["outcome_label"] == "", f"{name}: homo run should have empty outcome_label"
+        valid_homo_labels = {"stable_isolation", "full_merger", "partial_clustering", "cannibalism", "fragmentation"}
+        assert m["outcome_label"] in valid_homo_labels, \
+            f"{name}: unexpected homo outcome_label {m['outcome_label']!r}"
+        seq = m.get("outcome_sequence", [])
+        assert len(seq) == 1, f"{name}: homo outcome_sequence should have 1 series, got {len(seq)}"
+        assert len(seq[0]) >= 1, f"{name}: homo outcome_sequence series should have at least 1 window"
     else:
         # Heterogeneous: coefficient matrix must be S x S (S=2 here).
         ic = m["interaction_coefficients"]
@@ -202,6 +207,8 @@ for run_dir in runs:
         assert all(len(row) == 2 for row in ic), f"{name}: coefficient rows wrong length"
         assert m["outcome_label"] in {"merger", "coexistence", "exclusion", "fragmentation"}, \
             f"{name}: unexpected outcome_label {m['outcome_label']!r}"
+        seq = m.get("outcome_sequence", [])
+        assert len(seq) == 2, f"{name}: hetero outcome_sequence should have 2 series, got {len(seq)}"
         print(f"  {name}: outcome={m['outcome_label']}, coefficients={ic}")
 
 print("all summary.json checks passed")

@@ -842,6 +842,7 @@ def _render_ecosystem_run(run_dir: Path, publish: bool = False) -> str:
     species_territory_history: list[list[float]] = measures.get("species_territory_history", [])
     interaction_coefficients: list[list[float]] = measures.get("interaction_coefficients", [])
     outcome_label: str = measures.get("outcome_label", "")
+    outcome_sequence: list[list[dict[str, object]]] = measures.get("outcome_sequence", [])
     # Spatial observables -- heterogeneous runs.
     species_patch_count: list[list[int]] = measures.get("species_patch_count", [])
     species_interface_area: list[list[list[int]]] = measures.get("species_interface_area", [])
@@ -900,6 +901,7 @@ def _render_ecosystem_run(run_dir: Path, publish: bool = False) -> str:
         species_palette=species_palette_hex[:n_species],
         interaction_coefficients=interaction_coefficients,
         outcome_label=outcome_label,
+        outcome_sequence_json=json.dumps(outcome_sequence),
         species_patch_count_json=json.dumps(species_patch_count),
         species_interface_area_json=json.dumps(species_interface_area),
         species_com_distance_json=json.dumps(species_com_distance),

@@ -1,7 +1,7 @@
 """Post-run interaction measurement and ecosystem outcome classification.
 
-Both functions operate on data already captured during the simulation loop.
-Neither touches the simulation itself. No new physics, no prescribed rules.
+All functions operate on data already captured during the simulation loop.
+No simulation code is touched.
 
 compute_interaction_coefficients
     Takes the per-species growth field snapshots and the ownership snapshots.
@@ -9,15 +9,53 @@ compute_interaction_coefficients
     with A's growth field value at that cell, compared to cells where B is
     absent. The result is an S x S float matrix stored in summary.json.
 
-classify_outcome
-    Takes species_territory_history (already in v2.5.0 output) and optionally
-    the ownership snapshots for spatial analysis. Returns one of four labels:
-    merger, coexistence, exclusion, fragmentation.
+classify_outcome_hetero
+    Produces a per-species temporal label sequence from ownership snapshots,
+    territory history, and patch count data. Each species gets an independent
+    sequence of labeled windows. The run-level label is derived from the final
+    window states across all species.
+
+classify_outcome_homo
+    Produces a single run-level temporal label sequence from patch count history
+    and patch size history. Labels: full_merger, stable_isolation,
+    partial_clustering, cannibalism, fragmentation.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+
 import numpy as np
+
+
+@dataclass
+class OutcomeWindow:
+    """One labeled interval in an outcome sequence.
+
+    from_step and to_step are simulation step numbers (not snapshot indices).
+    to_step is the last step of the window, inclusive.
+    """
+
+    label: str
+    from_step: int
+    to_step: int
+
+
+@dataclass
+class OutcomeSequence:
+    """Temporal outcome classification for one ecosystem run.
+
+    For heterogeneous runs, series is indexed by species: series[s] is the
+    sequence of labeled windows for species s. For homogeneous runs, series
+    has a single entry representing the collective run dynamics.
+
+    final_label is the dominant run-level label derived from the last window
+    of each series entry. Priority: exclusion > fragmentation > cannibalism >
+    partial_clustering > merger > stable_isolation > coexistence.
+    """
+
+    series: list[list[OutcomeWindow]] = field(default_factory=list)
+    final_label: str = ""
 
 
 def compute_interaction_coefficients(
@@ -137,125 +175,203 @@ def compute_interaction_coefficients(
     return coefficients
 
 
-def classify_outcome(
+def _ownership_entropy_at(ownership: np.ndarray) -> float:
+    """Mean per-cell Shannon entropy of an (H, W, S) ownership snapshot, in [0, 1]."""
+    s = ownership.shape[2]
+    total = ownership.sum(axis=2)
+    occupied = total > 0.1
+    if not occupied.any():
+        return 0.0
+    norm = ownership[occupied] / total[occupied, np.newaxis]
+    clipped = np.clip(norm, 1e-12, 1.0)
+    per_cell = -(clipped * np.log(clipped)).sum(axis=1)
+    max_e = np.log(s)
+    return float(per_cell.mean()) / max_e if max_e > 0 else 0.0
+
+
+def _derive_final_label(per_species_final: list[str]) -> str:
+    """Derive a single run-level label from the final label of each species."""
+    priority = [
+        "exclusion",
+        "fragmentation",
+        "cannibalism",
+        "partial_clustering",
+        "merger",
+        "stable_isolation",
+        "coexistence",
+    ]
+    for label in priority:
+        if label in per_species_final:
+            return label
+    return per_species_final[0] if per_species_final else ""
+
+
+def build_windows(
+    labels_per_snapshot: list[str],
+    snapshot_steps: list[int],
+    debounce: int,
+) -> list[OutcomeWindow]:
+    """Convert a per-snapshot label list into debounced OutcomeWindow list.
+
+    A label transition is only committed after `debounce` consecutive snapshots
+    with the new label. Prevents transient single-snapshot splits from producing
+    spurious windows.
+    """
+    if not labels_per_snapshot:
+        return []
+
+    n = len(labels_per_snapshot)
+    smoothed: list[str] = [labels_per_snapshot[0]] * n
+    current = labels_per_snapshot[0]
+    candidate = current
+    candidate_count = 0
+    for i in range(n):
+        raw = labels_per_snapshot[i]
+        if raw == current:
+            candidate = current
+            candidate_count = 0
+        else:
+            if raw == candidate:
+                candidate_count += 1
+            else:
+                candidate = raw
+                candidate_count = 1
+            if candidate_count >= debounce:
+                current = candidate
+                candidate_count = 0
+        smoothed[i] = current
+
+    windows: list[OutcomeWindow] = []
+    run_label = smoothed[0]
+    run_start = snapshot_steps[0]
+    for i in range(1, n):
+        if smoothed[i] != run_label:
+            windows.append(OutcomeWindow(run_label, run_start, snapshot_steps[i - 1]))
+            run_label = smoothed[i]
+            run_start = snapshot_steps[i]
+    windows.append(OutcomeWindow(run_label, run_start, snapshot_steps[-1]))
+    return windows
+
+
+def classify_outcome_hetero(
     species_territory_history: list[list[float]],
     ownership_snapshots: list[np.ndarray],
+    snapshot_steps: list[int],
+    species_patch_count: list[list[int]],
     exclusion_threshold: float = 0.05,
     merger_entropy_threshold: float = 0.85,
-    species_patch_count: list[list[int]] | None = None,
-) -> str:
-    """Classify an ecosystem run's outcome from territory history and ownership.
+    fragmentation_debounce: int = 3,
+) -> OutcomeSequence:
+    """Temporal outcome classification for a heterogeneous ecosystem run.
 
-    Returns one of four labels:
-
-    merger       - species converge into a shared spatial structure. Final
-                   territory is distributed relatively evenly and ownership
-                   entropy at occupied cells is high (species are mixed).
-
-    coexistence  - all species maintain meaningful territory throughout the run
-                   and ownership entropy stays low (clear boundaries persist).
-
-    exclusion    - one or more species' territory drops below exclusion_threshold
-                   (as a fraction of that species' initial territory) while at
-                   least one other species retains territory.
-
-    fragmentation - one or more non-excluded species has patch count > 1 at
-                   any snapshot and remains fragmented at the final snapshot.
-                   When species_patch_count is not provided, falls back to a
-                   coarse CV heuristic on the territory time series.
-
-    Returns an empty string if there is insufficient data (e.g., fewer than
-    two species or empty history).
+    Each species gets an independent sequence of labeled windows. Labels per
+    snapshot per species follow priority: exclusion > merger > fragmentation >
+    coexistence. Transitions are debounced to suppress transient splits.
 
     Args:
-        species_territory_history: outer list indexed by species, inner by
-            step. Length S x (steps + 1). From EcosystemMeasures.
-        ownership_snapshots: list of (H, W, S) float32 arrays. Used to
-            compute spatial ownership entropy at the final snapshot.
-        exclusion_threshold: a species is considered excluded if its final
-            territory is below this fraction of its initial territory.
-        merger_entropy_threshold: mean per-cell ownership entropy at the
-            final snapshot above which species are considered merged.
-        species_patch_count: optional (S, n_snapshots) patch count data from
-            compute_spatial_observables_hetero. When provided, fragmentation
-            is detected directly: a species is fragmented if its patch count
-            exceeds 1 at any snapshot and is still > 1 at the final snapshot.
+        species_territory_history: (S, steps+1) territory per step.
+        ownership_snapshots: list of (H, W, S) arrays, one per snapshot.
+        snapshot_steps: step numbers corresponding to ownership_snapshots.
+        species_patch_count: (S, n_snapshots) patch counts from analytics.
+        exclusion_threshold: territory fraction below which a species is excluded.
+        merger_entropy_threshold: ownership entropy above which species are merged.
+        fragmentation_debounce: consecutive snapshots to commit a transition.
     """
     n_species = len(species_territory_history)
-    if n_species < 2:
-        return ""
-    for hist in species_territory_history:
-        if len(hist) < 2:
-            return ""
+    if n_species < 2 or not ownership_snapshots or not snapshot_steps:
+        return OutcomeSequence()
 
+    n_snaps = len(snapshot_steps)
     initial_territories = [hist[0] for hist in species_territory_history]
-    final_territories = [hist[-1] for hist in species_territory_history]
+    all_series: list[list[OutcomeWindow]] = []
 
-    # Exclusion: any species ends with < threshold * initial territory,
-    # while at least one other species has nonzero territory.
-    excluded = [
-        init > 0 and (final / init) < exclusion_threshold
-        for init, final in zip(initial_territories, final_territories, strict=True)
-    ]
-    survivors = [
-        not exc and final > 0 for exc, final in zip(excluded, final_territories, strict=True)
-    ]
-    if any(excluded) and any(survivors):
-        return "exclusion"
+    for sp in range(n_species):
+        init_t = initial_territories[sp]
+        labels: list[str] = []
 
-    # Merger vs coexistence: use ownership entropy at the final snapshot if
-    # available, otherwise fall back to territory ratio analysis.
-    if ownership_snapshots:
-        final_own = ownership_snapshots[-1]  # (H, W, S)
-        _h, _w, s = final_own.shape
-        # Per-cell Shannon entropy of ownership distribution.
-        # Only computed at cells where total ownership is meaningful.
-        total_own = final_own.sum(axis=2)  # (H, W)
-        occupied = total_own > 0.1
-        if occupied.any():
-            # Normalize to a proper distribution per occupied cell.
-            own_norm = final_own[occupied] / total_own[occupied, np.newaxis]
-            # Clip to avoid log(0); zero-weight species contribute 0 to entropy.
-            own_clipped = np.clip(own_norm, 1e-12, 1.0)
-            per_cell_entropy = -(own_clipped * np.log(own_clipped)).sum(axis=1)
-            # Normalize by log(S) so entropy is in [0, 1].
-            max_entropy = np.log(s)
-            normalized_entropy = (
-                float(per_cell_entropy.mean()) / max_entropy if max_entropy > 0 else 0.0
-            )
-            if normalized_entropy >= merger_entropy_threshold:
-                return "merger"
-    else:
-        # Fallback: if final territory ratio is near uniform (within 20% of
-        # mean), treat as merger candidate.
-        total_final = sum(final_territories)
-        if total_final > 0:
-            fractions = [t / total_final for t in final_territories]
-            expected = 1.0 / n_species
-            max_deviation = max(abs(f - expected) for f in fractions)
-            if max_deviation < 0.2:
-                return "merger"
+        for snap_i in range(n_snaps):
+            step = snapshot_steps[snap_i]
+            own = ownership_snapshots[snap_i]
+            t_hist = species_territory_history[sp]
+            t_idx = min(step, len(t_hist) - 1)
+            territory = t_hist[t_idx]
 
-    # Fragmentation: a non-excluded species has patch count > 1 at any snapshot
-    # and is still fragmented (patch count > 1) at the final snapshot.
-    # Falls back to the territory CV heuristic when patch count data is absent.
-    if species_patch_count is not None:
-        for s_idx in range(n_species):
-            if excluded[s_idx]:
+            if init_t > 0 and (territory / init_t) < exclusion_threshold:
+                labels.append("exclusion")
                 continue
-            counts = species_patch_count[s_idx]
-            if counts and counts[-1] > 1 and any(c > 1 for c in counts):
-                return "fragmentation"
-    else:
-        # CV heuristic: kept as fallback for callers without spatial data.
-        for s_idx, hist in enumerate(species_territory_history):
-            if excluded[s_idx]:
-                continue
-            arr = np.array(hist, dtype=np.float64)
-            mean_t = float(arr.mean())
-            if mean_t > 0:
-                cv = float(arr.std()) / mean_t
-                if cv > 0.5:
-                    return "fragmentation"
 
-    return "coexistence"
+            if _ownership_entropy_at(own) >= merger_entropy_threshold:
+                labels.append("merger")
+                continue
+
+            counts = species_patch_count[sp] if sp < len(species_patch_count) else []
+            if snap_i < len(counts) and counts[snap_i] > 1:
+                labels.append("fragmentation")
+                continue
+
+            labels.append("coexistence")
+
+        windows = build_windows(labels, snapshot_steps, debounce=fragmentation_debounce)
+        all_series.append(windows)
+
+    final_labels = [s[-1].label if s else "coexistence" for s in all_series]
+    return OutcomeSequence(series=all_series, final_label=_derive_final_label(final_labels))
+
+
+def classify_outcome_homo(
+    snapshot_steps: list[int],
+    patch_count_history: list[int],
+    patch_size_history: list[list[int]],
+    initial_patch_sizes: list[int],
+    debounce: int = 3,
+) -> OutcomeSequence:
+    """Temporal outcome classification for a homogeneous ecosystem run.
+
+    Returns a single-entry OutcomeSequence representing the collective run
+    dynamics.
+
+    Labels:
+      full_merger       -- patch count reached 1.
+      fragmentation     -- patch count rose above the initial count.
+      cannibalism       -- patch count decreasing while surviving patches exceed
+                           1.5x the median initial patch size.
+      partial_clustering -- patch count decreased from initial but stable above 1.
+      stable_isolation  -- patch count near initial throughout.
+
+    Args:
+        snapshot_steps: step numbers for each snapshot.
+        patch_count_history: patch count at each snapshot.
+        patch_size_history: patch sizes (descending) at each snapshot.
+        initial_patch_sizes: patch sizes at the first snapshot (baseline).
+        debounce: consecutive snapshots to commit a label transition.
+    """
+    if not snapshot_steps or not patch_count_history:
+        return OutcomeSequence()
+
+    n_initial = len(initial_patch_sizes)
+    median_initial = sorted(initial_patch_sizes)[n_initial // 2] if initial_patch_sizes else 0
+
+    labels: list[str] = []
+    for i, count in enumerate(patch_count_history):
+        sizes = patch_size_history[i] if i < len(patch_size_history) else []
+
+        if count == 1:
+            labels.append("full_merger")
+        elif n_initial > 0 and count > n_initial:
+            labels.append("fragmentation")
+        elif (
+            n_initial > 0
+            and count < n_initial
+            and median_initial > 0
+            and sizes
+            and sizes[0] > median_initial * 1.5
+        ):
+            labels.append("cannibalism")
+        elif n_initial > 0 and count < n_initial:
+            labels.append("partial_clustering")
+        else:
+            labels.append("stable_isolation")
+
+    windows = build_windows(labels, snapshot_steps, debounce=debounce)
+    final = windows[-1].label if windows else "stable_isolation"
+    return OutcomeSequence(series=[windows], final_label=final)

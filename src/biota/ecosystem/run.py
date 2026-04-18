@@ -33,7 +33,12 @@ from biota.ecosystem.analytics import (
     compute_spatial_observables_homo,
 )
 from biota.ecosystem.config import CreatureSource, EcosystemConfig
-from biota.ecosystem.interaction import classify_outcome, compute_interaction_coefficients
+from biota.ecosystem.interaction import (
+    OutcomeSequence,
+    classify_outcome_hetero,
+    classify_outcome_homo,
+    compute_interaction_coefficients,
+)
 from biota.ecosystem.result import EcosystemMeasures, EcosystemResult
 from biota.ecosystem.spawn import build_initial_state, build_initial_state_multi_species
 from biota.search.archive import Archive
@@ -324,17 +329,28 @@ def _compute_outputs(
             sim.growth_snapshots,
             interface_area=hs.species_interface_area,
         )
-        outcome_label = classify_outcome(
+        outcome_seq: OutcomeSequence = classify_outcome_hetero(
             sim.species_territory_history,
             sim.ownership_snapshots,
-            species_patch_count=hs.species_patch_count,
+            sim.snapshot_steps,
+            hs.species_patch_count,
         )
         ho: HomoSpatial | None = None
     else:
         hs = HeteroSpatial()
         interaction_coefficients = []
-        outcome_label = ""
         ho = compute_spatial_observables_homo(sim.snapshots)
+        outcome_seq = classify_outcome_homo(
+            sim.snapshot_steps,
+            ho.patch_count_history,
+            ho.patch_size_history,
+            ho.initial_patch_sizes,
+        )
+
+    outcome_sequence = [
+        [{"label": w.label, "from": w.from_step, "to": w.to_step} for w in series]
+        for series in outcome_seq.series
+    ]
 
     measures = EcosystemMeasures(
         initial_mass=sim.initial_mass,
@@ -347,7 +363,8 @@ def _compute_outputs(
         species_mass_history=sim.species_mass_history,
         species_territory_history=sim.species_territory_history,
         interaction_coefficients=interaction_coefficients,
-        outcome_label=outcome_label,
+        outcome_label=outcome_seq.final_label,
+        outcome_sequence=outcome_sequence,
         species_patch_count=hs.species_patch_count,
         species_interface_area=hs.species_interface_area,
         species_com_distance=hs.species_com_distance,

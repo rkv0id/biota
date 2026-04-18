@@ -51,9 +51,15 @@ class EcosystemMeasures:
     # Negative = B suppresses A, positive = B enhances A, near zero = neutral.
     # Empty list for homogeneous runs or when growth snapshots are unavailable.
     interaction_coefficients: list[list[float]]
-    # Ecosystem outcome class: "merger", "coexistence", "exclusion", or
-    # "fragmentation". Empty string for homogeneous runs.
+    # Dominant outcome label derived from the final window of outcome_sequence.
+    # One of: merger, coexistence, exclusion, fragmentation (hetero) or
+    # full_merger, stable_isolation, partial_clustering, cannibalism,
+    # fragmentation (homo). Shown in the viewer badge.
     outcome_label: str
+    # Temporal outcome sequence. For hetero runs, outer list indexed by species;
+    # each entry is a list of OutcomeWindow dicts. For homo runs, one entry.
+    # Each window: {"label": str, "from": int, "to": int}.
+    outcome_sequence: list[list[dict[str, str | int]]] = field(default_factory=list)
 
     # --- Spatial observables: heterogeneous runs ---
     # Patch count per species per snapshot. Outer index = species (0..S-1),
@@ -153,6 +159,7 @@ class EcosystemResult:
                 "species_territory_history": m.species_territory_history,
                 "interaction_coefficients": m.interaction_coefficients,
                 "outcome_label": m.outcome_label,
+                "outcome_sequence": m.outcome_sequence,
                 "species_patch_count": m.species_patch_count,
                 "species_interface_area": m.species_interface_area,
                 "species_com_distance": [
