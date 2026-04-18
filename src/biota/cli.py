@@ -33,7 +33,13 @@ from biota.search.loop import (
     SearchStarted,
     search,
 )
-from biota.search.rollout import RolloutConfig, dev_preset, pretty_preset, standard_preset
+from biota.search.rollout import (
+    RolloutConfig,
+    dev_preset,
+    pretty_preset,
+    signal_preset,
+    standard_preset,
+)
 from biota.sim.flowlenia import Config as SimConfig
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
@@ -313,7 +319,13 @@ def search_cmd(
         raise typer.BadParameter(
             f"border must be 'wall' or 'torus', got {border!r}", param_hint="--border"
         )
-    rollout_cfg = _override_sim(_resolve_preset(preset), grid=grid, steps=steps, border=border)
+    # When --signal-field is active and no explicit --steps override was given,
+    # automatically use signal_preset (800 steps) instead of standard (500).
+    # This gives signal dynamics enough time to build up meaningful gradients.
+    base_preset = _resolve_preset(preset)
+    if signal_field and steps is None and preset == "standard":
+        base_preset = signal_preset()
+    rollout_cfg = _override_sim(base_preset, grid=grid, steps=steps, border=border)
     config = SearchConfig(
         rollout=rollout_cfg,
         budget=budget,

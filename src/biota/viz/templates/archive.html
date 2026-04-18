@@ -791,13 +791,30 @@
             color: #fbbf77;
             border: 1px solid rgba(251, 191, 119, 0.2);
         }
+
+        .signal-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 10px;
+            font-weight: 500;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            padding: 2px 7px;
+            border-radius: 10px;
+            margin-left: 8px;
+            vertical-align: middle;
+            background: rgba(60, 220, 200, 0.1);
+            color: #3cdcc8;
+            border: 1px solid rgba(60, 220, 200, 0.25);
+        }
         {{ stats_css }}
     </style>
 </head>
 <body>
     <header class="page-header">
         <h1 class="page-title">
-            <a class="title-home" href="../../index.html"><span class="title-prefix">biota</span></a>{{ run_id }}<span class="border-badge {{ border }}">{{ border }}</span>
+            <a class="title-home" href="../../index.html"><span class="title-prefix">biota</span></a>{{ run_id }}<span class="border-badge {{ border }}">{{ border }}</span>{% if has_signal %}<span class="signal-badge" title="Signal-enabled archive">signal</span>{% endif %}
         </h1>
         <div class="page-meta">
             <span class="meta-value">{{ n_cells }}</span> cells
@@ -1024,6 +1041,44 @@ function buildParamsTable(params) {
             + '</tr>';
     }
     html += '</tbody></table>';
+
+    // Signal field parameters (only present in signal-enabled archives)
+    if (params.emission_vector && params.receptor_profile) {
+        html += '<div class="params-scalar" style="margin-top:14px;padding-top:10px;border-top:1px solid rgba(60,220,200,0.15);color:#52525b;letter-spacing:0.07em;font-size:9px;">SIGNAL FIELD</div>';
+        html += '<div class="params-scalar" style="color:#71717a;">emission_rate &nbsp;=&nbsp; '
+            + '<span style="color:#a1a1aa;">' + fmt3(params.emission_rate) + '</span>';
+        html += '&nbsp;&nbsp;&nbsp;signal_kernel_r &nbsp;=&nbsp; '
+            + '<span style="color:#a1a1aa;">' + fmt3(params.signal_kernel_r) + '</span>';
+        html += '&nbsp;&nbsp;&nbsp;a=['  
+            + '<span style="color:#a1a1aa;">' + (params.signal_kernel_a||[]).map(fmt3).join(', ') + '</span>]</div>';
+
+        // Channel bar charts for emission_vector, receptor_profile, decay_rates
+        const C = params.emission_vector.length;
+        function channelBars(label, values, lo, hi, color) {
+            var span = hi - lo || 1;
+            var bars = values.map(function(v) {
+                var pct = Math.round((v - lo) / span * 100);
+                var zeroPct = Math.round((0 - lo) / span * 100);
+                // For symmetric ranges draw from zero; for [0,1] draw from left
+                var left = lo < 0 ? Math.min(pct, zeroPct) : 0;
+                var width = lo < 0 ? Math.abs(pct - zeroPct) : pct;
+                return '<div style="display:flex;align-items:center;gap:3px;margin-bottom:1px;">'
+                    + '<div style="width:14px;font-size:7px;color:#71717a;text-align:right;flex-shrink:0;">' + v.toFixed(2) + '</div>'
+                    + '<div style="flex:1;height:5px;background:#27272a;border-radius:1px;position:relative;">'
+                    + '<div style="position:absolute;left:' + left + '%;width:' + width + '%;height:100%;background:' + color + ';border-radius:1px;"></div>'
+                    + '</div></div>';
+            }).join('');
+            return '<div style="margin-top:6px;">'
+                + '<div style="font-size:9px;color:#a1a1aa;margin-bottom:2px;">' + label + '</div>'
+                + bars + '</div>';
+        }
+        html += channelBars('emission vector (C=' + C + ')', params.emission_vector, 0, 1, '#3cdcc8');
+        html += channelBars('receptor profile', params.receptor_profile, -1, 1, '#a78bfa');
+        if (params.decay_rates) {
+            html += channelBars('decay rates', params.decay_rates, 0, 0.9, '#fbbf24');
+        }
+    }
+
     return html;
 }
 

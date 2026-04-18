@@ -1,0 +1,124 @@
+experiments:
+  # --- Experiment 1 (revised) ---
+  # Cross homo revisited: larger patch, more copies, wall border.
+  # The cross is stable alone (prev run: 4597->3554au, all 4 survived 12k steps).
+  # Wall border prevents torus self-wrapping interference.
+  # 6 copies to see if self-signaling creates mutualism or cannibalism at scale.
+  # Larger patch (64) gives each copy more initial territory before they interact.
+  - name: signal-homo-cross-wall-v2
+    grid: 320
+    steps: 12000
+    snapshot_every: 20
+    border: wall
+    output_format: gif
+    spawn:
+      seed: 7
+      min_dist: 80
+      patch: 64
+    sources:
+      - archive_dir: archive
+        run: 20260418-161836-keen-orchid
+        cell: [8, 23, 12]
+        n: 6
+
+  # --- Experiment 2 (revised) ---
+  # Ring vs cross with bigger cross patch and wall border.
+  # Previous run: cross fragmented immediately under ring competition.
+  # Give the cross a 64px patch (vs ring's 40px) to establish territory first.
+  # Wall border means they start in different corners rather than wrapping into
+  # each other. Does cross hold territory when it gets a head start?
+  - name: signal-hetero-ring-vs-cross-wall-v2
+    grid: 320
+    steps: 12000
+    snapshot_every: 20
+    border: wall
+    output_format: gif
+    spawn:
+      seed: 13
+      min_dist: 100
+      patch: 40
+    sources:
+      - archive_dir: archive
+        run: 20260418-161836-keen-orchid
+        cell: [2, 19, 13]
+        n: 3
+      - archive_dir: archive
+        run: 20260418-161836-keen-orchid
+        cell: [8, 23, 12]
+        n: 3
+        patch: 64
+
+  # --- Experiment 3 (revised) ---
+  # Non-signal: flower/gear vs ring vs worm, more copies, wall border.
+  # Previous run showed three genuinely distinct stable morphologies coexisting.
+  # Bump to n:4/3/3 to stress-test coexistence at higher density.
+  # Wall border so each morphology establishes a corner before contact.
+  # The flower/gear (s2) is dominant and complex -- more copies tests whether
+  # it excludes or tolerates the simpler ring and worm forms.
+  - name: nonsignal-hetero-3species-wall-v2
+    grid: 384
+    steps: 10000
+    snapshot_every: 20
+    border: wall
+    output_format: gif
+    spawn:
+      seed: 42
+      min_dist: 90
+      patch: 48
+    sources:
+      - archive_dir: archive
+        run: 20260418-164424-frost-delta
+        cell: [9, 25, 12]
+        n: 4
+        patch: 40
+      - archive_dir: archive
+        run: 20260418-164424-frost-delta
+        cell: [6, 19, 13]
+        n: 3
+        patch: 56
+      - archive_dir: archive
+        run: 20260418-164424-frost-delta
+        cell: [4, 29, 12]
+        n: 3
+        patch: 40
+
+  # --- Experiment 4 (revised) ---
+  # Signal 4-species: replace snake (which always fragments) with a second ring
+  # variant from a different descriptor region. Keep cross as the "weak" species.
+  # Previous run confirmed the selection hierarchy: ring > dotted-ring >> cross > snake.
+  # New question: do two ring variants (s1, s2) compete or coexist chemically?
+  # Their receptor profiles differ (different archive positions) so their signal
+  # compatibility may produce mutualism, competition, or indifference between them.
+  # 3 copies each = 12 creatures on a 384 grid. Larger patches for ring variants,
+  # smaller for cross (to give it a fair start without overwhelming the others).
+  - name: signal-hetero-4species-rings-v2
+    grid: 384
+    steps: 15000
+    snapshot_every: 25
+    border: torus
+    output_format: gif
+    spawn:
+      seed: 17
+      min_dist: 70
+      patch: 40
+    sources:
+      - archive_dir: archive
+        run: 20260418-161836-keen-orchid
+        cell: [2, 19, 13]
+        n: 3
+        patch: 48
+      - archive_dir: archive
+        run: 20260418-161836-keen-orchid
+        cell: [5, 21, 13]
+        n: 3
+        patch: 48
+      - archive_dir: archive
+        run: 20260418-161836-keen-orchid
+        cell: [8, 23, 12]
+        n: 3
+        patch: 56
+      - archive_dir: archive
+        run: 20260418-161836-keen-orchid
+        cell: [4, 25, 13]
+        n: 3
+        patch: 40

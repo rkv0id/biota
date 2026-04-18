@@ -1,6 +1,6 @@
 [project]
 name = "biota"
-version = "3.3.0"
+version = "3.4.0"
 description = "Distributed QD search over FlowLenia"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -90,9 +90,12 @@ exclude = ["tests/sim/fixtures"]
 pythonVersion = "3.12"
 typeCheckingMode = "strict"
 reportMissingTypeStubs = false
-reportUnknownMemberType = "warning"
-reportUnknownVariableType = "warning"
-reportUnknownArgumentType = "warning"
+# These three generate ~150 warnings from incomplete third-party stubs
+# (torch.fft, numpy, pytest.approx, scipy.ndimage). Suppressed at config
+# level -- the error categories still catch real type mistakes.
+reportUnknownMemberType = "none"
+reportUnknownVariableType = "none"
+reportUnknownArgumentType = "none"
 reportConstantRedefinition = false
 
 [tool.pytest.ini_options]

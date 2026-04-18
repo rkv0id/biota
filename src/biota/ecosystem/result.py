@@ -81,6 +81,24 @@ class EcosystemMeasures:
     # Shape: (S, S). Empty for homogeneous runs.
     contact_occurred: list[list[bool]] = field(default_factory=list)
 
+    # --- Signal observables: both run modes (empty when no signal field) ---
+    # Total signal field mass per step (parallel to mass_history).
+    signal_total_history: list[float] = field(default_factory=list)
+    # Fraction of total mass in signal field per step: signal / (mass + signal).
+    signal_mass_fraction: list[float] = field(default_factory=list)
+    # Mean signal per channel at each snapshot step. Shape: (n_snapshots, C).
+    signal_channel_snapshots: list[list[float]] = field(default_factory=list)
+    # Index of the dominant (highest mean) signal channel at each snapshot.
+    dominant_channel_history: list[float] = field(default_factory=list)
+
+    # --- Signal observables: heterogeneous runs only ---
+    # Receptor alignment per species per snapshot: dot(receptor_profile, mean_signal_received).
+    # Shape: (S, n_snapshots). Positive = receiving aligned signal, negative = inhibitory.
+    receptor_alignment: list[list[float]] = field(default_factory=list)
+    # Emission-reception compatibility matrix: dot(emission_vector[i], receptor_profile[j]).
+    # Shape: (S, S). Positive = species i's signal benefits species j.
+    emission_reception_matrix: list[list[float]] = field(default_factory=list)
+
     # --- Spatial observables: homogeneous runs ---
     # Patch count of the mass field at each snapshot. Empty for heterogeneous runs.
     patch_count_history: list[int] = field(default_factory=list)
@@ -178,6 +196,12 @@ class EcosystemResult:
                 "mass_spatial_entropy_history": m.mass_spatial_entropy_history,
                 "initial_patch_sizes": m.initial_patch_sizes,
                 "patch_size_history": m.patch_size_history,
+                "signal_total_history": m.signal_total_history,
+                "signal_mass_fraction": m.signal_mass_fraction,
+                "signal_channel_snapshots": m.signal_channel_snapshots,
+                "dominant_channel_history": m.dominant_channel_history,
+                "receptor_alignment": m.receptor_alignment,
+                "emission_reception_matrix": m.emission_reception_matrix,
             },
             "elapsed_seconds": self.elapsed_seconds,
         }

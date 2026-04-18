@@ -472,6 +472,7 @@ def _render_run(run_dir: Path, archive: Archive, publish: bool = False) -> str:
 
     cfg = _load_config(run_dir)
     border: str = cfg.get("rollout", {}).get("sim", {}).get("border", "wall")
+    has_signal: bool = bool(manifest.get("signal_field", False))
     return render_archive_page(
         archive,
         run_id,
@@ -480,6 +481,7 @@ def _render_run(run_dir: Path, archive: Archive, publish: bool = False) -> str:
         stats_css=_STATS_CSS if stats_html else "",
         thumbs_dir=thumbs_dir,
         border=border,
+        has_signal=has_signal,
     )
 
 
@@ -540,6 +542,8 @@ def _build_card_context(
     device = cfg.get("device", "")
     descriptor_names: list[str] = cfg.get("descriptor_names", [])
     border: str = cfg.get("rollout", {}).get("sim", {}).get("border", "wall")
+    manifest = _load_manifest(run_dir)
+    has_signal: bool = bool(manifest.get("signal_field", False))
 
     return {
         "run_id": run_dir.name,
@@ -553,6 +557,7 @@ def _build_card_context(
         "device": device,
         "descriptor_names": descriptor_names,
         "border": border,
+        "has_signal": has_signal,
     }
 
 
@@ -564,7 +569,7 @@ def _build_index_html(
     # (no assumption about whether docs/ gets shipped alongside index.html).
     docs_dir = Path(__file__).resolve().parent.parent / "docs"
     svgs: dict[str, str] = {}
-    for name in ("archive-grid", "search-loop", "ecosystem-dispatch"):
+    for name in ("archive-grid", "search-loop", "ecosystem-dispatch", "signal-field"):
         path = docs_dir / f"{name}.svg"
         svgs[name.replace("-", "_")] = path.read_text(encoding="utf-8") if path.exists() else ""
     return template.render(
@@ -575,6 +580,7 @@ def _build_index_html(
         svg_archive_grid=svgs["archive_grid"],
         svg_search_loop=svgs["search_loop"],
         svg_ecosystem_dispatch=svgs["ecosystem_dispatch"],
+        svg_signal_field=svgs["signal_field"],
     )
 
 
@@ -815,19 +821,29 @@ def _render_ecosystem_run(run_dir: Path, publish: bool = False) -> str:
 
     output_format = summary.get("output_format", "frames")
     gif_path = run_dir / "ecosystem.gif"
+    signal_gif_path = run_dir / "signal.gif"
 
     # For GIF output: embed the GIF directly instead of individual frames
     gif_src: str = ""
+    signal_gif_src: str = ""
     if output_format == "gif" and gif_path.exists():
         if publish:
-            # Reference by relative path
             gif_src = "ecosystem.gif"
         else:
-            # Embed as base64
             import base64 as _b64
 
             gif_data = gif_path.read_bytes()
             gif_src = "data:image/gif;base64," + _b64.b64encode(gif_data).decode("ascii")
+    if output_format == "gif" and signal_gif_path.exists():
+        if publish:
+            signal_gif_src = "signal.gif"
+        else:
+            import base64 as _b64
+
+            signal_gif_data = signal_gif_path.read_bytes()
+            signal_gif_src = "data:image/gif;base64," + _b64.b64encode(signal_gif_data).decode(
+                "ascii"
+            )
 
     # Use snapshot count from summary.json as ground truth - frames may not
     # exist on disk (gif mode only writes ecosystem.gif, not individual frames)
@@ -855,6 +871,13 @@ def _render_ecosystem_run(run_dir: Path, publish: bool = False) -> str:
     mass_spatial_entropy_history: list[float] = measures.get("mass_spatial_entropy_history", [])
     initial_patch_sizes: list[int] = measures.get("initial_patch_sizes", [])
     patch_size_history: list[list[int]] = measures.get("patch_size_history", [])
+    signal_total_history: list[float] = measures.get("signal_total_history", [])
+    signal_mass_fraction: list[float] = measures.get("signal_mass_fraction", [])
+    signal_channel_snapshots: list[list[float]] = measures.get("signal_channel_snapshots", [])
+    dominant_channel_history: list[float] = measures.get("dominant_channel_history", [])
+    receptor_alignment: list[list[float]] = measures.get("receptor_alignment", [])
+    emission_reception_matrix: list[list[float]] = measures.get("emission_reception_matrix", [])
+    has_signal_data: bool = bool(signal_total_history and any(v > 0 for v in signal_total_history))
     n_species = len(sources_ctx) if sources_ctx else 1
     # Species palette as hex strings, matching SPECIES_PALETTE in run.py.
     species_palette_hex = [
@@ -895,12 +918,23 @@ def _render_ecosystem_run(run_dir: Path, publish: bool = False) -> str:
         thumb_px=THUMB_PX,
         output_format=output_format,
         gif_src=gif_src,
+        signal_gif_src=signal_gif_src,
         n_species=n_species,
         species_mass_history_json=json.dumps(species_mass_history),
         species_territory_history_json=json.dumps(species_territory_history),
         species_palette=species_palette_hex[:n_species],
         interaction_coefficients=interaction_coefficients,
         outcome_label=outcome_label,
+        outcome_tooltips={
+            "coexistence": "Both species maintain stable populations and territory over time",
+            "exclusion": "One species steadily outcompetes and eliminates the other",
+            "merger": "Species boundaries dissolve -- mass intermixes into a single blended population",
+            "fragmentation": "One or both species break into disconnected spatial patches under competitive pressure",
+            "full_merger": "All copies merge into one large connected mass structure",
+            "stable_isolation": "Copies remain spatially separate and stable throughout the run",
+            "partial_clustering": "Some copies cluster together while others remain isolated",
+            "cannibalism": "Copies absorb each other -- some grow at the expense of others",
+        },
         outcome_sequence_json=json.dumps(outcome_sequence),
         species_patch_count_json=json.dumps(species_patch_count),
         species_interface_area_json=json.dumps(species_interface_area),
@@ -912,6 +946,13 @@ def _render_ecosystem_run(run_dir: Path, publish: bool = False) -> str:
         initial_patch_sizes_json=json.dumps(initial_patch_sizes),
         patch_size_history_json=json.dumps(patch_size_history),
         snapshot_steps_json=json.dumps(snapshot_steps),
+        has_signal_data=has_signal_data,
+        signal_total_history_json=json.dumps(signal_total_history),
+        signal_mass_fraction_json=json.dumps(signal_mass_fraction),
+        signal_channel_snapshots_json=json.dumps(signal_channel_snapshots),
+        dominant_channel_history_json=json.dumps(dominant_channel_history),
+        receptor_alignment_json=json.dumps(receptor_alignment),
+        emission_reception_matrix_json=json.dumps(emission_reception_matrix),
     )
 
 
@@ -957,6 +998,8 @@ def _build_eco_card_context(run_dir: Path) -> dict[str, Any]:
         "initial_mass": f"{measures.get('initial_mass', 0.0):.1f}",
         "mass_turnover": f"{measures.get('mass_turnover', 0.0) * 100:.3f}",
         "elapsed": f"{summary.get('elapsed_seconds', 0.0):.1f}s",
+        "has_signal": any(v > 0 for v in measures.get("signal_total_history", [])),
+        "outcome_label": measures.get("outcome_label", ""),
     }
 
 

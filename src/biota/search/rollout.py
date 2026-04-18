@@ -77,8 +77,18 @@ def dev_preset() -> RolloutConfig:
 
 
 def standard_preset() -> RolloutConfig:
-    """The v1 default: 192x192 grid, 300 steps. For real searches and benchmarks."""
-    return RolloutConfig(sim=SimConfig(grid_h=192, grid_w=192), steps=300)
+    """Standard: 192x192 grid, 500 steps. Balanced speed vs behavioral resolution."""
+    return RolloutConfig(sim=SimConfig(grid_h=192, grid_w=192), steps=500)
+
+
+def signal_preset() -> RolloutConfig:
+    """Signal-field search: 192x192 grid, 800 steps.
+
+    Signal dynamics require more steps to build up spatial gradients and for
+    the alive/retention filters to discriminate emitters with different rates.
+    Auto-selected by the CLI when --signal-field is passed without --steps.
+    """
+    return RolloutConfig(sim=SimConfig(grid_h=192, grid_w=192), steps=800)
 
 
 def pretty_preset() -> RolloutConfig:
@@ -118,6 +128,12 @@ def _params_dict_to_tensors(params: ParamDict, device: str) -> Params:
         ),
         receptor_profile=torch.tensor(
             params["receptor_profile"],  # type: ignore[typeddict-item]
+            dtype=torch.float32,
+            device=device,
+        ),
+        emission_rate=float(params["emission_rate"]),  # type: ignore[typeddict-item]
+        decay_rates=torch.tensor(
+            params["decay_rates"],  # type: ignore[typeddict-item]
             dtype=torch.float32,
             device=device,
         ),
@@ -278,6 +294,8 @@ def rollout(
     thumb_buf: list[torch.Tensor] = []
 
     # 5. Run the loop, capturing stats and frames as we go
+    midpoint_step = config.steps // 2
+    midpoint_state_np: np.ndarray | None = None
     for step in range(history_len):
         com_y, com_x, bbox, gyr = _step_stats(state)
         com_y_np[step] = com_y
@@ -286,6 +304,8 @@ def rollout(
         gyradius_np[step] = gyr
         if step in frame_indices:
             thumb_buf.append(_downsample_frame(state, thumbnail_size))
+        if step == midpoint_step:
+            midpoint_state_np = state[:, :, 0].detach().cpu().numpy().astype(np.float32)
         if step < config.steps:
             state, signal = fl.step(state, signal)
 
@@ -326,6 +346,7 @@ def rollout(
         final_state=final_state_np,
         grid_size=config.sim.grid_h,
         total_steps=config.steps,
+        midpoint_state=midpoint_state_np,
     )
 
     # 8. Evaluate quality

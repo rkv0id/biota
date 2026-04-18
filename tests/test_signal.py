@@ -75,6 +75,8 @@ def test_sample_random_no_signal_lacks_signal_keys() -> None:
     assert not has_signal_field(params)
     assert "emission_vector" not in params
     assert "receptor_profile" not in params
+    assert "emission_rate" not in params
+    assert "decay_rates" not in params
 
 
 def test_sample_random_signal_has_all_signal_keys() -> None:
@@ -83,6 +85,8 @@ def test_sample_random_signal_has_all_signal_keys() -> None:
     for key in (
         "emission_vector",
         "receptor_profile",
+        "emission_rate",
+        "decay_rates",
         "signal_kernel_r",
         "signal_kernel_a",
         "signal_kernel_b",
@@ -95,6 +99,17 @@ def test_signal_vector_lengths() -> None:
     params = _make_signal_params()
     assert len(params["emission_vector"]) == SIGNAL_CHANNELS  # type: ignore[typeddict-item]
     assert len(params["receptor_profile"]) == SIGNAL_CHANNELS  # type: ignore[typeddict-item]
+    assert len(params["decay_rates"]) == SIGNAL_CHANNELS  # type: ignore[typeddict-item]
+
+
+def test_emission_rate_in_range() -> None:
+    params = _make_signal_params()
+    assert 0.001 <= params["emission_rate"] <= 0.05  # type: ignore[typeddict-item]
+
+
+def test_decay_rates_in_range() -> None:
+    params = _make_signal_params()
+    assert all(0.0 <= v <= 0.9 for v in params["decay_rates"])  # type: ignore[typeddict-item]
 
 
 def test_signal_kernel_vector_lengths() -> None:
@@ -120,6 +135,8 @@ def test_mutate_preserves_signal_keys() -> None:
     assert has_signal_field(child)
     assert len(child["emission_vector"]) == SIGNAL_CHANNELS  # type: ignore[typeddict-item]
     assert len(child["receptor_profile"]) == SIGNAL_CHANNELS  # type: ignore[typeddict-item]
+    assert len(child["decay_rates"]) == SIGNAL_CHANNELS  # type: ignore[typeddict-item]
+    assert 0.001 <= child["emission_rate"] <= 0.05  # type: ignore[typeddict-item]
 
 
 def test_mutate_non_signal_stays_non_signal() -> None:
@@ -180,7 +197,7 @@ def test_alive_filter_fails_when_creature_mass_collapses() -> None:
     """Creature converted almost all mass to signal -- below creature floor."""
     trace = _minimal_trace()
     initial_mass = 100.0
-    # Creature mass dropped to 5% of initial -- below CREATURE_MASS_FLOOR (10%)
+    # Creature mass dropped to 5% of initial -- below CREATURE_MASS_FLOOR (20%)
     eval_input = RolloutEvaluation(
         initial_mass=initial_mass,
         final_mass=5.0,
@@ -204,6 +221,46 @@ def test_alive_filter_fails_when_total_mass_lost() -> None:
     )
     result = evaluate(eval_input)
     assert result.rejection_reason == "dead"
+
+
+def test_alive_filter_signal_creature_mass_floor_is_stricter() -> None:
+    """Signal creature mass floor is 0.2 (vs no effective floor for non-signal)."""
+    trace = _minimal_trace()
+    # 15% of initial_mass remaining -- above old 10% floor, below new 20% floor
+    eval_input = RolloutEvaluation(
+        initial_mass=100.0,
+        final_mass=15.0,
+        trace=trace,
+        initial_total=100.0,
+        final_signal_mass=85.0,  # total conserved
+    )
+    result = evaluate(eval_input)
+    assert result.rejection_reason == "dead"
+
+
+def test_signal_retention_boosts_quality() -> None:
+    """Creatures that retain mass score higher than those that bleed it into signal."""
+    trace = _minimal_trace()
+    # High retention: kept almost all mass
+    high = RolloutEvaluation(
+        initial_mass=100.0,
+        final_mass=98.0,
+        trace=trace,
+        initial_total=100.0,
+        final_signal_mass=0.1,
+    )
+    # Low retention: lost 40% to signal (but total still conserved)
+    low = RolloutEvaluation(
+        initial_mass=100.0,
+        final_mass=60.0,
+        trace=trace,
+        initial_total=100.0,
+        final_signal_mass=40.0,
+    )
+    r_high = evaluate(high)
+    r_low = evaluate(low)
+    assert r_high.quality is not None and r_low.quality is not None
+    assert r_high.quality > r_low.quality
 
 
 def test_alive_filter_non_signal_path_unchanged() -> None:
@@ -260,6 +317,8 @@ def _make_fl(signal: bool = False, grid: int = 32) -> FlowLenia:
             w=p.w,
             emission_vector=torch.tensor(pdict["emission_vector"]),  # type: ignore[typeddict-item]
             receptor_profile=torch.tensor(pdict["receptor_profile"]),  # type: ignore[typeddict-item]
+            emission_rate=float(pdict["emission_rate"]),  # type: ignore[typeddict-item]
+            decay_rates=torch.tensor(pdict["decay_rates"]),  # type: ignore[typeddict-item]
             signal_kernel_r=float(pdict["signal_kernel_r"]),  # type: ignore[typeddict-item]
             signal_kernel_a=torch.tensor(pdict["signal_kernel_a"]),  # type: ignore[typeddict-item]
             signal_kernel_b=torch.tensor(pdict["signal_kernel_b"]),  # type: ignore[typeddict-item]

@@ -330,6 +330,24 @@
             border: 1px solid rgba(192, 132, 252, 0.25);
         }
 
+        /* Signal badge: marks signal-enabled archives */
+        .signal-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 10px;
+            font-weight: 500;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            padding: 2px 7px;
+            border-radius: 10px;
+            margin-left: 8px;
+            vertical-align: middle;
+            background: rgba(60, 220, 200, 0.1);
+            color: #3cdcc8;
+            border: 1px solid rgba(60, 220, 200, 0.25);
+        }
+
         /* Outcome badge: one of four labels produced by classify_outcome */
         .outcome-badge {
             display: inline-flex;
@@ -500,6 +518,37 @@
         .gif-hud-hint {
             color: #3f3f46;
         }
+
+        /* Mass / Signal view toggle */
+        .gif-view-tabs {
+            display: flex;
+            gap: 0;
+            position: absolute;
+            top: 10px;
+            left: 14px;
+            z-index: 10;
+            border-radius: 5px;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+        .gif-view-tab {
+            background: rgba(8,9,11,0.8);
+            border: none;
+            color: #52525b;
+            font-family: inherit;
+            font-size: 9px;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            padding: 5px 12px;
+            cursor: pointer;
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            transition: color 0.12s, background 0.12s;
+        }
+        .gif-view-tab:hover { color: #a1a1aa; }
+        .gif-view-tab.active { color: #3cdcc8; background: rgba(60,220,200,0.12); }
+        .gif-view-tab.signal-tab.active { color: #3cdcc8; }
 
         /* When viz column hosts the gif viewport, drop its padding so the
            canvas can bleed to the column edges. Filmstrip mode keeps padding. */
@@ -673,7 +722,7 @@
     <header class="page-header">
     <div class="page-wrap">
         <h1 class="page-title">
-            <a class="title-home" href="../../index.html"><span class="title-prefix">biota</span></a>ecosystem<span class="title-sub">{{ run_id }}</span><span class="border-badge {{ border }}">{{ border }}</span><span class="mode-badge {{ mode }}">{{ mode }}</span>{% if outcome_label %}<span class="outcome-badge {{ outcome_label }}">{{ outcome_label }}</span>{% endif %}
+            <a class="title-home" href="../../index.html"><span class="title-prefix">biota</span></a>ecosystem<span class="title-sub">{{ run_id }}</span><span class="border-badge {{ border }}">{{ border }}</span><span class="mode-badge {{ mode }}">{{ mode }}</span>{% if outcome_label %}<span class="outcome-badge {{ outcome_label }}" title="{{ outcome_tooltips[outcome_label] if outcome_label in outcome_tooltips else outcome_label }}">{{ outcome_label }}</span>{% endif %}{% if has_signal_data %}<span class="signal-badge" title="Signal-enabled archive: creatures have emission, receptor, and decay parameters">signal</span>{% endif %}
         </h1>
         <div class="page-meta">
             <span class="meta-value">{{ n_creatures }}</span> creatures
@@ -722,6 +771,12 @@
     <div class="page-grid">
     {% if output_format == "gif" and gif_src %}
     <img class="eco-gif-mobile" src="{{ gif_src }}" alt="ecosystem animation" />
+    {% if signal_gif_src %}
+    <div class="eco-gif-mobile" style="margin-top:8px;">
+        <div style="font-size:9px;color:#3cdcc8;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:4px;">signal field</div>
+        <img style="width:100%;height:auto;border-radius:4px;" src="{{ signal_gif_src }}" alt="signal field animation" />
+    </div>
+    {% endif %}
     {% endif %}
     <aside class="run-meta">
         {% if sources %}
@@ -773,7 +828,7 @@
                 <path d="{{ mass_line_path }}" fill="none" stroke="#fbbf77" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
             {% else %}
-            <div class="meta-chart-empty">total mass conserved across run</div>
+            <div class="meta-chart-empty">{% if has_signal_data %}mass field only &middot; signal tracked separately{% else %}total mass conserved across run{% endif %}</div>
             {% endif %}
 
             {% if n_species > 1 and species_mass_history_json != '[]' %}
@@ -860,6 +915,30 @@
         <div class="meta-section">
             <div class="meta-section-title">outcome timeline</div>
             <div class="outcome-timeline" id="outcomeTimeline"></div>
+            <div style="font-size:9px;color:#52525b;margin-top:6px;" id="outcomeKey"></div>
+        </div>
+        {% endif %}
+
+        {% if has_signal_data %}
+        <div class="meta-section">
+            <div class="meta-section-title" style="margin-top:20px;">signal field</div>
+            <div style="font-size:9px;color:#71717a;margin-bottom:6px;">total signal mass in shared chemical field per step</div>
+            <canvas id="signalTotalChart" class="species-chart" width="800" height="80"></canvas>
+            <div class="meta-section-title" style="margin-top:16px;">signal mass fraction</div>
+            <div style="font-size:9px;color:#71717a;margin-bottom:6px;">signal / (mass + signal) — fraction of total in field</div>
+            <canvas id="signalFractionChart" class="species-chart" width="800" height="60"></canvas>
+            {% if n_species > 1 and receptor_alignment_json != "[]" %}
+            <div class="meta-section-title" style="margin-top:16px;">receptor alignment</div>
+            <div style="font-size:9px;color:#71717a;margin-bottom:6px;">dot(receptor_profile, mean_signal_received) per species — positive = receiving aligned signal</div>
+            <canvas id="receptorAlignChart" class="species-chart" width="800" height="100"></canvas>
+            {% endif %}
+            {% if n_species > 1 and emission_reception_matrix_json != "[]" %}
+            <div class="meta-section-title" style="margin-top:16px;">emission-reception compatibility</div>
+            <div style="font-size:9px;color:#71717a;margin-bottom:6px;">dot(emission[i], receptor[j]) — positive: species i's signal benefits species j</div>
+            <div class="interaction-heatmap-wrap">
+                <canvas id="emissionReceptionHeatmap" class="interaction-heatmap-canvas"></canvas>
+            </div>
+            {% endif %}
         </div>
         {% endif %}
     </aside>
@@ -871,6 +950,16 @@
             <div class="gif-viewport-inner" id="gifInner">
                 <img class="eco-gif" id="ecoGif" src="{{ gif_src }}" alt="ecosystem animation" />
             </div>
+            {% if signal_gif_src %}
+            <div class="gif-view-tabs" id="gifViewTabs">
+                <button class="gif-view-tab active" data-view="mass">MASS</button>
+                <button class="gif-view-tab signal-tab" data-view="signal">SIGNAL</button>
+            </div>
+            <img class="eco-gif" id="ecoGifSignal"
+                 src="{{ signal_gif_src }}"
+                 alt="signal field animation"
+                 style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;opacity:0;transition:opacity 0.2s;"/>
+            {% endif %}
             <div class="gif-hud">
                 <span class="gif-hud-hint">drag to pan · scroll to zoom · double-click to reset</span>
                 <span class="gif-hud-zoom" id="gifZoom">100%</span>
@@ -1413,6 +1502,150 @@
         container.appendChild(legend);
         })();
     });
+    {% endif %}
+
+    {% if has_signal_data %}
+    (function() {
+    // --- Signal charts ---
+    var snapshotSteps = {{ snapshot_steps_json | safe }};
+    var signalTotal   = {{ signal_total_history_json | safe }};
+    var signalFrac    = {{ signal_mass_fraction_json | safe }};
+    var channelSnaps  = {{ signal_channel_snapshots_json | safe }};
+    var recepAlign    = {{ receptor_alignment_json | safe }};
+    var emitRecepMat  = {{ emission_reception_matrix_json | safe }};
+    var palette       = {{ species_palette | tojson }};
+
+    function drawSimpleChart(canvasId, data, color, yMin, yMax) {
+        var canvas = document.getElementById(canvasId);
+        if (!canvas || !data || !data.length) return;
+        var ctx = canvas.getContext('2d');
+        var W = canvas.width, H = canvas.height;
+        var pad = 4;
+        var lo = yMin !== undefined ? yMin : Math.min.apply(null, data);
+        var hi = yMax !== undefined ? yMax : Math.max.apply(null, data);
+        var span = hi - lo || Math.max(Math.abs(lo) * 0.01, 1);
+        ctx.clearRect(0, 0, W, H);
+        ctx.beginPath();
+        for (var i = 0; i < data.length; i++) {
+            var x = i / (data.length - 1) * W;
+            var y = H - pad - (data[i] - lo) / span * (H - 2 * pad);
+            i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+    }
+
+    // Signal total history (uses snapshot steps as x-axis)
+    if (signalTotal.length) {
+        drawSimpleChart('signalTotalChart', signalTotal, '#3cdcc8');
+    }
+
+    // Signal mass fraction [0, 1]
+    if (signalFrac.length) {
+        drawSimpleChart('signalFractionChart', signalFrac, '#a78bfa', 0, 1);
+    }
+
+    // Receptor alignment per species over snapshots
+    if (recepAlign.length) {
+        var alignCanvas = document.getElementById('receptorAlignChart');
+        if (alignCanvas) {
+            // Reuse drawSpeciesChart pattern inline
+            var ctx2 = alignCanvas.getContext('2d');
+            var W2 = alignCanvas.width, H2 = alignCanvas.height;
+            var allV = recepAlign.reduce(function(a, s) { return a.concat(s); }, []);
+            var lo2 = Math.min.apply(null, allV), hi2 = Math.max.apply(null, allV);
+            var span2 = hi2 - lo2 || 1;
+            var pad2 = 4;
+            ctx2.clearRect(0, 0, W2, H2);
+            // Draw zero line
+            if (lo2 < 0 && hi2 > 0) {
+                var zy = H2 - pad2 - (0 - lo2) / span2 * (H2 - 2 * pad2);
+                ctx2.beginPath();
+                ctx2.moveTo(0, zy); ctx2.lineTo(W2, zy);
+                ctx2.strokeStyle = '#3f3f46'; ctx2.lineWidth = 0.5; ctx2.stroke();
+            }
+            for (var si = 0; si < recepAlign.length; si++) {
+                var series = recepAlign[si];
+                if (!series.length) continue;
+                ctx2.beginPath();
+                for (var i = 0; i < series.length; i++) {
+                    var x2 = i / (series.length - 1) * W2;
+                    var y2 = H2 - pad2 - (series[i] - lo2) / span2 * (H2 - 2 * pad2);
+                    i === 0 ? ctx2.moveTo(x2, y2) : ctx2.lineTo(x2, y2);
+                }
+                ctx2.strokeStyle = palette[si] || '#a1a1aa';
+                ctx2.lineWidth = 1.5; ctx2.stroke();
+            }
+        }
+    }
+
+    // Emission-reception compatibility heatmap (S x S matrix, static)
+    if (emitRecepMat.length) {
+        var hCanvas = document.getElementById('emissionReceptionHeatmap');
+        if (hCanvas) {
+            var S = emitRecepMat.length;
+            var cellSize = 60;
+            hCanvas.width = S * cellSize;
+            hCanvas.height = S * cellSize;
+            var hCtx = hCanvas.getContext('2d');
+            var absMax = 0;
+            for (var i = 0; i < S; i++)
+                for (var j = 0; j < S; j++)
+                    absMax = Math.max(absMax, Math.abs(emitRecepMat[i][j]));
+            if (absMax === 0) absMax = 1;
+            for (var i = 0; i < S; i++) {
+                for (var j = 0; j < S; j++) {
+                    var v = emitRecepMat[i][j] / absMax;
+                    var r, g, b;
+                    if (v > 0) { r = 60; g = Math.round(60 + v * 160); b = Math.round(60 + v * 140); }
+                    else       { r = Math.round(60 - v * 160); g = 60; b = 60; }
+                    hCtx.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
+                    hCtx.fillRect(j * cellSize, i * cellSize, cellSize, cellSize);
+                    hCtx.fillStyle = '#e4e4e7';
+                    hCtx.font = '11px monospace';
+                    hCtx.textAlign = 'center';
+                    hCtx.textBaseline = 'middle';
+                    hCtx.fillText(emitRecepMat[i][j].toFixed(2),
+                                  j * cellSize + cellSize / 2,
+                                  i * cellSize + cellSize / 2);
+                    // Row/col labels
+                    if (j === 0) {
+                        hCtx.fillStyle = '#a1a1aa'; hCtx.font = '9px monospace';
+                        hCtx.textAlign = 'right';
+                        hCtx.fillText('s' + (i + 1), cellSize * 0.18, i * cellSize + cellSize / 2);
+                    }
+                }
+                hCtx.fillStyle = '#a1a1aa'; hCtx.font = '9px monospace';
+                hCtx.textAlign = 'center';
+                hCtx.fillText('s' + (i + 1), i * cellSize + cellSize / 2, cellSize * 0.18);
+            }
+        }
+    }
+
+    // Signal overlay toggle on GIF
+    // Mass / Signal view toggle
+    (function() {
+    var tabs = document.querySelectorAll('.gif-view-tab');
+    var massGif = document.getElementById('ecoGif');
+    var signalGif = document.getElementById('ecoGifSignal');
+    if (!tabs.length || !signalGif) return;
+    tabs.forEach(function(tab) {
+        tab.addEventListener('click', function() {
+            tabs.forEach(function(t) { t.classList.remove('active'); });
+            this.classList.add('active');
+            var view = this.dataset.view;
+            if (view === 'signal') {
+                if (massGif) massGif.style.opacity = '0';
+                signalGif.style.opacity = '1';
+            } else {
+                if (massGif) massGif.style.opacity = '1';
+                signalGif.style.opacity = '0';
+            }
+        });
+    });
+    })();
+    })();
     {% endif %}
     </script>
 </body>

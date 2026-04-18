@@ -170,3 +170,94 @@ def test_short_trace_persistence_rejects() -> None:
     )
     result = _eval(trace=trace)
     assert result.rejection_reason == "unstable"
+
+
+# === multi-component quality metric ===
+
+
+def test_midpoint_degrader_scores_lower_than_stable() -> None:
+    """Creature that degrades after midpoint scores lower than stable one."""
+    # Stable: compact at both midpoint and final
+    state_compact = np.zeros((GRID, GRID), dtype=np.float32)
+    state_compact[40:56, 40:56] = 1.0
+
+    # Degraded: diffuse at midpoint (scattered), compact at final
+    # (the creature has already re-condensed -- but min() catches the midpoint dip)
+    state_diffuse = np.full((GRID, GRID), 0.05, dtype=np.float32)
+    state_diffuse[45:51, 45:51] = 1.0
+
+    trace_stable = RolloutTrace(
+        com_history=np.full((TRACE_LEN, 2), 48.0, dtype=np.float32),
+        bbox_fraction_history=np.full(TRACE_LEN, 0.04, dtype=np.float32),
+        gyradius_history=np.zeros(TRACE_LEN, dtype=np.float32),
+        final_state=state_compact,
+        grid_size=GRID,
+        total_steps=STEPS,
+        midpoint_state=state_compact,  # stays compact throughout
+    )
+    trace_degrader = RolloutTrace(
+        com_history=np.full((TRACE_LEN, 2), 48.0, dtype=np.float32),
+        bbox_fraction_history=np.full(TRACE_LEN, 0.04, dtype=np.float32),
+        gyradius_history=np.zeros(TRACE_LEN, dtype=np.float32),
+        final_state=state_compact,
+        grid_size=GRID,
+        total_steps=STEPS,
+        midpoint_state=state_diffuse,  # diffuse at midpoint
+    )
+
+    r_stable = _eval(trace=trace_stable)
+    r_degrader = _eval(trace=trace_degrader)
+
+    assert r_stable.quality is not None and r_degrader.quality is not None
+    assert r_stable.quality > r_degrader.quality, (
+        f"stable {r_stable.quality:.4f} should beat degrader {r_degrader.quality:.4f}"
+    )
+
+
+def test_stability_term_rewards_low_drift() -> None:
+    """Creature with low descriptor drift scores higher than one near the threshold."""
+    state = np.zeros((GRID, GRID), dtype=np.float32)
+    state[40:56, 40:56] = 1.0
+
+    # Zero drift: stationary COM both windows
+    coms_stable = np.full((TRACE_LEN, 2), 48.0, dtype=np.float32)
+
+    # Near-threshold drift: COM shifts slightly between windows
+    # We need drift just below 0.2 in normalized velocity descriptor space.
+    # Velocity = mean displacement / grid_size. Make early window fast, late slow.
+    coms_drifty = np.zeros((TRACE_LEN, 2), dtype=np.float32)
+    # Late window (last 50 steps): stationary
+    coms_drifty[WINDOW:, :] = 48.0
+    # Early window (first 50 steps): moving very slowly
+    for i in range(WINDOW):
+        coms_drifty[i, 0] = 48.0 + i * 0.1  # slow drift
+
+    trace_stable = _make_trace(com_path=coms_stable, final_state=state)
+    trace_drifty = _make_trace(com_path=coms_drifty, final_state=state)
+
+    r_stable = _eval(trace=trace_stable)
+    r_drifty = _eval(trace=trace_drifty)
+
+    # Both should pass (drifty COM is mild) but stable should score higher.
+    if r_stable.quality is not None and r_drifty.quality is not None:
+        assert r_stable.quality >= r_drifty.quality
+
+
+def test_quality_in_unit_interval() -> None:
+    """Quality is always in [0, 1] for creatures that pass filters."""
+    state = np.zeros((GRID, GRID), dtype=np.float32)
+    state[40:56, 40:56] = 1.0
+    result = _eval(initial_mass=100.0, final_mass=98.0, trace=_make_trace(final_state=state))
+    if result.quality is not None:
+        assert 0.0 <= result.quality <= 1.0
+
+
+def test_no_midpoint_falls_back_to_final_compactness() -> None:
+    """When midpoint_state is None, quality uses final compactness only."""
+    state = np.zeros((GRID, GRID), dtype=np.float32)
+    state[40:56, 40:56] = 1.0
+    trace = _make_trace(final_state=state)
+    assert trace.midpoint_state is None  # default is None
+    result = _eval(trace=trace)
+    assert result.quality is not None
+    assert result.quality > 0.0

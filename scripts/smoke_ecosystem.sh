@@ -176,7 +176,7 @@ test "$(ls -1 "$SMOKE_DATA/ecosystem" | wc -l)" -eq 3
 # Verify summary.json content for each run.
 log "verifying summary.json fields..."
 "$SMOKE_VENV/bin/python" - <<'PYEOF'
-import json, sys
+import json, sys, os
 from pathlib import Path
 
 eco = Path("/tmp/biota-smoke-eco/ecosystem")
@@ -210,6 +210,23 @@ for run_dir in runs:
         seq = m.get("outcome_sequence", [])
         assert len(seq) == 2, f"{name}: hetero outcome_sequence should have 2 series, got {len(seq)}"
         print(f"  {name}: outcome={m['outcome_label']}, coefficients={ic}")
+
+    # Signal observable fields must be present (may be empty for non-signal creatures).
+    for field in ("signal_total_history", "signal_mass_fraction",
+                  "signal_channel_snapshots", "dominant_channel_history",
+                  "receptor_alignment", "emission_reception_matrix"):
+        assert field in m, f"{name}: missing signal field {field!r} in measures"
+
+    # For GIF runs, check ecosystem.gif exists.
+    if summary.get("output_format") == "gif":
+        gif = os.path.join(run_dir, "ecosystem.gif")
+        assert os.path.exists(gif), f"{name}: ecosystem.gif missing"
+        # For signal-enabled runs (non-zero signal history), signal.gif must exist.
+        sig_hist = m.get("signal_total_history", [])
+        is_signal = any(v > 0 for v in sig_hist)
+        if is_signal:
+            sig_gif = os.path.join(run_dir, "signal.gif")
+            assert os.path.exists(sig_gif), f"{name}: signal.gif missing for signal run"
 
 print("all summary.json checks passed")
 PYEOF
