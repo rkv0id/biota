@@ -542,6 +542,8 @@ def _build_card_context(
     device = cfg.get("device", "")
     descriptor_names: list[str] = cfg.get("descriptor_names", [])
     border: str = cfg.get("rollout", {}).get("sim", {}).get("border", "wall")
+    manifest = _load_manifest(run_dir)
+    has_signal: bool = bool(manifest.get("signal_field", False))
 
     return {
         "run_id": run_dir.name,
@@ -555,6 +557,7 @@ def _build_card_context(
         "device": device,
         "descriptor_names": descriptor_names,
         "border": border,
+        "has_signal": has_signal,
     }
 
 

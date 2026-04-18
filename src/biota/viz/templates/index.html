@@ -670,7 +670,7 @@
                 <div class="card-thumb card-thumb-empty"></div>
                 {% endif %}
                 <div class="card-body">
-                    <div class="card-id">{{ card.run_id }}</div>
+                    <div class="card-id">{{ card.run_id }}{% if card.border and card.border != "wall" %}<span style="margin-left:8px;font-size:9px;letter-spacing:0.05em;text-transform:uppercase;padding:1px 6px;border-radius:8px;background:rgba(251,191,119,0.1);color:#fbbf77;border:1px solid rgba(251,191,119,0.25);white-space:nowrap;">{{ card.border }}</span>{% endif %}{% if card.has_signal %}<span style="margin-left:6px;font-size:9px;letter-spacing:0.05em;text-transform:uppercase;padding:1px 6px;border-radius:8px;background:rgba(60,220,200,0.1);color:#3cdcc8;border:1px solid rgba(60,220,200,0.25);white-space:nowrap;">signal</span>{% endif %}</div>
                     <div class="card-stats">
                         <span class="card-stat"><span class="card-stat-v">{{ card.n_cells }}</span> cells</span>
                         <span class="card-sep">&middot;</span>
@@ -686,7 +686,6 @@
                         {% if card.preset %}<span class="card-cfg-item">{{ card.preset }}</span>{% endif %}
                         {% if card.budget %}<span class="card-cfg-item">{{ card.budget }} budget</span>{% endif %}
                         {% if card.device %}<span class="card-cfg-item">{{ card.device }}</span>{% endif %}
-                        {% if card.border and card.border != "wall" %}<span class="card-cfg-item" style="color:#fbbf77">{{ card.border }}</span>{% endif %}
                     </div>
                     {% endif %}
                     {% if card.descriptor_names %}
