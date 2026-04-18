@@ -25,9 +25,6 @@
     </style>
   </defs>
 
-  <!-- Background -->
-  <rect width="720" height="420" fill="#0e1015"/>
-
   <!-- ── Left column: Mass field ─────────────────────────────────── -->
   <!-- Mass field input box -->
   <rect x="28" y="28" width="140" height="48" rx="6" fill="#16181f" stroke="#2e3044" stroke-width="1"/>
@@ -115,16 +112,14 @@
 
   <!-- ── Cross arrows ───────────────────────────────────────────── -->
   <!-- Emission: mass field → signal field (add emitted signal) -->
-  <path d="M168 284 C280 284 440 284 550 284" fill="none" stroke="#fbbf77" stroke-width="1.4"
+  <path d="M168 292 C280 292 440 292 550 292" fill="none" stroke="#fbbf77" stroke-width="1.4"
         stroke-dasharray="5 3" marker-end="url(#arr-amber)"/>
-  <text class="tsa" x="360" y="278" text-anchor="middle" fill="#fbbf77">+ emission → signal</text>
-  <!-- drain label -->
-  <text class="tsa" x="360" y="298" text-anchor="middle" fill="#71717a">− emission from mass</text>
+  <text class="tsa" x="360" y="274" text-anchor="middle" fill="#fbbf77">emission  (drain mass, add signal)</text>
 
   <!-- Reception: convolved signal → growth field boost (signal → mass col) -->
-  <path d="M552 206 C460 206 340 206 170 206" fill="none" stroke="#a78bfa" stroke-width="1.4"
+  <path d="M552 212 C460 212 340 212 170 212" fill="none" stroke="#a78bfa" stroke-width="1.4"
         stroke-dasharray="5 3" marker-end="url(#arr-purple)"/>
-  <text class="tsa" x="360" y="200" text-anchor="middle" fill="#a78bfa">+ growth boost → ΔG</text>
+  <text class="tsa" x="360" y="192" text-anchor="middle" fill="#a78bfa">reception boost → ΔG</text>
 
   <!-- Conservation arrows to centre bottom box -->
   <line x1="168" y1="358" x2="218" y2="358" stroke="#2e3044" stroke-width="1" marker-end="url(#arr)"/>
@@ -138,12 +133,4 @@
   <line x1="236" y1="74" x2="266" y2="74" stroke="#a78bfa" stroke-width="1.4" stroke-dasharray="4 2"/>
   <text class="tsa" x="272" y="78" fill="#a78bfa">reception  (signal → growth boost)</text>
 
-  <!-- ── Parameter labels ───────────────────────────────────────── -->
-  <!-- emission_vector label near emission arrow -->
-  <text class="tcode" x="234" y="270" fill="#fbbf77">ev: emission_vector (C,)</text>
-  <text class="tcode" x="234" y="284" fill="#fbbf77">rate: emission_rate</text>
-  <!-- receptor_profile label near reception arrow -->
-  <text class="tcode" x="234" y="192" fill="#a78bfa">rp: receptor_profile (C,)  [−1, 1]</text>
-  <!-- decay_rates label near decay box -->
-  <text class="tcode" x="434" y="254" fill="#ff6464">dr: decay_rates (C,)  [0, 0.9]</text>
 </svg>

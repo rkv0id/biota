@@ -37,7 +37,7 @@
         /* === header === */
         .page-header {
             padding: 48px 0 0 0;
-            margin-bottom: 32px;
+            margin-bottom: 0;
         }
         .page-title {
             font-size: 32px;
@@ -91,11 +91,11 @@
         }
 
         /* === tab panels === */
-        .tab-panel { display: none; padding: 44px 0 80px 0; }
+        .tab-panel { display: none; padding: 28px 0 80px 0; }
         .tab-panel.active { display: block; }
         .system-nav {
             display: flex; gap: 6px; flex-wrap: wrap;
-            margin-bottom: 36px; padding-bottom: 16px;
+            margin-bottom: 20px; padding-bottom: 14px;
             border-bottom: 1px solid #1e2030;
         }
         .system-nav a {
@@ -435,7 +435,7 @@
 
         @media (max-width: 700px) {
             .page-header { padding: 32px 0 0 0; }
-            .tab-panel { padding: 28px 0 64px 0; }
+            .tab-panel { padding: 20px 0 64px 0; }
             .page-wrap { padding: 0 20px; }
             .page-title { font-size: 24px; }
             .descriptor-grid { grid-template-columns: 1fr; }
@@ -445,7 +445,7 @@
 
         @media (max-width: 480px) {
             .page-header { padding: 20px 0 0 0; }
-            .tab-panel { padding: 20px 0 48px 0; }
+            .tab-panel { padding: 10px 0 48px 0; }
             .page-wrap { padding: 0 16px; }
             .page-title { font-size: 20px; }
             .page-tagline { font-size: 13px; }
@@ -486,7 +486,7 @@
                 <a href="#sys-descriptors">Descriptors</a>
             </nav>
             <h2 id="sys-arch">Architecture</h2>
-            <p>biota is a distributed quality-diversity search platform for <a class="pill amber" href="https://arxiv.org/abs/2212.07906" target="_blank" style="display:inline;padding:2px 6px;border-radius:3px;font-size:inherit;">Flow-Lenia</a>. Two subsystems share the same vectorized PyTorch runtime and the same Ray cluster: a MAP-Elites <em>search</em> that fills a behavioral archive, and an <em>ecosystem</em> dispatch that runs selected archive creatures on shared canvases. Both run on consumer-grade hardware — a 3-node RTX 5060 Ti cluster with Thunderbolt OCuLink GPU attach.</p>
+            <p>biota is a distributed quality-diversity search platform for <a class="pill amber" href="https://arxiv.org/abs/2212.07906" target="_blank" style="display:inline;padding:2px 6px;border-radius:3px;font-size:inherit;">Flow-Lenia</a>. Two subsystems share the same vectorized PyTorch runtime and the same Ray cluster: a MAP-Elites <em>search</em> that fills a behavioral archive, and an <em>ecosystem</em> dispatch that runs selected archive creatures on shared canvases. Both run on a homelab 3-node RTX 5060 Ti cluster.</p>
 
             <div class="stat-row">
                 <div class="stat">
@@ -498,8 +498,8 @@
                     <div class="stat-value">32 &times; 32 &times; 16</div>
                 </div>
                 <div class="stat">
-                    <div class="stat-label">cluster throughput</div>
-                    <div class="stat-value">97 <span class="stat-unit">s / 500 rollouts</span></div>
+                    <div class="stat-label">descriptor library</div>
+                    <div class="stat-value">15 <span class="stat-unit">built-in axes</span></div>
                 </div>
             </div>
 
