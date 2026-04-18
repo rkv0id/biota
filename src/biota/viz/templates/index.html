@@ -521,7 +521,7 @@
                 <em>q</em> = 0.6 &middot; <span class="teal">compactness</span> + 0.4 &middot; <span class="amber">stability</span>
                 <br/>
                 <span class="eq-label" style="margin-top:10px;">quality score (signal)</span>
-                <em>q</em> = 0.5 &middot; <span class="teal">compactness</span> + 0.3 &middot; <span class="amber">stability</span> + 0.2 &middot; <span class="red">retention</span>
+                <em>q</em> = 0.5 &middot; <span class="teal">compactness</span> + 0.2 &middot; <span class="amber">stability</span> + 0.3 &middot; <span class="red">retention</span>
             </div>
             <div class="math-block">
                 <span class="eq-label">compactness &nbsp;&mdash;&nbsp; two-point minimum</span>
@@ -561,7 +561,7 @@
                 <br/>
                 <span class="dim">signal_kernel_r / a / b / w              # spatial diffusion kernel (per-creature)</span>
             </div>
-            <p>One simulation step with the signal field active proceeds as follows: (1) the creature convolves its mass field with its growth kernel to compute growth G(H,W); (2) the signal field is convolved with the signal diffusion kernel; (3) the dot product of the convolved signal with <code>receptor_profile</code> produces a spatial growth boost that is added to G — negative receptor weights produce inhibitory responses; (4) positive growth activity G&sup+ is scaled by <code>emission_rate</code> and <code>emission_vector</code> to produce emitted signal, which is added to the signal field and drained from the mass field; (5) the mass reintegrates via the standard Flow-Lenia advection step; (6) the signal field decays per-channel at <code>decay_rates</code>. The total conserved quantity is mass + signal; decay is the only leak.</p>
+            <p>One simulation step: (1) convolve mass to get growth G(H,W); (2) convolve signal field with signal kernel; (3) compute reception: <code>dot(convolved_signal, receptor_profile)</code> — negative receptor weights are inhibitory; (4) apply <code>alpha_coupling</code>: <code>G &times; (1 + &alpha; &times; reception)</code> clamped to [0,&infin;) — positive &alpha; amplifies growth where signal is favorable, including inside other species’ territory (the cross-species predation pathway); negative &alpha; is chemorepulsion; (5) modulate emission rate via <code>beta_modulation</code>: <code>rate &times; (1 + &beta; &times; mean(reception))</code> — positive &beta; = quorum sensing, negative &beta; = feedback inhibition; (6) emit <code>G&sup+ &times; rate_eff &times; emission_vector</code>, draining mass into signal field; (7) reintegrate mass via Flow-Lenia advection; (8) decay signal per-channel at <code>decay_rates</code>. Total conserved: mass + signal.</p>
             <div class="diagram-frame">{{ svg_signal_field | safe }}</div>
             <p>Searches with <code>--signal-field</code> automatically use 800 steps (vs 500 for standard) so emission and reception dynamics have time to build meaningful gradients. The quality metric gains a retention term: <code>clip(final_mass / initial_mass, 0, 1)</code> weighted at 0.2, penalising creatures that bleed all their mass into the signal field. A creature mass floor of 0.2 × initial_mass is enforced as a hard filter. In ecosystem runs, all species share one signal field: each species emits and decays by its own parameters, ownership-weighted. Signal archives and non-signal archives cannot be mixed in a single ecosystem run.</p>
             <p>The ecosystem viewer exposes signal-specific observables: total signal mass history, signal mass fraction per step (signal / (mass + signal)), receptor alignment per species per snapshot (dot(receptor_profile, mean signal received in territory)), and an emission-reception compatibility matrix (dot(emission_vector[i], receptor_profile[j])) showing which species pairs have chemically compatible signal profiles.</p>
@@ -628,6 +628,18 @@
                 <div class="descriptor-card">
                     <div class="descriptor-name">spatial entropy</div>
                     <div class="descriptor-desc">Shannon entropy of mass distribution over a coarse spatial grid. Low = compact localized mass, high = diffuse or multi-body spread.</div>
+                </div>
+                <div class="descriptor-card" style="border-color:rgba(60,220,200,0.2);">
+                    <div class="descriptor-name" style="color:#3cdcc8;">emission activity <span style="font-size:9px;padding:1px 5px;border-radius:6px;background:rgba(60,220,200,0.1);border:1px solid rgba(60,220,200,0.2);margin-left:6px;letter-spacing:0.05em;">signal only</span></div>
+                    <div class="descriptor-desc">Mean positive-growth emission activity over the trace tail, normalized to [0,&thinsp;1]. Measures how much signal the creature actually emits dynamically &mdash; a creature with high emission_rate but low growth activity barely emits. Zero for non-signal rollouts.</div>
+                </div>
+                <div class="descriptor-card" style="border-color:rgba(167,139,250,0.2);">
+                    <div class="descriptor-name" style="color:#a78bfa;">receptor sensitivity <span style="font-size:9px;padding:1px 5px;border-radius:6px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.2);margin-left:6px;letter-spacing:0.05em;">signal only</span></div>
+                    <div class="descriptor-desc">Mean absolute reception response |dot(convolved_signal, receptor_profile)| over the trace tail, normalized to [0,&thinsp;1]. Measures chemical responsiveness: how strongly the creature reacted to its chemical environment. Zero for non-signal rollouts.</div>
+                </div>
+                <div class="descriptor-card" style="border-color:rgba(60,220,200,0.2);">
+                    <div class="descriptor-name" style="color:#3cdcc8;">signal retention <span style="font-size:9px;padding:1px 5px;border-radius:6px;background:rgba(60,220,200,0.1);border:1px solid rgba(60,220,200,0.2);margin-left:6px;letter-spacing:0.05em;">signal only</span></div>
+                    <div class="descriptor-desc">final_mass / initial_mass, clipped to [0,&thinsp;1]. High = chemically conservative emitter that retains its mass. Low = aggressive broadcaster. Partitions the archive along an ecological role axis: broadcaster vs listener vs predator candidate (high emission + high sensitivity + high &alpha;). Returns 1.0 for non-signal rollouts.</div>
                 </div>
             </div>
         </div>

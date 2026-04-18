@@ -30,7 +30,7 @@ where:
 
 Weights:
     Non-signal:  w_c = 0.6,  w_s = 0.4,  w_r = 0.0
-    Signal:      w_c = 0.5,  w_s = 0.3,  w_r = 0.2
+    Signal:      w_c = 0.5,  w_s = 0.2,  w_r = 0.3
 
 The midpoint compactness term is the key addition over the old single-point
 metric. Most Flow-Lenia solitons score >0.95 compactness at the final step,
@@ -64,8 +64,8 @@ CREATURE_MASS_FLOOR = 0.2
 _W_COMPACT_BASE = 0.6
 _W_STABLE_BASE = 0.4
 _W_COMPACT_SIG = 0.5
-_W_STABLE_SIG = 0.3
-_W_RETAIN_SIG = 0.2
+_W_STABLE_SIG = 0.2
+_W_RETAIN_SIG = 0.3
 
 
 @dataclass(frozen=True)
@@ -194,7 +194,7 @@ def evaluate(
         retention    final_mass / initial_mass, clipped [0,1] (signal only)
 
     Weights (non-signal): compactness=0.6, stability=0.4
-    Weights (signal):     compactness=0.5, stability=0.3, retention=0.2
+    Weights (signal):     compactness=0.5, stability=0.2, retention=0.3
     """
     if not _alive(eval_input):
         return EvaluationResult(descriptors=None, quality=None, rejection_reason="dead")

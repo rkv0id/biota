@@ -156,12 +156,14 @@ This adds six signal parameters to each creature's searchable parameter space:
 | `receptor_profile` | `(16,)` | `[-1, 1]` | Channel weights for sensing. Negative values produce inhibitory (aversive) responses |
 | `emission_rate` | scalar | `[0.001, 0.05]` | Fraction of positive growth activity converted to signal per step. Lower values reduce mass bleed over long ecosystem runs |
 | `decay_rates` | `(16,)` | `[0, 0.9]` | Per-channel decay rate applied each step. Creatures with low decay on key channels maintain longer-range chemical gradients |
+| `alpha_coupling` | scalar | `[-1, 1]` | Reception-to-growth coupling. Positive = chemotaxis (grow into favorable signal, enables cross-species predation). Negative = chemorepulsion. Zero = no coupling |
+| `beta_modulation` | scalar | `[-1, 1]` | Adaptive emission. Positive = quorum sensing (amplify emission when receiving signal). Negative = feedback inhibition (suppress emission). Zero = static rate |
 | `signal_kernel_r` | scalar | `[0.2, 1.0]` | Signal kernel radius scale |
 | `signal_kernel_a/b/w` | `(3,)` each | same as mass kernels | Ring function parameters for signal diffusion |
 
 ![signal field mechanics](docs/signal-field.svg)
 
-**Physics.** At each step: (1) the creature emits signal proportional to local positive growth activity scaled by `emission_rate`, draining from the mass field into the signal field; (2) the signal field is convolved with the creature's signal kernel; (3) the dot product of the convolved field with `receptor_profile` boosts (or inhibits) the growth field; (4) the signal field decays per-channel at the creature's own `decay_rates`. The total conserved quantity is `mass + signal`. Decay is the only leak.
+**Physics.** At each step: (1) convolve mass to get G(H,W); (2) convolve signal field; (3) compute reception `dot(convolved_signal, receptor_profile)`; (4) apply `alpha_coupling`: `G *= (1 + alpha * reception).clamp(min=0)` -- positive alpha is chemotaxis (grow into favorable signal, including other species' territory, enabling cross-species predation); negative alpha is chemorepulsion; (5) modulate emission rate via `beta_modulation`: `rate_eff = rate * (1 + beta * mean(reception))` clipped to [0, 0.1] -- positive beta is quorum sensing, negative beta is feedback inhibition; (6) emit `G_pos * rate_eff * emission_vector`, draining mass into signal field; (7) reintegrate mass; (8) decay signal at `decay_rates`. Total conserved: mass + signal.
 
 **Archive compatibility.** An archive produced with `--signal-field` is tagged `"signal_field": true` in `manifest.json`. Ecosystem runs detect this automatically from the creature params -- no YAML flag needed. If any source creature comes from a signal-enabled archive, all sources must too; mixing signal and non-signal archives raises an error at load time.
 
@@ -169,7 +171,7 @@ This adds six signal parameters to each creature's searchable parameter space:
 
 ```
 non-signal:  q = 0.6 × compactness  +  0.4 × stability
-signal:      q = 0.5 × compactness  +  0.3 × stability  +  0.2 × retention
+signal:      q = 0.5 × compactness  +  0.2 × stability  +  0.3 × retention
 
 compactness = min( compact(state_T/2),  compact(state_T) )
 stability   = clip( 1 − drift / 0.2,  0,  1 )
@@ -283,7 +285,7 @@ ecosystem/20260415-104007-096-dense-population/
 ## Development
 
 ```bash
-just check       # ruff + pyright + pytest (406 tests, 0 warnings)
+just check       # ruff + pyright + pytest (422 tests, 0 warnings)
 just smoke-ray   # local-Ray integration smoke test
 ```
 
