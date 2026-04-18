@@ -138,6 +138,8 @@ def _card_thumbnail_src(thumbnail: np.ndarray, key: str, thumbs_dir: Path | None
 def _serialize_params(result: RolloutResult) -> dict[str, Any]:
     """Convert a result's params dict (with nested lists) into a JSON-safe
     dict that the modal can render."""
+    from biota.search.params import has_signal_field
+
     params = result.params
     out: dict[str, Any] = {
         "R": float(params["R"]),
@@ -146,6 +148,15 @@ def _serialize_params(result: RolloutResult) -> dict[str, Any]:
         out[key] = [round(float(v), 4) for v in params[key]]
     for key in ("a", "b", "w"):
         out[key] = [[round(float(v), 4) for v in row] for row in params[key]]
+
+    if has_signal_field(params):
+        out["emission_vector"] = [round(float(v), 4) for v in params["emission_vector"]]  # type: ignore[typeddict-item]
+        out["receptor_profile"] = [round(float(v), 4) for v in params["receptor_profile"]]  # type: ignore[typeddict-item]
+        out["emission_rate"] = round(float(params["emission_rate"]), 5)  # type: ignore[typeddict-item]
+        out["decay_rates"] = [round(float(v), 4) for v in params["decay_rates"]]  # type: ignore[typeddict-item]
+        out["signal_kernel_r"] = round(float(params["signal_kernel_r"]), 4)  # type: ignore[typeddict-item]
+        out["signal_kernel_a"] = [round(float(v), 4) for v in params["signal_kernel_a"]]  # type: ignore[typeddict-item]
+
     return out
 
 
