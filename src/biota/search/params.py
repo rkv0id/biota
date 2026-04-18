@@ -68,6 +68,8 @@ PARAMETER_SPECS: tuple[ParameterSpec, ...] = (
 SIGNAL_PARAMETER_SPECS: tuple[ParameterSpec, ...] = (
     ParameterSpec("emission_vector", "c", 0.0, 1.0, 0.1),
     ParameterSpec("receptor_profile", "c_sym", -1.0, 1.0, 0.2),
+    ParameterSpec("emission_rate", "scalar", 0.001, 0.05, 0.005),
+    ParameterSpec("decay_rates", "c", 0.0, 0.9, 0.05),
     ParameterSpec("signal_kernel_r", "scalar", 0.2, 1.0, 0.08),
     ParameterSpec("signal_kernel_a", "k3_fixed", 0.0, 1.0, 0.1),
     ParameterSpec("signal_kernel_b", "k3_fixed", 0.001, 1.0, 0.0999),
@@ -127,6 +129,8 @@ def sample_random(kernels: int = 10, seed: int = 0, signal_field: bool = False) 
     if signal_field:
         params["emission_vector"] = _uniform_c(rng, "emission_vector")
         params["receptor_profile"] = _uniform_c(rng, "receptor_profile")
+        params["emission_rate"] = _uniform_scalar(rng, "emission_rate")
+        params["decay_rates"] = _uniform_c(rng, "decay_rates")
         params["signal_kernel_r"] = _uniform_scalar(rng, "signal_kernel_r")
         params["signal_kernel_a"] = _uniform_k3_fixed(rng, "signal_kernel_a")
         params["signal_kernel_b"] = _uniform_k3_fixed(rng, "signal_kernel_b")
@@ -194,6 +198,8 @@ def mutate(parent: ParamDict, seed: int = 0) -> ParamDict:
     if "emission_vector" in parent:
         child["emission_vector"] = _perturb_c(rng, "emission_vector", parent["emission_vector"])  # type: ignore[typeddict-item]
         child["receptor_profile"] = _perturb_c(rng, "receptor_profile", parent["receptor_profile"])  # type: ignore[typeddict-item]
+        child["emission_rate"] = _perturb_scalar(rng, "emission_rate", parent["emission_rate"])  # type: ignore[typeddict-item]
+        child["decay_rates"] = _perturb_c(rng, "decay_rates", parent["decay_rates"])  # type: ignore[typeddict-item]
         child["signal_kernel_r"] = _perturb_scalar(
             rng,
             "signal_kernel_r",
@@ -246,11 +252,14 @@ def in_range(params: ParamDict) -> bool:
                     return False
 
     if has_signal_field(params):
-        for name in ("emission_vector", "receptor_profile"):
+        for name in ("emission_vector", "receptor_profile", "decay_rates"):
             spec = _SPECS_BY_NAME[name]
             for v in params[name]:  # type: ignore[literal-required]
                 if v < spec.low or v > spec.high:
                     return False
+        er_spec = _SPECS_BY_NAME["emission_rate"]
+        if not (er_spec.low <= params["emission_rate"] <= er_spec.high):  # type: ignore[typeddict-item]
+            return False
         sk_r_spec = _SPECS_BY_NAME["signal_kernel_r"]
         if not (sk_r_spec.low <= params["signal_kernel_r"] <= sk_r_spec.high):  # type: ignore[typeddict-item]
             return False

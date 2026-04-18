@@ -28,6 +28,7 @@ from biota.search.rollout import (
     dev_preset,
     pretty_preset,
     rollout,
+    signal_preset,
     standard_preset,
 )
 from biota.sim.flowlenia import Config as SimConfig
@@ -53,13 +54,19 @@ def test_dev_preset_shape() -> None:
 def test_standard_preset_shape() -> None:
     cfg = standard_preset()
     assert cfg.sim.grid == 192
-    assert cfg.steps == 300
+    assert cfg.steps == 500
 
 
 def test_pretty_preset_shape() -> None:
     cfg = pretty_preset()
     assert cfg.sim.grid == 384
     assert cfg.steps == 500
+
+
+def test_signal_preset_shape() -> None:
+    cfg = signal_preset()
+    assert cfg.sim.grid == 192
+    assert cfg.steps == 800
 
 
 # === cheap unit tests ===

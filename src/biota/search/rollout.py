@@ -77,8 +77,18 @@ def dev_preset() -> RolloutConfig:
 
 
 def standard_preset() -> RolloutConfig:
-    """The v1 default: 192x192 grid, 300 steps. For real searches and benchmarks."""
-    return RolloutConfig(sim=SimConfig(grid_h=192, grid_w=192), steps=300)
+    """Standard: 192x192 grid, 500 steps. Balanced speed vs behavioral resolution."""
+    return RolloutConfig(sim=SimConfig(grid_h=192, grid_w=192), steps=500)
+
+
+def signal_preset() -> RolloutConfig:
+    """Signal-field search: 192x192 grid, 800 steps.
+
+    Signal dynamics require more steps to build up spatial gradients and for
+    the alive/retention filters to discriminate emitters with different rates.
+    Auto-selected by the CLI when --signal-field is passed without --steps.
+    """
+    return RolloutConfig(sim=SimConfig(grid_h=192, grid_w=192), steps=800)
 
 
 def pretty_preset() -> RolloutConfig:
@@ -118,6 +128,12 @@ def _params_dict_to_tensors(params: ParamDict, device: str) -> Params:
         ),
         receptor_profile=torch.tensor(
             params["receptor_profile"],  # type: ignore[typeddict-item]
+            dtype=torch.float32,
+            device=device,
+        ),
+        emission_rate=float(params["emission_rate"]),  # type: ignore[typeddict-item]
+        decay_rates=torch.tensor(
+            params["decay_rates"],  # type: ignore[typeddict-item]
             dtype=torch.float32,
             device=device,
         ),

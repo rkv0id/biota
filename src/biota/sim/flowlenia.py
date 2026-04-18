@@ -29,18 +29,6 @@ import torch.nn.functional as F
 # kept as a local constant here so flowlenia.py has no search-layer dependency.
 SIGNAL_CHANNELS = 16
 
-# Emission rate: fraction of growth-field activity converted to signal per step.
-# Low enough not to destabilize mass dynamics; high enough to produce measurable
-# signal over a typical 200-300 step rollout.
-EMISSION_RATE = 0.02
-
-# Per-channel decay rates for the signal field: range from fast (local,
-# contact-range) to slow (diffuse, long-range). Fixed at the platform level --
-# this is a property of the signal medium, not of the creature.
-# Channels 0-3: fast decay (0.15/step), 4-7: medium (0.05), 8-11: slow (0.01),
-# 12-15: very slow (0.002). Analogous to chemical signal half-lives.
-_DECAY_RATES: list[float] = [0.15] * 4 + [0.05] * 4 + [0.01] * 4 + [0.002] * 4
-
 
 @dataclass(frozen=True)
 class Config:
@@ -76,6 +64,8 @@ class Params:
     # Signal field parameters -- optional. None for non-signal creatures.
     emission_vector: torch.Tensor | None = None  # (C,) in [0, 1]
     receptor_profile: torch.Tensor | None = None  # (C,) in [-1, 1]
+    emission_rate: float | None = None  # scalar in [0.001, 0.05]
+    decay_rates: torch.Tensor | None = None  # (C,) in [0, 0.9] per-channel
     signal_kernel_r: float | None = None
     signal_kernel_a: torch.Tensor | None = None  # (3,) ring centers
     signal_kernel_b: torch.Tensor | None = None  # (3,) ring weights
@@ -107,6 +97,8 @@ class FlowLenia:
             receptor_profile=params.receptor_profile.to(device)
             if params.receptor_profile is not None
             else None,
+            emission_rate=params.emission_rate,
+            decay_rates=params.decay_rates.to(device) if params.decay_rates is not None else None,
             signal_kernel_r=params.signal_kernel_r,
             signal_kernel_a=params.signal_kernel_a.to(device)
             if params.signal_kernel_a is not None
@@ -122,7 +114,12 @@ class FlowLenia:
         self._fK_signal: torch.Tensor | None = (
             self._build_signal_kernel_fft() if self.params.has_signal else None
         )
-        self._decay = torch.tensor(_DECAY_RATES, dtype=torch.float32, device=device)
+        # _decay built from per-creature decay_rates; fallback zeros if somehow absent.
+        self._decay: torch.Tensor = (
+            self.params.decay_rates
+            if self.params.decay_rates is not None
+            else torch.zeros(SIGNAL_CHANNELS, dtype=torch.float32, device=device)
+        )
         self._sobel_kx, self._sobel_ky = self._build_sobel_kernels()
         self._pos = self._build_position_grid()
 
@@ -176,7 +173,7 @@ class FlowLenia:
 
         Signal physics (only when signal is not None and params.has_signal):
           1. Compute growth field G as usual.
-          2. Emission: add emission_vector * G_magnitude * EMISSION_RATE to
+          2. Emission: add emission_vector * G_magnitude * emission_rate to
              the signal field at each cell, drain the same amount from mass.
           3. Reception: compute dot(receptor_profile, conv(signal)) per cell,
              add as a boost to the growth field before reintegration.
@@ -205,7 +202,8 @@ class FlowLenia:
 
             # Emission: drain from mass, add to signal field.
             # emission_vector (C,) distributes the scalar emission across channels.
-            emitted = G_pos * EMISSION_RATE  # (H, W) scalar per cell
+            rate = self.params.emission_rate if self.params.emission_rate is not None else 0.0
+            emitted = G_pos * rate  # (H, W) scalar per cell
             # Clamp emitted to available mass to avoid going negative.
             emitted = torch.minimum(emitted, A2.clamp(min=0.0))
             emit_per_channel = emitted.unsqueeze(-1) * self.params.emission_vector  # (H, W, C)

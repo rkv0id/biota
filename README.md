@@ -154,14 +154,16 @@ This adds six signal parameters to each creature's searchable parameter space:
 |---|---|---|---|
 | `emission_vector` | `(16,)` | `[0, 1]` | How emitted signal is distributed across the 16 channels |
 | `receptor_profile` | `(16,)` | `[-1, 1]` | Channel weights for sensing. Negative values produce inhibitory (aversive) responses |
+| `emission_rate` | scalar | `[0.001, 0.05]` | Fraction of positive growth activity converted to signal per step. Lower values reduce mass bleed over long ecosystem runs |
+| `decay_rates` | `(16,)` | `[0, 0.9]` | Per-channel decay rate applied each step. Creatures with low decay on key channels maintain longer-range chemical gradients |
 | `signal_kernel_r` | scalar | `[0.2, 1.0]` | Signal kernel radius scale |
 | `signal_kernel_a/b/w` | `(3,)` each | same as mass kernels | Ring function parameters for signal diffusion |
 
-**Physics.** At each step: (1) the creature emits signal proportional to local positive growth activity, draining from the mass field into the signal field; (2) the signal field is convolved with the creature's signal kernel; (3) the dot product of the convolved field with `receptor_profile` boosts (or inhibits) the growth field; (4) the signal field decays per-channel at fixed rates (0.15 / 0.05 / 0.01 / 0.002 per step across four channel groups). The total conserved quantity is `mass + signal`. Decay is the only leak.
+**Physics.** At each step: (1) the creature emits signal proportional to local positive growth activity scaled by `emission_rate`, draining from the mass field into the signal field; (2) the signal field is convolved with the creature's signal kernel; (3) the dot product of the convolved field with `receptor_profile` boosts (or inhibits) the growth field; (4) the signal field decays per-channel at the creature's own `decay_rates`. The total conserved quantity is `mass + signal`. Decay is the only leak.
 
 **Archive compatibility.** An archive produced with `--signal-field` is tagged `"signal_field": true` in `manifest.json`. Ecosystem runs detect this automatically from the creature params -- no YAML flag needed. If any source creature comes from a signal-enabled archive, all sources must too; mixing signal and non-signal archives raises an error at load time.
 
-**Quality metric.** The alive filter checks that total mass (`mass + signal`) stays within `[0.5, 2.0]` of the initial total, and that the mass field itself does not collapse below 10% of its initial value (so a creature that converts all its mass to signal does not score as alive). The initial signal field is spatially varied low-frequency noise (~0.01 amplitude) per channel, giving the receptor profile something to respond to during solo rollouts.
+**Quality metric.** The alive filter checks that total mass (`mass + signal`) stays within `[0.5, 2.0]` of the initial total, and that the mass field itself does not collapse below 20% of its initial value (stricter than non-signal to create selection pressure against mass bleed). The quality score blends compactness (70%) with signal retention -- `final_mass / initial_mass` (30%) -- directly rewarding creatures that emit efficiently without depleting themselves. The initial signal field is spatially varied low-frequency noise (~0.01 amplitude) per channel, giving the receptor profile something to respond to during solo rollouts. Signal searches automatically use 800 steps (vs 500 for standard) so emission/reception dynamics have time to build up meaningful gradients.
 
 ## Relationship to related work
 
@@ -268,7 +270,7 @@ ecosystem/20260415-104007-096-dense-population/
 ## Development
 
 ```bash
-just check       # ruff + pyright + pytest (384 tests)
+just check       # ruff + pyright + pytest (389 tests)
 just smoke-ray   # local-Ray integration smoke test
 ```
 
@@ -292,7 +294,7 @@ The test suite runs entirely in no-Ray mode. `just smoke-ray` exercises the Ray 
 - [x] v3.1.0 - Spatial observables for both run modes: patch count, interface area, COM distance, spatial entropy (from existing snapshots, no new simulation code); interaction coefficients gated to contact windows; blended pair colors in viewer
 - [x] v3.2.0 - Temporal outcome classifier: per-species labeled windows, patch-count-based fragmentation, separate taxonomies for homogeneous and heterogeneous runs, outcome timeline in viewer
 - [x] v3.3.0 - Signal field: per-creature emission and sensing in a shared (H, W, 16) chemical field; switchable via --signal-field; archive-level tagging; quality filter updated for mass+signal conservation; both homo and hetero ecosystem paths signal-aware
-- [ ] v3.4.0 - Signal observables: net mass flux per species pair, signal overlap matrix, receptor-signal alignment; homogeneous self-signal flux
+- [ ] v3.4.0 - Signal physics corrected: per-creature emission_rate and decay_rates (searchable, replace hardcoded constants); standard preset bumped to 500 steps; signal_preset at 800 steps auto-selected with --signal-field; CREATURE_MASS_FLOOR raised to 0.2; signal_retention quality term
 - [ ] v3.5.0 - Ecosystem viewer overhaul: all new charts, signal GIF overlay, mode-specific panels, temporal outcome sequence
 
 ## References

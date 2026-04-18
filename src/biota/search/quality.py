@@ -32,10 +32,12 @@ ALIVE_LOWER = 0.5
 ALIVE_UPPER = 2.0
 LOCALIZED_THRESHOLD = 0.6
 PERSISTENT_DESCRIPTOR_DRIFT = 0.2
-# A creature that emits most of its mass into the signal field but maintains
-# a minimal mass-field structure still passes the total-mass conservation check.
-# This floor ensures the creature itself still exists as a mass-field entity.
-CREATURE_MASS_FLOOR = 0.1
+# For signal creatures, the alive filter uses a stricter mass floor: the creature's
+# mass field must not collapse below this fraction of initial_mass even if total
+# (mass + signal) is conserved. Higher value = stronger selection against mass bleed.
+CREATURE_MASS_FLOOR = 0.2
+# For non-signal rollouts the original looser floor is used (mass floor = 0 effectively,
+# since the total-mass check already enforces >=0.5 * initial_mass).
 
 
 @dataclass(frozen=True)
@@ -194,5 +196,16 @@ def evaluate(
     if not is_persistent:
         return EvaluationResult(descriptors=descriptors, quality=None, rejection_reason="unstable")
 
-    quality = _compactness(eval_input.trace)
+    compactness = _compactness(eval_input.trace)
+    # Signal retention bonus: reward creatures that keep their mass field stable
+    # under signal emission. Only applied when initial_total > initial_mass (i.e.
+    # a signal run with a non-trivial background field) OR when final_signal_mass > 0.
+    if eval_input.final_signal_mass > 0 or eval_input.initial_total > eval_input.initial_mass:
+        retention = float(
+            eval_input.final_mass / eval_input.initial_mass if eval_input.initial_mass > 0 else 1.0
+        )
+        retention = max(0.0, min(1.0, retention))
+        quality = 0.7 * compactness + 0.3 * retention
+    else:
+        quality = compactness
     return EvaluationResult(descriptors=descriptors, quality=quality, rejection_reason=None)

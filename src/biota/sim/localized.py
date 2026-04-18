@@ -28,7 +28,7 @@ from dataclasses import dataclass
 import torch
 import torch.nn.functional as F
 
-from biota.sim.flowlenia import EMISSION_RATE, Config, FlowLenia, Params
+from biota.sim.flowlenia import Config, FlowLenia, Params
 
 
 @dataclass(frozen=True)
@@ -163,7 +163,8 @@ class LocalizedFlowLenia:
             if new_signal is not None and sp.params.emission_vector is not None:
                 G_pos = G_s_total.clamp(min=0.0)
                 ownership_s = W_eff[:, :, s]  # (H, W) -- how much of this cell species s owns
-                emitted_scalar = G_pos * ownership_s * EMISSION_RATE
+                rate = sp.params.emission_rate if sp.params.emission_rate is not None else 0.0
+                emitted_scalar = G_pos * ownership_s * rate
                 emitted_scalar = torch.minimum(emitted_scalar, A.clamp(min=0.0))
                 emit_per_channel = emitted_scalar.unsqueeze(-1) * sp.params.emission_vector
                 new_signal = new_signal + emit_per_channel
