@@ -710,7 +710,7 @@
                 <div class="card-body" style="padding-top:16px">
                     <div class="card-id">
                         {{ card.run_id }}
-                        {% if card.mode == "heterogeneous" %}<span style="margin-left:8px;font-size:9px;letter-spacing:0.05em;text-transform:uppercase;padding:1px 6px;border-radius:8px;background:rgba(192,132,252,0.1);color:#c084fc;border:1px solid rgba(192,132,252,0.25)">het</span>{% endif %}
+                        {% if card.mode == "heterogeneous" %}<span style="margin-left:8px;font-size:9px;letter-spacing:0.05em;text-transform:uppercase;padding:1px 6px;border-radius:8px;background:rgba(192,132,252,0.1);color:#c084fc;border:1px solid rgba(192,132,252,0.25)">het</span>{% endif %}{% if card.has_signal %}<span style="margin-left:6px;font-size:9px;letter-spacing:0.05em;text-transform:uppercase;padding:1px 6px;border-radius:8px;background:rgba(60,220,200,0.1);color:#3cdcc8;border:1px solid rgba(60,220,200,0.25)">signal</span>{% endif %}
                     </div>
                     <div class="card-stats">
                         <span class="card-stat"><span class="card-stat-v">{{ card.n_creatures }}</span> creatures</span>
@@ -733,7 +733,7 @@
                         {% endif %}
                         {% if card.border and card.border != "wall" %}<span class="card-cfg-item" style="color:#fbbf77">{{ card.border }}</span>{% endif %}
                     </div>
-                    <div class="card-descriptors">mass turnover {{ card.mass_turnover }}%/step</div>
+                    <div class="card-descriptors">mass turnover {{ card.mass_turnover }}%/step{% if card.outcome_label %} &middot; {{ card.outcome_label }}{% endif %}</div>
                 </div>
             </a>
             {% endfor %}

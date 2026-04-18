@@ -771,6 +771,12 @@
     <div class="page-grid">
     {% if output_format == "gif" and gif_src %}
     <img class="eco-gif-mobile" src="{{ gif_src }}" alt="ecosystem animation" />
+    {% if signal_gif_src %}
+    <div class="eco-gif-mobile" style="margin-top:8px;">
+        <div style="font-size:9px;color:#3cdcc8;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:4px;">signal field</div>
+        <img style="width:100%;height:auto;border-radius:4px;" src="{{ signal_gif_src }}" alt="signal field animation" />
+    </div>
+    {% endif %}
     {% endif %}
     <aside class="run-meta">
         {% if sources %}

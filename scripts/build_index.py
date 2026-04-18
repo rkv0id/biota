@@ -995,6 +995,8 @@ def _build_eco_card_context(run_dir: Path) -> dict[str, Any]:
         "initial_mass": f"{measures.get('initial_mass', 0.0):.1f}",
         "mass_turnover": f"{measures.get('mass_turnover', 0.0) * 100:.3f}",
         "elapsed": f"{summary.get('elapsed_seconds', 0.0):.1f}s",
+        "has_signal": any(v > 0 for v in measures.get("signal_total_history", [])),
+        "outcome_label": measures.get("outcome_label", ""),
     }
 
 
