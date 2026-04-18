@@ -1030,6 +1030,19 @@
     }
 
     // Reusable multi-line chart renderer for species data.
+    function blendColors(hexA, hexB) {
+        // Parse two hex colors (#rrggbb) and return their 50/50 RGB average.
+        function parse(h) {
+            var v = parseInt(h.slice(1), 16);
+            return [(v >> 16) & 255, (v >> 8) & 255, v & 255];
+        }
+        var a = parse(hexA), b = parse(hexB);
+        var r = Math.round((a[0] + b[0]) / 2);
+        var g = Math.round((a[1] + b[1]) / 2);
+        var bl = Math.round((a[2] + b[2]) / 2);
+        return 'rgb(' + r + ',' + g + ',' + bl + ')';
+    }
+
     function drawSpeciesChart(canvasId, data, palette) {
         var canvas = document.getElementById(canvasId);
         if (!canvas || !data || data.length === 0) return;
@@ -1106,8 +1119,7 @@
             for (var b = a + 1; b < S; b++) {
                 var vals = raw.map(function(snap) { return snap[a][b]; });
                 series.push(vals);
-                // Mix the two species colors for the pair line.
-                colors.push(palette[a % palette.length]);
+                colors.push(blendColors(palette[a % palette.length], palette[b % palette.length]));
             }
         }
         drawSpeciesChart('interfaceAreaChart', series, colors, 0);
@@ -1136,7 +1148,7 @@
                     else { vals.push(last); }
                 }
                 series.push(vals);
-                colors.push(palette[a % palette.length]);
+                colors.push(blendColors(palette[a % palette.length], palette[b % palette.length]));
             }
         }
         drawSpeciesChart('comDistanceChart', series, colors, 0);
