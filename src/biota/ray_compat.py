@@ -76,9 +76,11 @@ def init(
 
     - **ray_address=<str>**: attach to an already-running Ray cluster at the
       given address. Value is passed verbatim to ray.init(address=...). Use
-      "host:port" for a GCS-level connection from the same network, or
-      "ray://host:port" for Ray Client protocol. Cluster resources were fixed
-      at 'ray start' time; passing num_cpus to a cluster-connecting ray.init()
+      "host:port" (e.g. "10.10.12.1:6379") for a GCS-level connection from
+      a node on the same network as the cluster. The "ray://host:port" Ray
+      Client form also works but requires the ray[client] extra, which biota
+      does not declare as a dependency. Cluster resources were fixed at
+      'ray start' time; passing num_cpus to a cluster-connecting ray.init()
       raises ValueError, so we never pass it.
 
     local_ray and ray_address are mutually exclusive. Passing both raises

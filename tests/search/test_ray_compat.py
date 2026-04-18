@@ -99,7 +99,12 @@ def test_build_kwargs_attach() -> None:
 
 
 def test_build_kwargs_attach_with_ray_client_url() -> None:
-    """Ray Client URLs (ray://host:port) pass through verbatim."""
+    """Ray Client URLs (ray://host:port) pass through verbatim to ray.init.
+
+    Connecting via ray:// requires pip install ray[client], which biota does
+    not declare as a dependency. This test only verifies that the address
+    normalization does not mangle the URL, not that the connection succeeds.
+    """
     kwargs: dict[str, Any] = _build_ray_init_kwargs(ray_address="ray://head.example.com:10001")
     assert kwargs == {
         "address": "ray://head.example.com:10001",

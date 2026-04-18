@@ -194,7 +194,7 @@ def _normalize_ray_address(value: str | None) -> str | None:
 
     Rules:
     - None -> None
-    - "ray://..." -> passed through verbatim (Ray Client URL)
+    - "ray://..." -> passed through verbatim (Ray Client URL; requires ray[client])
     - "host:port" -> passed through verbatim
     - "host" -> "host:6379" (append default GCS port)
     """
@@ -245,7 +245,7 @@ def search_cmd(
         help=(
             "Attach to an existing Ray cluster at HOST[:PORT]. "
             f"Port defaults to {RAY_DEFAULT_PORT} if not given. "
-            "Use 'ray://host:port' for Ray Client protocol. "
+            "Use 'ray://host:port' for Ray Client protocol (requires pip install ray[client]). "
             "Mutually exclusive with --local-ray."
         ),
     ),
@@ -364,7 +364,8 @@ def ecosystem(
         "--ray-address",
         help=(
             "Attach to an existing Ray cluster at HOST[:PORT] and run experiments "
-            "in parallel. Use 'ray://host:port' for Ray Client protocol. "
+            "in parallel. Use 'ray://host:port' for Ray Client protocol "
+            "(requires pip install ray[client]). "
             "Mutually exclusive with --local-ray."
         ),
     ),

@@ -91,8 +91,10 @@ class SearchConfig:
     ray_address: str | None = None
     """If set, attach to an already-running Ray cluster at this address. Value
     is passed verbatim to ray.init(address=...). Use 'host:port' for GCS-level
-    connection or 'ray://host:port' for Ray Client. Mutually exclusive with
-    local_ray. When neither local_ray nor ray_address is set, rollouts run
+    connection from a node on the same network as the cluster. Use
+    'ray://host:port' for Ray Client from an external machine (requires
+    pip install ray[client], which biota does not declare). Mutually exclusive
+    with local_ray. When neither local_ray nor ray_address is set, rollouts run
     synchronously in the driver (the no-Ray default)."""
 
     device: str = "cpu"

@@ -256,8 +256,13 @@ The test suite runs entirely in no-Ray mode. `just smoke-ray` exercises the Ray 
 - [x] v2.2.0 - Heterogeneous ecosystems: multi-source YAML configs, species-indexed parameter localization, per-cell ownership tracking
 - [x] v2.3.0 - Per-source `patch` override; parallel ecosystem dispatch via Ray (`--local-ray`, `--ray-address`, `--workers`, `--gpu-fraction`); sidebar layout with pan/zoom canvas
 - [x] v2.4.0 - Cluster-safe ecosystem dispatch: driver-side creature loading and driver-side output materialization; transport×device smoke test grid
-- [x] v2.5.0 - Species-colored ecosystem rendering, per-species territory and mass charts, ecosystem visualization overhaul
-- [ ] v3.0.0 - Growth-modulated multi-species ecosystems: emergent interaction measurement, ecosystem outcome taxonomy
+- [x] v2.5.0 - Species-colored ecosystem rendering, per-species territory and mass charts, mobile layout overhaul
+- [x] v3.0.0 - Growth field capture, empirical S×S interaction coefficient matrix, ecosystem outcome classification, interaction heatmap in viewer
+- [ ] v3.1.0 - Spatial observables for both run modes: patch count, interface area, COM distance, spatial entropy (from existing snapshots, no new simulation code)
+- [ ] v3.2.0 - Revised outcome classifier: temporal label sequence, patch-count-based fragmentation, separate taxonomies for homogeneous and heterogeneous runs
+- [ ] v3.3.0 - Signal field: per-creature emission and sensing in a shared (H, W, 16) chemical field; mass exchange via signal; total mass conserved across mass + signal
+- [ ] v3.4.0 - Signal observables: net mass flux per species pair, signal overlap matrix, receptor-signal alignment; homogeneous self-signal flux
+- [ ] v3.5.0 - Ecosystem viewer overhaul: all new charts, signal GIF overlay, mode-specific panels, temporal outcome sequence
 
 ## References
 

@@ -571,7 +571,8 @@ def main() -> None:
         type=str,
         required=True,
         help="Ray cluster address. Same format as biota's --ray-address: "
-        "HOST[:PORT] (port defaults to 6379) or ray://HOST:PORT for Ray Client.",
+        "HOST[:PORT] (port defaults to 6379) or ray://HOST:PORT for Ray Client "
+        "(requires pip install ray[client]).",
     )
     parser.add_argument(
         "--out",
