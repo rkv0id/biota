@@ -472,6 +472,7 @@ def _render_run(run_dir: Path, archive: Archive, publish: bool = False) -> str:
 
     cfg = _load_config(run_dir)
     border: str = cfg.get("rollout", {}).get("sim", {}).get("border", "wall")
+    has_signal: bool = bool(manifest.get("signal_field", False))
     return render_archive_page(
         archive,
         run_id,
@@ -480,6 +481,7 @@ def _render_run(run_dir: Path, archive: Archive, publish: bool = False) -> str:
         stats_css=_STATS_CSS if stats_html else "",
         thumbs_dir=thumbs_dir,
         border=border,
+        has_signal=has_signal,
     )
 
 
@@ -908,6 +910,16 @@ def _render_ecosystem_run(run_dir: Path, publish: bool = False) -> str:
         species_palette=species_palette_hex[:n_species],
         interaction_coefficients=interaction_coefficients,
         outcome_label=outcome_label,
+        outcome_tooltips={
+            "coexistence": "Both species maintain stable populations and territory over time",
+            "exclusion": "One species steadily outcompetes and eliminates the other",
+            "merger": "Species boundaries dissolve -- mass intermixes into a single blended population",
+            "fragmentation": "One or both species break into disconnected spatial patches under competitive pressure",
+            "full_merger": "All copies merge into one large connected mass structure",
+            "stable_isolation": "Copies remain spatially separate and stable throughout the run",
+            "partial_clustering": "Some copies cluster together while others remain isolated",
+            "cannibalism": "Copies absorb each other -- some grow at the expense of others",
+        },
         outcome_sequence_json=json.dumps(outcome_sequence),
         species_patch_count_json=json.dumps(species_patch_count),
         species_interface_area_json=json.dumps(species_interface_area),

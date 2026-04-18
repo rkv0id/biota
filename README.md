@@ -270,7 +270,7 @@ ecosystem/20260415-104007-096-dense-population/
 ## Development
 
 ```bash
-just check       # ruff + pyright + pytest (397 tests)
+just check       # ruff + pyright + pytest (397 tests, 0 warnings)
 just smoke-ray   # local-Ray integration smoke test
 ```
 
@@ -294,7 +294,11 @@ The test suite runs entirely in no-Ray mode. `just smoke-ray` exercises the Ray 
 - [x] v3.1.0 - Spatial observables for both run modes: patch count, interface area, COM distance, spatial entropy (from existing snapshots, no new simulation code); interaction coefficients gated to contact windows; blended pair colors in viewer
 - [x] v3.2.0 - Temporal outcome classifier: per-species labeled windows, patch-count-based fragmentation, separate taxonomies for homogeneous and heterogeneous runs, outcome timeline in viewer
 - [x] v3.3.0 - Signal field: per-creature emission and sensing in a shared (H, W, 16) chemical field; switchable via --signal-field; archive-level tagging; quality filter updated for mass+signal conservation; both homo and hetero ecosystem paths signal-aware
-- [ ] v3.4.0 - Signal physics corrected: per-creature emission_rate and decay_rates (searchable, replace hardcoded constants); standard preset bumped to 500 steps; signal_preset at 800 steps auto-selected with --signal-field; CREATURE_MASS_FLOOR raised to 0.2; signal_retention quality term
+- [x] v3.4.0 - Signal physics corrected: per-creature emission_rate and decay_rates (searchable);
+  standard preset 500 steps, signal_preset 800 steps; CREATURE_MASS_FLOOR 0.2; signal_retention
+  quality term; signal observables (total history, mass fraction, receptor alignment,
+  emission-reception matrix); SIGNAL badge on archives; signal params in creature modal;
+  signal overlay checkbox on ecosystem GIF; outcome label tooltips
 - [ ] v3.5.0 - Ecosystem viewer overhaul: all new charts, signal GIF overlay, mode-specific panels, temporal outcome sequence
 
 ## References

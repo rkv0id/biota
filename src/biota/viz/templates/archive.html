@@ -791,13 +791,21 @@
             color: #fbbf77;
             border: 1px solid rgba(251, 191, 119, 0.2);
         }
+
+        .signal-badge {
+            display: inline-flex; align-items: center;
+            font-size: 9px; font-weight: 600; letter-spacing: 0.06em;
+            text-transform: uppercase; padding: 2px 6px; border-radius: 3px;
+            background: #1a2a3a; color: #3cdcc8; border: 1px solid #3cdcc8;
+            margin-left: 6px;
+        }
         {{ stats_css }}
     </style>
 </head>
 <body>
     <header class="page-header">
         <h1 class="page-title">
-            <a class="title-home" href="../../index.html"><span class="title-prefix">biota</span></a>{{ run_id }}<span class="border-badge {{ border }}">{{ border }}</span>
+            <a class="title-home" href="../../index.html"><span class="title-prefix">biota</span></a>{{ run_id }}<span class="border-badge {{ border }}">{{ border }}</span>{% if has_signal %}<span class="signal-badge" title="Signal-enabled archive">signal</span>{% endif %}
         </h1>
         <div class="page-meta">
             <span class="meta-value">{{ n_cells }}</span> cells
@@ -1024,6 +1032,43 @@ function buildParamsTable(params) {
             + '</tr>';
     }
     html += '</tbody></table>';
+
+    // Signal field parameters (only present in signal-enabled archives)
+    if (params.emission_vector && params.receptor_profile) {
+        html += '<div class="params-scalar" style="margin-top:10px;color:#3cdcc8;">SIGNAL FIELD</div>';
+        html += '<div class="params-scalar">emission rate &nbsp;=&nbsp; ' + fmt3(params.emission_rate) + '</div>';
+
+        // Channel bar charts for emission_vector, receptor_profile, decay_rates
+        const C = params.emission_vector.length;
+        function channelBars(label, values, lo, hi, color) {
+            var span = hi - lo || 1;
+            var bars = values.map(function(v) {
+                var pct = Math.round((v - lo) / span * 100);
+                var zeroPct = Math.round((0 - lo) / span * 100);
+                // For symmetric ranges draw from zero; for [0,1] draw from left
+                var left = lo < 0 ? Math.min(pct, zeroPct) : 0;
+                var width = lo < 0 ? Math.abs(pct - zeroPct) : pct;
+                return '<div style="display:flex;align-items:center;gap:3px;margin-bottom:1px;">'
+                    + '<div style="width:14px;font-size:7px;color:#71717a;text-align:right;flex-shrink:0;">' + v.toFixed(2) + '</div>'
+                    + '<div style="flex:1;height:5px;background:#27272a;border-radius:1px;position:relative;">'
+                    + '<div style="position:absolute;left:' + left + '%;width:' + width + '%;height:100%;background:' + color + ';border-radius:1px;"></div>'
+                    + '</div></div>';
+            }).join('');
+            return '<div style="margin-top:6px;">'
+                + '<div style="font-size:9px;color:#a1a1aa;margin-bottom:2px;">' + label + '</div>'
+                + bars + '</div>';
+        }
+        html += channelBars('emission vector (C=' + C + ')', params.emission_vector, 0, 1, '#3cdcc8');
+        html += channelBars('receptor profile', params.receptor_profile, -1, 1, '#a78bfa');
+        if (params.decay_rates) {
+            html += channelBars('decay rates', params.decay_rates, 0, 0.9, '#fbbf24');
+        }
+        html += '<div class="params-scalar" style="margin-top:6px;font-size:9px;color:#52525b;">'
+            + 'kernel r=' + fmt3(params.signal_kernel_r)
+            + ' &nbsp;a=[' + (params.signal_kernel_a||[]).map(fmt3).join(',') + ']'
+            + '</div>';
+    }
+
     return html;
 }
 

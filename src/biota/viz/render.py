@@ -288,6 +288,7 @@ def render_archive_page(
     stats_css: str = "",
     thumbs_dir: Path | None = None,
     border: str = "wall",
+    has_signal: bool = False,
 ) -> str:
     """Render an archive as a self-contained HTML page string.
 
@@ -362,4 +363,5 @@ def render_archive_page(
         d2_dir=d2_dir,
         footer_legend=footer_legend,
         border=border,
+        has_signal=has_signal,
     )

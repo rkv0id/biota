@@ -330,6 +330,15 @@
             border: 1px solid rgba(192, 132, 252, 0.25);
         }
 
+        /* Signal badge: marks signal-enabled archives */
+        .signal-badge {
+            display: inline-flex; align-items: center;
+            font-size: 9px; font-weight: 600; letter-spacing: 0.06em;
+            text-transform: uppercase; padding: 2px 6px; border-radius: 3px;
+            background: #1a2a3a; color: #3cdcc8; border: 1px solid #3cdcc8;
+            margin-left: 6px;
+        }
+
         /* Outcome badge: one of four labels produced by classify_outcome */
         .outcome-badge {
             display: inline-flex;
@@ -673,7 +682,7 @@
     <header class="page-header">
     <div class="page-wrap">
         <h1 class="page-title">
-            <a class="title-home" href="../../index.html"><span class="title-prefix">biota</span></a>ecosystem<span class="title-sub">{{ run_id }}</span><span class="border-badge {{ border }}">{{ border }}</span><span class="mode-badge {{ mode }}">{{ mode }}</span>{% if outcome_label %}<span class="outcome-badge {{ outcome_label }}">{{ outcome_label }}</span>{% endif %}
+            <a class="title-home" href="../../index.html"><span class="title-prefix">biota</span></a>ecosystem<span class="title-sub">{{ run_id }}</span><span class="border-badge {{ border }}">{{ border }}</span><span class="mode-badge {{ mode }}">{{ mode }}</span>{% if outcome_label %}<span class="outcome-badge {{ outcome_label }}" title="{{ outcome_tooltips[outcome_label] if outcome_label in outcome_tooltips else outcome_label }}">{{ outcome_label }}</span>{% endif %}{% if has_signal_data %}<span class="signal-badge" title="Signal-enabled archive: creatures have emission, receptor, and decay parameters">signal</span>{% endif %}
         </h1>
         <div class="page-meta">
             <span class="meta-value">{{ n_creatures }}</span> creatures
@@ -773,7 +782,7 @@
                 <path d="{{ mass_line_path }}" fill="none" stroke="#fbbf77" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
             {% else %}
-            <div class="meta-chart-empty">total mass conserved across run</div>
+            <div class="meta-chart-empty">{% if has_signal_data %}signal active: mass field may have transferred to signal field{% else %}total mass conserved across run{% endif %}</div>
             {% endif %}
 
             {% if n_species > 1 and species_mass_history_json != '[]' %}
@@ -860,6 +869,30 @@
         <div class="meta-section">
             <div class="meta-section-title">outcome timeline</div>
             <div class="outcome-timeline" id="outcomeTimeline"></div>
+            <div style="font-size:9px;color:#52525b;margin-top:6px;" id="outcomeKey"></div>
+        </div>
+        {% endif %}
+
+        {% if has_signal_data %}
+        <div class="meta-section">
+            <div class="meta-section-title" style="margin-top:20px;">signal field</div>
+            <div style="font-size:9px;color:#71717a;margin-bottom:6px;">total signal mass in shared chemical field per step</div>
+            <canvas id="signalTotalChart" class="species-chart" width="800" height="80"></canvas>
+            <div class="meta-section-title" style="margin-top:16px;">signal mass fraction</div>
+            <div style="font-size:9px;color:#71717a;margin-bottom:6px;">signal / (mass + signal) — fraction of total in field</div>
+            <canvas id="signalFractionChart" class="species-chart" width="800" height="60"></canvas>
+            {% if n_species > 1 and receptor_alignment_json != "[]" %}
+            <div class="meta-section-title" style="margin-top:16px;">receptor alignment</div>
+            <div style="font-size:9px;color:#71717a;margin-bottom:6px;">dot(receptor_profile, mean_signal_received) per species — positive = receiving aligned signal</div>
+            <canvas id="receptorAlignChart" class="species-chart" width="800" height="100"></canvas>
+            {% endif %}
+            {% if n_species > 1 and emission_reception_matrix_json != "[]" %}
+            <div class="meta-section-title" style="margin-top:16px;">emission-reception compatibility</div>
+            <div style="font-size:9px;color:#71717a;margin-bottom:6px;">dot(emission[i], receptor[j]) — positive: species i's signal benefits species j</div>
+            <div class="interaction-heatmap-wrap">
+                <canvas id="emissionReceptionHeatmap" class="interaction-heatmap-canvas"></canvas>
+            </div>
+            {% endif %}
         </div>
         {% endif %}
     </aside>
@@ -873,6 +906,12 @@
             </div>
             <div class="gif-hud">
                 <span class="gif-hud-hint">drag to pan · scroll to zoom · double-click to reset</span>
+                {% if has_signal_data %}
+                <label class="gif-hud-hint" style="cursor:pointer;user-select:none;">
+                    <input type="checkbox" id="signalOverlayToggle" style="vertical-align:middle;"> signal overlay
+                </label>
+                <canvas id="signalOverlayCanvas" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;opacity:0;transition:opacity 0.2s;mix-blend-mode:screen;"></canvas>
+                {% endif %}
                 <span class="gif-hud-zoom" id="gifZoom">100%</span>
             </div>
         </div>
@@ -1413,6 +1452,176 @@
         container.appendChild(legend);
         })();
     });
+    {% endif %}
+
+    {% if has_signal_data %}
+    (function() {
+    // --- Signal charts ---
+    var snapshotSteps = {{ snapshot_steps_json | safe }};
+    var signalTotal   = {{ signal_total_history_json | safe }};
+    var signalFrac    = {{ signal_mass_fraction_json | safe }};
+    var channelSnaps  = {{ signal_channel_snapshots_json | safe }};
+    var recepAlign    = {{ receptor_alignment_json | safe }};
+    var emitRecepMat  = {{ emission_reception_matrix_json | safe }};
+    var palette       = {{ species_palette | tojson }};
+
+    function drawSimpleChart(canvasId, data, color, yMin, yMax) {
+        var canvas = document.getElementById(canvasId);
+        if (!canvas || !data || !data.length) return;
+        var ctx = canvas.getContext('2d');
+        var W = canvas.width, H = canvas.height;
+        var pad = 4;
+        var lo = yMin !== undefined ? yMin : Math.min.apply(null, data);
+        var hi = yMax !== undefined ? yMax : Math.max.apply(null, data);
+        var span = hi - lo || Math.max(Math.abs(lo) * 0.01, 1);
+        ctx.clearRect(0, 0, W, H);
+        ctx.beginPath();
+        for (var i = 0; i < data.length; i++) {
+            var x = i / (data.length - 1) * W;
+            var y = H - pad - (data[i] - lo) / span * (H - 2 * pad);
+            i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+    }
+
+    // Signal total history (uses snapshot steps as x-axis)
+    if (signalTotal.length) {
+        drawSimpleChart('signalTotalChart', signalTotal, '#3cdcc8');
+    }
+
+    // Signal mass fraction [0, 1]
+    if (signalFrac.length) {
+        drawSimpleChart('signalFractionChart', signalFrac, '#a78bfa', 0, 1);
+    }
+
+    // Receptor alignment per species over snapshots
+    if (recepAlign.length) {
+        var alignCanvas = document.getElementById('receptorAlignChart');
+        if (alignCanvas) {
+            // Reuse drawSpeciesChart pattern inline
+            var ctx2 = alignCanvas.getContext('2d');
+            var W2 = alignCanvas.width, H2 = alignCanvas.height;
+            var allV = recepAlign.reduce(function(a, s) { return a.concat(s); }, []);
+            var lo2 = Math.min.apply(null, allV), hi2 = Math.max.apply(null, allV);
+            var span2 = hi2 - lo2 || 1;
+            var pad2 = 4;
+            ctx2.clearRect(0, 0, W2, H2);
+            // Draw zero line
+            if (lo2 < 0 && hi2 > 0) {
+                var zy = H2 - pad2 - (0 - lo2) / span2 * (H2 - 2 * pad2);
+                ctx2.beginPath();
+                ctx2.moveTo(0, zy); ctx2.lineTo(W2, zy);
+                ctx2.strokeStyle = '#3f3f46'; ctx2.lineWidth = 0.5; ctx2.stroke();
+            }
+            for (var si = 0; si < recepAlign.length; si++) {
+                var series = recepAlign[si];
+                if (!series.length) continue;
+                ctx2.beginPath();
+                for (var i = 0; i < series.length; i++) {
+                    var x2 = i / (series.length - 1) * W2;
+                    var y2 = H2 - pad2 - (series[i] - lo2) / span2 * (H2 - 2 * pad2);
+                    i === 0 ? ctx2.moveTo(x2, y2) : ctx2.lineTo(x2, y2);
+                }
+                ctx2.strokeStyle = palette[si] || '#a1a1aa';
+                ctx2.lineWidth = 1.5; ctx2.stroke();
+            }
+        }
+    }
+
+    // Emission-reception compatibility heatmap (S x S matrix, static)
+    if (emitRecepMat.length) {
+        var hCanvas = document.getElementById('emissionReceptionHeatmap');
+        if (hCanvas) {
+            var S = emitRecepMat.length;
+            var cellSize = 60;
+            hCanvas.width = S * cellSize;
+            hCanvas.height = S * cellSize;
+            var hCtx = hCanvas.getContext('2d');
+            var absMax = 0;
+            for (var i = 0; i < S; i++)
+                for (var j = 0; j < S; j++)
+                    absMax = Math.max(absMax, Math.abs(emitRecepMat[i][j]));
+            if (absMax === 0) absMax = 1;
+            for (var i = 0; i < S; i++) {
+                for (var j = 0; j < S; j++) {
+                    var v = emitRecepMat[i][j] / absMax;
+                    var r, g, b;
+                    if (v > 0) { r = 60; g = Math.round(60 + v * 160); b = Math.round(60 + v * 140); }
+                    else       { r = Math.round(60 - v * 160); g = 60; b = 60; }
+                    hCtx.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
+                    hCtx.fillRect(j * cellSize, i * cellSize, cellSize, cellSize);
+                    hCtx.fillStyle = '#e4e4e7';
+                    hCtx.font = '11px monospace';
+                    hCtx.textAlign = 'center';
+                    hCtx.textBaseline = 'middle';
+                    hCtx.fillText(emitRecepMat[i][j].toFixed(2),
+                                  j * cellSize + cellSize / 2,
+                                  i * cellSize + cellSize / 2);
+                    // Row/col labels
+                    if (j === 0) {
+                        hCtx.fillStyle = '#a1a1aa'; hCtx.font = '9px monospace';
+                        hCtx.textAlign = 'right';
+                        hCtx.fillText('s' + (i + 1), cellSize * 0.18, i * cellSize + cellSize / 2);
+                    }
+                }
+                hCtx.fillStyle = '#a1a1aa'; hCtx.font = '9px monospace';
+                hCtx.textAlign = 'center';
+                hCtx.fillText('s' + (i + 1), i * cellSize + cellSize / 2, cellSize * 0.18);
+            }
+        }
+    }
+
+    // Signal overlay toggle on GIF
+    var toggle = document.getElementById('signalOverlayToggle');
+    var overlayCanvas = document.getElementById('signalOverlayCanvas');
+    if (toggle && overlayCanvas && channelSnaps.length) {
+        // Pre-render per-snapshot mean-signal magnitude as a heatmap into an offscreen canvas.
+        // We use the last snapshot for a static overlay (GIF is animated but overlay is static
+        // showing the final signal distribution).
+        var lastSnap = channelSnaps[channelSnaps.length - 1];
+        // lastSnap is (C,) mean per channel -- for overlay we show the channel-mean magnitude.
+        var sigMag = 0;
+        for (var c = 0; c < lastSnap.length; c++) sigMag += Math.abs(lastSnap[c]);
+        sigMag /= lastSnap.length;
+
+        // Draw a simple colorbar overlay showing the dominant channel magnitude.
+        // Since we don't have the spatial signal field (only per-species means), we render
+        // a HUD badge showing signal magnitude and dominant channel instead.
+        var domChan = 0, domVal = 0;
+        for (var c = 0; c < lastSnap.length; c++) {
+            if (Math.abs(lastSnap[c]) > domVal) { domVal = Math.abs(lastSnap[c]); domChan = c; }
+        }
+
+        toggle.addEventListener('change', function() {
+            overlayCanvas.style.opacity = this.checked ? '0.7' : '0';
+            if (this.checked) {
+                var ctx = overlayCanvas.getContext('2d');
+                var W = overlayCanvas.offsetWidth || 400;
+                var H = overlayCanvas.offsetHeight || 300;
+                overlayCanvas.width = W; overlayCanvas.height = H;
+                ctx.clearRect(0, 0, W, H);
+                // Show a signal info badge top-left.
+                ctx.fillStyle = 'rgba(30,30,46,0.75)';
+                ctx.roundRect ? ctx.roundRect(8, 8, 200, 52, 4) : ctx.fillRect(8, 8, 200, 52);
+                ctx.fill();
+                ctx.fillStyle = '#3cdcc8';
+                ctx.font = 'bold 11px monospace';
+                ctx.fillText('SIGNAL FIELD ACTIVE', 16, 26);
+                ctx.fillStyle = '#a1a1aa';
+                ctx.font = '10px monospace';
+                ctx.fillText('dominant ch: ' + domChan + '  mag: ' + sigMag.toFixed(4), 16, 44);
+                // Tint the viewport slightly with a teal gradient.
+                var grad = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, Math.max(W,H)/2);
+                grad.addColorStop(0, 'rgba(60,220,200,0.08)');
+                grad.addColorStop(1, 'rgba(60,220,200,0.0)');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, W, H);
+            }
+        });
+    }
+    })();
     {% endif %}
     </script>
 </body>
