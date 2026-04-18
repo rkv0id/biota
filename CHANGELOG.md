@@ -1,6 +1,51 @@
 # Changelog
 
+## v3.0.0 - 2026-04-17
+
+Growth field capture, empirical interaction coefficients, ecosystem outcome classification, interaction heatmap in viewer.
+
+### Per-species growth field capture
+
+`LocalizedFlowLenia.step` refactored through `_step_inner(capture_growth)`. New `step_with_diagnostics()` returns `(LocalizedState, list[Tensor])` where each tensor is `G_s_total` (H, W) for that species before ownership blending. Called only at snapshot steps; `step()` used at all others. Growth tensors stored as `SimOutput.growth_snapshots[snap_idx][species_idx]`.
+
+### Empirical interaction coefficients
+
+`compute_interaction_coefficients()` in `src/biota/ecosystem/interaction.py`. For each ordered pair (A, B): `mean(G_A | W_B > 0.3) - mean(G_A | W_B < 0.05)`, accumulated across all snapshots. NaN when species never co-occurred. Result is an S x S nested list stored in `summary.json["measures"]["interaction_coefficients"]`.
+
+### Ecosystem outcome classification
+
+`classify_outcome()` in `src/biota/ecosystem/interaction.py`. Priority order: exclusion (species territory drops below 5% of initial) > merger (per-cell ownership entropy > 0.85 of maximum) > fragmentation (territory CV > 0.5) > coexistence. Stored in `summary.json["measures"]["outcome_label"]`.
+
+### Interaction heatmap and outcome badge in viewer
+
+`ecosystem.html` extended with an outcome badge in the header (four CSS classes: merger, coexistence, exclusion, fragmentation) and an S x S canvas heatmap in the sidebar. Color scale: teal at +maxAbs, red at -maxAbs, dark neutral at zero, gray for NaN. Axis labels colored by species palette. `build_index.py` reads both new fields from `summary.json` and passes them to the template.
+
+### Mobile ecosystem layout overhaul
+
+Breakpoint moved from 700px to 1100px. `body` gets `height: auto; overflow: auto` at mobile. A separate `.eco-gif-mobile` element is rendered above the sidebar and shown at mobile; the pan/zoom viewport is hidden with `display: none !important`. Pan/zoom JS gates on `!isMobile` check at 1100px. Eliminates touch-scroll hijacking on all mobile viewports.
+
+---
+
+## v2.5.0 - 2026-04-16
+
+Species-colored ecosystem rendering, per-species territory and mass charts, atlas IA restructure, architecture SVG diagrams.
+
+### Species-colored GIF rendering
+
+8-color perceptually distinct palette (`SPECIES_PALETTE` in `run.py`): warm orange, sky blue, lime green, hot pink, purple, gold, teal, coral. `_colorize_frame_species` blends palette colors by ownership weight per pixel, scales by mass intensity. Homogeneous runs keep the existing magma colormap.
+
+### Per-species territory and mass charts
+
+Effective area (`sum(weights[:,:,s])`) tracked at every step as `species_territory_history`. Per-species mass also tracked. Both stored in `EcosystemMeasures` and `summary.json`. Rendered as multi-line canvas charts in the ecosystem viewer sidebar via shared `drawSpeciesChart()` (DPR-aware, subsamples to canvas width).
+
+### Atlas IA restructure
+
+System tab now lands (was About). Contains architecture diagrams, cluster stats, descriptor grid. About trimmed to project context and further reading. Three architecture SVGs (`search-loop.svg`, `archive-grid.svg`, `ecosystem-dispatch.svg`) inlined at build time via Jinja variables in `build_index.py`.
+
+---
+
 ## v2.4.0 - 2026-04-15
+
 
 Cluster-safe ecosystem dispatch. The v2.3.0 cluster ecosystem path made two wrong filesystem assumptions: workers could read the driver's archive directory (broken — `FileNotFoundError` on the first task), and outputs written by workers would be visible to the driver (broken — outputs landed on the worker filesystem). v2.4.0 fixes both with the same architectural pattern: dispatcher tasks are self-contained payloads, no shared filesystem assumed at any point.
 
