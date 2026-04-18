@@ -29,6 +29,8 @@ import torch
 from biota.ecosystem.analytics import (
     HeteroSpatial,
     HomoSpatial,
+    compute_signal_observables,
+    compute_signal_observables_hetero,
     compute_spatial_observables_hetero,
     compute_spatial_observables_homo,
 )
@@ -74,6 +76,16 @@ class SimOutput:
     # the (H, W) float32 G_s_total for species s before ownership blending.
     # Empty for homo runs. Used to compute empirical interaction coefficients.
     growth_snapshots: list[list[np.ndarray]] = field(default_factory=list)
+    # Signal field total mass per step (parallel to mass_history). Empty when
+    # no signal field is active.
+    signal_total_history: list[float] = field(default_factory=list)
+    # Mean signal per channel at each snapshot step. Shape: (n_snapshots, C).
+    # Empty when no signal field is active.
+    signal_channel_snapshots: list[list[float]] = field(default_factory=list)
+    # Per-species mean signal received per snapshot. Shape: (S, n_snapshots, C).
+    # Computed as mean signal per channel over species s territory. Empty for
+    # non-signal or homo runs.
+    species_signal_received: list[list[list[float]]] = field(default_factory=list)
 
 
 # Perceptually distinct hues for species coloring. Ordered so the first
@@ -303,6 +315,7 @@ def _compute_outputs(
     run_dir: Path,
     sim: SimOutput,
     elapsed: float,
+    creatures: list[RolloutResult] | None = None,
 ) -> tuple[EcosystemResult, dict[str, bytes]]:
     """Compute the EcosystemResult and the artifact bytes dict.
 
@@ -389,6 +402,28 @@ def _compute_outputs(
             ho.initial_patch_sizes,
         )
 
+    # Signal observables (empty when no signal field was active).
+    sig_obs = compute_signal_observables(
+        sim.signal_total_history,
+        sim.mass_history,
+        sim.signal_channel_snapshots,
+    )
+    # Hetero-specific signal observables: receptor alignment + emission-reception matrix.
+    # Extract per-species emission_vector and receptor_profile from creatures when available.
+    emission_vectors: list[list[float]] | None = None
+    receptor_profiles: list[list[float]] | None = None
+    if creatures is not None and has_ownership:
+        from biota.search.params import has_signal_field
+
+        if all(has_signal_field(c.params) for c in creatures):
+            emission_vectors = [c.params["emission_vector"] for c in creatures]  # type: ignore[typeddict-item]
+            receptor_profiles = [c.params["receptor_profile"] for c in creatures]  # type: ignore[typeddict-item]
+    sig_obs_hetero = compute_signal_observables_hetero(
+        sim.species_signal_received,
+        species_params_emission_vector=emission_vectors,
+        species_params_receptor_profile=receptor_profiles,
+    )
+
     outcome_sequence = [
         [{"label": w.label, "from": w.from_step, "to": w.to_step} for w in series]
         for series in outcome_seq.series
@@ -416,6 +451,12 @@ def _compute_outputs(
         mass_spatial_entropy_history=ho.mass_spatial_entropy_history if ho else [],
         initial_patch_sizes=ho.initial_patch_sizes if ho else [],
         patch_size_history=ho.patch_size_history if ho else [],
+        signal_total_history=sig_obs["signal_total_history"],  # type: ignore[arg-type]
+        signal_mass_fraction=sig_obs["signal_mass_fraction"],  # type: ignore[arg-type]
+        signal_channel_snapshots=sig_obs["signal_channel_snapshots"],  # type: ignore[arg-type]
+        dominant_channel_history=sig_obs["dominant_channel_history"],  # type: ignore[arg-type]
+        receptor_alignment=sig_obs_hetero["receptor_alignment"],  # type: ignore[arg-type]
+        emission_reception_matrix=sig_obs_hetero["emission_reception_matrix"],  # type: ignore[arg-type]
     )
 
     if sim.snapshots:
@@ -519,15 +560,22 @@ def _run_homogeneous(
     snapshots: list[np.ndarray] = []
     steps_taken: list[int] = []
     mass_history: list[float] = [initial_mass]
+    signal_total_history: list[float] = [float(signal.sum().item()) if signal is not None else 0.0]
+    signal_channel_snapshots: list[list[float]] = []
 
     for step in range(1, config.steps + 1):
         state, signal = fl.step(state, signal)
         mass_history.append(float(state.sum().item()))
+        signal_total_history.append(float(signal.sum().item()) if signal is not None else 0.0)
 
         if step % config.snapshot_every == 0 or step == config.steps:
             frame = state[:, :, 0].detach().cpu().numpy().astype(np.float32)
             snapshots.append(frame)
             steps_taken.append(step)
+            if signal is not None:
+                # Mean per channel across all spatial positions.
+                ch_mean = signal.mean(dim=(0, 1)).detach().cpu().tolist()
+                signal_channel_snapshots.append(ch_mean)
 
     return SimOutput(
         snapshots=snapshots,
@@ -538,6 +586,8 @@ def _run_homogeneous(
         species_mass_history=[mass_history],
         species_territory_history=[],
         ownership_snapshots=[],
+        signal_total_history=signal_total_history,
+        signal_channel_snapshots=signal_channel_snapshots,
     )
 
 
@@ -593,6 +643,10 @@ def _run_heterogeneous(
     growth_snapshots: list[list[np.ndarray]] = []
     steps_taken: list[int] = []
     mass_history: list[float] = [initial_mass]
+    signal_total_history: list[float] = [float(signal.sum().item()) if signal is not None else 0.0]
+    signal_channel_snapshots: list[list[float]] = []
+    # species_signal_received[s] = list of (C,) mean signal per snapshot
+    species_signal_received: list[list[list[float]]] = [[] for _ in range(n_species)]
     species_mass: list[list[float]] = []
     species_territory: list[list[float]] = []
     for s in range(n_species):
@@ -609,6 +663,8 @@ def _run_heterogeneous(
         else:
             state = lfl.step(state)
         mass_history.append(float(state.mass.sum().item()))
+        sig = state.signal
+        signal_total_history.append(float(sig.sum().item()) if sig is not None else 0.0)
         for s in range(n_species):
             sp_mass = float((state.mass[:, :, 0] * state.weights[:, :, s]).sum().item())
             species_mass[s].append(sp_mass)
@@ -621,6 +677,19 @@ def _run_heterogeneous(
             steps_taken.append(step)
             ownership_snapshots.append(state.weights.detach().cpu().numpy().astype(np.float32))
             growth_snapshots.append([g.numpy().astype(np.float32) for g in growth_tensors])
+            if sig is not None:
+                ch_mean = sig.mean(dim=(0, 1)).detach().cpu().tolist()
+                signal_channel_snapshots.append(ch_mean)
+                # Per-species: mean signal over cells where species has ownership > 0.1
+                for s in range(n_species):
+                    w_s = state.weights[:, :, s]  # (H, W)
+                    territory_mask = (w_s > 0.1).float().unsqueeze(-1)  # (H, W, 1)
+                    total_territory = territory_mask.sum().item()
+                    if total_territory > 0:
+                        sp_sig = (sig * territory_mask).sum(dim=(0, 1)) / total_territory
+                        species_signal_received[s].append(sp_sig.detach().cpu().tolist())
+                    else:
+                        species_signal_received[s].append([0.0] * sig.shape[-1])
 
     return SimOutput(
         snapshots=snapshots,
@@ -632,6 +701,9 @@ def _run_heterogeneous(
         species_territory_history=species_territory,
         ownership_snapshots=ownership_snapshots,
         growth_snapshots=growth_snapshots,
+        signal_total_history=signal_total_history,
+        signal_channel_snapshots=signal_channel_snapshots,
+        species_signal_received=species_signal_received,
     )
 
 
@@ -706,6 +778,7 @@ def compute_ecosystem(
         run_dir=run_dir,
         sim=sim,
         elapsed=elapsed,
+        creatures=creatures,
     )
     # config.json travels in the same artifact bundle so the driver
     # materializes it alongside everything else.

@@ -252,3 +252,128 @@ def compute_spatial_observables_homo(
         initial_patch_sizes=initial_patch_sizes,
         patch_size_history=patch_size_history,
     )
+
+
+# ---------------------------------------------------------------------------
+# Signal observables
+# ---------------------------------------------------------------------------
+
+
+def compute_signal_observables(
+    signal_total_history: list[float],
+    mass_history: list[float],
+    signal_channel_snapshots: list[list[float]],
+) -> dict[str, list[float] | list[list[float]]]:
+    """Scalar signal observables computable for both homo and hetero runs.
+
+    Args:
+        signal_total_history: total signal field mass per step.
+        mass_history: total mass field per step (parallel list).
+        signal_channel_snapshots: (n_snapshots, C) mean per-channel signal.
+
+    Returns dict with:
+        signal_total_history:    raw total signal mass per step.
+        signal_mass_fraction:    signal / (mass + signal) per step in [0, 1].
+        signal_channel_snapshots: per-snapshot mean per channel (passthrough).
+        dominant_channel_history: index of the channel with highest mean
+                                  at each snapshot. Empty if no snapshots.
+    """
+    if not signal_total_history:
+        return {
+            "signal_total_history": [],
+            "signal_mass_fraction": [],
+            "signal_channel_snapshots": [],
+            "dominant_channel_history": [],
+        }
+
+    fraction: list[float] = []
+    for sig, mass in zip(signal_total_history, mass_history, strict=True):
+        total = sig + mass
+        fraction.append(float(sig / total) if total > 0 else 0.0)
+
+    dominant: list[float] = []
+    for ch_means in signal_channel_snapshots:
+        if ch_means:
+            dominant.append(float(ch_means.index(max(ch_means))))
+        else:
+            dominant.append(0.0)
+
+    return {
+        "signal_total_history": signal_total_history,
+        "signal_mass_fraction": fraction,
+        "signal_channel_snapshots": signal_channel_snapshots,
+        "dominant_channel_history": dominant,
+    }
+
+
+def compute_signal_observables_hetero(
+    species_signal_received: list[list[list[float]]],
+    species_params_emission_vector: list[list[float]] | None = None,
+    species_params_receptor_profile: list[list[float]] | None = None,
+) -> dict[str, object]:
+    """Signal observables specific to heterogeneous runs.
+
+    Args:
+        species_signal_received: (S, n_snapshots, C) mean signal received
+            per species per snapshot.
+        species_params_emission_vector: (S, C) emission_vector per species.
+            Used to compute signal overlap (who emits what each species receives).
+        species_params_receptor_profile: (S, C) receptor_profile per species.
+            Used to compute receptor alignment.
+
+    Returns dict with:
+        receptor_alignment: (S, n_snapshots) float. Dot product of each
+            species' receptor_profile with the mean signal it's actually
+            receiving at each snapshot. Positive = receiving aligned signal,
+            negative = receiving anti-aligned signal, near zero = mismatch.
+        emission_reception_matrix: (S, S) float. How much of each species'
+            typical emission vector aligns with each other species' receptor.
+            entry [i][j] = dot(emission_vector[i], receptor_profile[j]).
+            Positive = species i's signal is beneficial to species j.
+            Negative = species i's signal inhibits species j.
+    """
+    if not species_signal_received:
+        return {
+            "receptor_alignment": [],
+            "emission_reception_matrix": [],
+        }
+
+    s = len(species_signal_received)
+
+    # receptor_alignment[sp][snapshot] = dot(receptor_profile[sp], mean_signal_received[sp][snap])
+    receptor_alignment: list[list[float]] = []
+    if species_params_receptor_profile is not None:
+        for sp in range(s):
+            rec = species_params_receptor_profile[sp]
+            alignments: list[float] = []
+            for snap_sig in species_signal_received[sp]:
+                if len(snap_sig) == len(rec) and snap_sig:
+                    dot = float(sum(r * v for r, v in zip(rec, snap_sig, strict=True)))
+                else:
+                    dot = 0.0
+                alignments.append(dot)
+            receptor_alignment.append(alignments)
+    else:
+        receptor_alignment = [[] for _ in range(s)]
+
+    # emission_reception_matrix[i][j] = dot(emission_vector[i], receptor_profile[j])
+    emission_reception_matrix: list[list[float]] = []
+    if species_params_emission_vector is not None and species_params_receptor_profile is not None:
+        for i in range(s):
+            row: list[float] = []
+            for j in range(s):
+                ev = species_params_emission_vector[i]
+                rp = species_params_receptor_profile[j]
+                if len(ev) == len(rp) and ev:
+                    dot = float(sum(e * r for e, r in zip(ev, rp, strict=True)))
+                else:
+                    dot = 0.0
+                row.append(dot)
+            emission_reception_matrix.append(row)
+    else:
+        emission_reception_matrix = []
+
+    return {
+        "receptor_alignment": receptor_alignment,
+        "emission_reception_matrix": emission_reception_matrix,
+    }

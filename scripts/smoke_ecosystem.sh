@@ -211,6 +211,12 @@ for run_dir in runs:
         assert len(seq) == 2, f"{name}: hetero outcome_sequence should have 2 series, got {len(seq)}"
         print(f"  {name}: outcome={m['outcome_label']}, coefficients={ic}")
 
+    # Signal observable fields must be present (may be empty for non-signal creatures).
+    for field in ("signal_total_history", "signal_mass_fraction",
+                  "signal_channel_snapshots", "dominant_channel_history",
+                  "receptor_alignment", "emission_reception_matrix"):
+        assert field in m, f"{name}: missing signal field {field!r} in measures"
+
 print("all summary.json checks passed")
 PYEOF
 

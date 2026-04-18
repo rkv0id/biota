@@ -855,6 +855,13 @@ def _render_ecosystem_run(run_dir: Path, publish: bool = False) -> str:
     mass_spatial_entropy_history: list[float] = measures.get("mass_spatial_entropy_history", [])
     initial_patch_sizes: list[int] = measures.get("initial_patch_sizes", [])
     patch_size_history: list[list[int]] = measures.get("patch_size_history", [])
+    signal_total_history: list[float] = measures.get("signal_total_history", [])
+    signal_mass_fraction: list[float] = measures.get("signal_mass_fraction", [])
+    signal_channel_snapshots: list[list[float]] = measures.get("signal_channel_snapshots", [])
+    dominant_channel_history: list[float] = measures.get("dominant_channel_history", [])
+    receptor_alignment: list[list[float]] = measures.get("receptor_alignment", [])
+    emission_reception_matrix: list[list[float]] = measures.get("emission_reception_matrix", [])
+    has_signal_data: bool = bool(signal_total_history and any(v > 0 for v in signal_total_history))
     n_species = len(sources_ctx) if sources_ctx else 1
     # Species palette as hex strings, matching SPECIES_PALETTE in run.py.
     species_palette_hex = [
@@ -912,6 +919,13 @@ def _render_ecosystem_run(run_dir: Path, publish: bool = False) -> str:
         initial_patch_sizes_json=json.dumps(initial_patch_sizes),
         patch_size_history_json=json.dumps(patch_size_history),
         snapshot_steps_json=json.dumps(snapshot_steps),
+        has_signal_data=has_signal_data,
+        signal_total_history_json=json.dumps(signal_total_history),
+        signal_mass_fraction_json=json.dumps(signal_mass_fraction),
+        signal_channel_snapshots_json=json.dumps(signal_channel_snapshots),
+        dominant_channel_history_json=json.dumps(dominant_channel_history),
+        receptor_alignment_json=json.dumps(receptor_alignment),
+        emission_reception_matrix_json=json.dumps(emission_reception_matrix),
     )
 
 

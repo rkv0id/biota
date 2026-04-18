@@ -21,6 +21,8 @@ import numpy as np
 from biota.ecosystem.analytics import (
     HeteroSpatial,
     HomoSpatial,
+    compute_signal_observables,
+    compute_signal_observables_hetero,
     compute_spatial_observables_hetero,
     compute_spatial_observables_homo,
     patch_count,
@@ -331,3 +333,110 @@ def test_homo_entropy_increases_as_mass_spreads() -> None:
     r_spread = compute_spatial_observables_homo([spread])
 
     assert r_spread.mass_spatial_entropy_history[0] > r_conc.mass_spatial_entropy_history[0]
+
+
+# ===========================================================================
+# Signal observables
+# ===========================================================================
+
+
+def test_signal_observables_empty_when_no_signal() -> None:
+    obs = compute_signal_observables([], [], [])
+    assert obs["signal_total_history"] == []
+    assert obs["signal_mass_fraction"] == []
+    assert obs["signal_channel_snapshots"] == []
+    assert obs["dominant_channel_history"] == []
+
+
+def test_signal_mass_fraction_sums_correctly() -> None:
+    # 50 units mass, 50 units signal -> fraction = 0.5
+    obs = compute_signal_observables(
+        signal_total_history=[50.0, 40.0],
+        mass_history=[50.0, 60.0],
+        signal_channel_snapshots=[],
+    )
+    fracs = obs["signal_mass_fraction"]
+    assert isinstance(fracs, list)
+    assert abs(float(fracs[0]) - 0.5) < 1e-6  # type: ignore[arg-type]
+    assert abs(float(fracs[1]) - 0.4) < 1e-6  # type: ignore[arg-type]
+
+
+def test_signal_mass_fraction_zero_when_no_signal() -> None:
+    obs = compute_signal_observables(
+        signal_total_history=[0.0, 0.0],
+        mass_history=[100.0, 100.0],
+        signal_channel_snapshots=[],
+    )
+    fracs = obs["signal_mass_fraction"]
+    assert isinstance(fracs, list)
+    assert all(f == 0.0 for f in fracs)
+
+
+def test_dominant_channel_picks_highest_mean() -> None:
+    # Channel 3 has highest mean at first snapshot, channel 0 at second.
+    ch = [[0.1, 0.2, 0.1, 0.9, 0.1], [0.8, 0.1, 0.1, 0.2, 0.1]]
+    obs = compute_signal_observables(
+        signal_total_history=[1.0, 1.0],
+        mass_history=[10.0, 10.0],
+        signal_channel_snapshots=ch,
+    )
+    dom = obs["dominant_channel_history"]
+    assert isinstance(dom, list)
+    assert dom[0] == 3.0
+    assert dom[1] == 0.0
+
+
+def test_signal_observables_hetero_empty_when_no_data() -> None:
+    obs = compute_signal_observables_hetero([])
+    assert obs["receptor_alignment"] == []
+    assert obs["emission_reception_matrix"] == []
+
+
+def test_receptor_alignment_positive_when_aligned() -> None:
+    # Species 0 has receptor_profile tuned to channel 0.
+    # When species 0 is receiving signal dominated by channel 0, alignment should be positive.
+    # Species 0 receives mostly channel-0 signal at both snapshots.
+    species_signal_received = [
+        [[0.5, 0.0, 0.0, 0.0], [0.4, 0.0, 0.0, 0.0]],  # species 0: 2 snapshots
+    ]
+    obs = compute_signal_observables_hetero(
+        species_signal_received,
+        species_params_receptor_profile=[[1.0, 0.0, 0.0, 0.0]],
+    )
+    alignment = obs["receptor_alignment"]
+    assert isinstance(alignment, list) and len(alignment) == 1
+    assert all(a > 0 for a in alignment[0])
+
+
+def test_receptor_alignment_negative_when_anti_aligned() -> None:
+    # Receptor profile is negative on channel 0 but receives mostly channel 0.
+    species_signal_received = [
+        [[0.5, 0.0, 0.0, 0.0]],
+    ]
+    obs = compute_signal_observables_hetero(
+        species_signal_received,
+        species_params_receptor_profile=[[-1.0, 0.0, 0.0, 0.0]],
+    )
+    alignment = obs["receptor_alignment"]
+    assert isinstance(alignment, list)
+    assert alignment[0][0] < 0
+
+
+def test_emission_reception_matrix_shape() -> None:
+    # 2 species, C=4 channels.
+    ev = [[0.5, 0.5, 0.0, 0.0], [0.0, 0.0, 0.5, 0.5]]
+    rp = [[1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]]
+    obs = compute_signal_observables_hetero(
+        species_signal_received=[[[], []], [[], []]],  # 2 species, 2 snapshots, no channels
+        species_params_emission_vector=ev,
+        species_params_receptor_profile=rp,
+    )
+    mat = obs["emission_reception_matrix"]
+    assert isinstance(mat, list) and len(mat) == 2
+    assert all(len(row) == 2 for row in mat)
+    # ev[0] dot rp[0] = 0.5*1.0 + 0.5*0.0 = 0.5
+    assert abs(mat[0][0] - 0.5) < 1e-6
+    # ev[0] dot rp[1] = 0.5*0.0 + 0.5*0.0 = 0.0
+    assert abs(mat[0][1] - 0.0) < 1e-6
+    # ev[1] dot rp[1] = 0.0 + 0.0 + 0.5*1.0 + 0.5*0.0 = 0.5
+    assert abs(mat[1][1] - 0.5) < 1e-6
