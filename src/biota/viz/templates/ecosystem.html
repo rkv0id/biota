@@ -777,7 +777,7 @@
             {% endif %}
 
             {% if n_species > 1 and species_mass_history_json != '[]' %}
-            <div class="meta-section-label" style="margin-top: 16px;">species mass</div>
+            <div class="meta-section-title" style="margin-top: 20px;">species mass</div>
             <div class="species-legend">
                 {% for src in sources %}
                 <span class="species-legend-item" title="{{ src.run_id }} cell {{ src.cell }}">
@@ -790,44 +790,44 @@
             {% endif %}
 
             {% if n_species > 1 and species_territory_history_json != '[]' %}
-            <div class="meta-section-label" style="margin-top: 16px;">species territory</div>
+            <div class="meta-section-title" style="margin-top: 20px;">species territory</div>
             <canvas id="territoryChart" class="species-chart" width="800" height="160"></canvas>
             {% endif %}
 
             {% if n_species > 1 and species_patch_count_json != '[]' %}
-            <div class="meta-section-label" style="margin-top: 16px;">patch count per species</div>
+            <div class="meta-section-title" style="margin-top: 20px;">patch count per species</div>
             <canvas id="patchCountChart" class="species-chart" width="800" height="120"></canvas>
             {% endif %}
 
             {% if n_species > 1 and species_spatial_entropy_json != '[]' %}
-            <div class="meta-section-label" style="margin-top: 16px;">spatial entropy per species</div>
+            <div class="meta-section-title" style="margin-top: 20px;">spatial entropy per species</div>
             <canvas id="spatialEntropyChart" class="species-chart" width="800" height="120"></canvas>
             {% endif %}
 
             {% if n_species > 1 and species_interface_area_json != '[]' %}
-            <div class="meta-section-label" style="margin-top: 16px;">interface area per pair</div>
+            <div class="meta-section-title" style="margin-top: 20px;">interface area per pair</div>
             <div id="interfaceLegend" class="species-legend"></div>
             <canvas id="interfaceAreaChart" class="species-chart" width="800" height="120"></canvas>
             {% endif %}
 
             {% if n_species > 1 and species_com_distance_json != '[]' %}
-            <div class="meta-section-label" style="margin-top: 16px;">COM distance per pair</div>
+            <div class="meta-section-title" style="margin-top: 20px;">COM distance per pair</div>
             <div id="comLegend" class="species-legend"></div>
             <canvas id="comDistanceChart" class="species-chart" width="800" height="120"></canvas>
             {% endif %}
 
             {% if mode == 'homogeneous' and patch_count_history_json != '[]' %}
-            <div class="meta-section-label" style="margin-top: 16px;">patch count over time</div>
+            <div class="meta-section-title" style="margin-top: 20px;">patch count over time</div>
             <canvas id="homoPathCountChart" class="species-chart" width="800" height="120"></canvas>
             {% endif %}
 
             {% if mode == 'homogeneous' and mass_spatial_entropy_history_json != '[]' %}
-            <div class="meta-section-label" style="margin-top: 16px;">spatial entropy over time</div>
+            <div class="meta-section-title" style="margin-top: 20px;">spatial entropy over time</div>
             <canvas id="homoEntropyChart" class="species-chart" width="800" height="120"></canvas>
             {% endif %}
 
             {% if mode == 'homogeneous' and patch_size_history_json != '[]' %}
-            <div class="meta-section-label" style="margin-top: 16px;">final patch sizes</div>
+            <div class="meta-section-title" style="margin-top: 20px;">final patch sizes</div>
             <canvas id="patchSizeChart" class="species-chart" width="800" height="100"></canvas>
             {% endif %}
         </div>

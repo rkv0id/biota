@@ -484,6 +484,7 @@
 
             <h2>Ecosystem dispatch</h2>
             <p>Once the archive is populated, <code>biota ecosystem</code> takes specific archive cells and runs them on a shared grid to see how creatures interact. A homogeneous run spawns N copies of one species. A heterogeneous run mixes two or more species, each with its own full parameter set — kernel radii, growth windows, weights — using species-indexed LocalizedFlowLenia: per-cell species ownership tracks which lineage owns the local mass, blends growth fields by ownership, and advects with the flow.</p>
+            <p>After the simulation, a suite of spatial observables is computed from the captured snapshots without re-running the simulation. For heterogeneous runs: patch count per species over time, interface area and center-of-mass distance per species pair, and spatial entropy per species. For homogeneous runs: patch count over time, spatial entropy, and patch size distribution. Interaction coefficients between species are gated to snapshot windows where species actually co-occur, so they measure contact dynamics rather than spatial separation. A temporal outcome classifier assigns per-species labeled windows — coexistence, exclusion, merger, or fragmentation for heterogeneous runs; stable isolation, full merger, partial clustering, cannibalism, or fragmentation for homogeneous runs — and derives a dominant run-level label shown as a badge. The ecosystem viewer renders all charts alongside the animated GIF.</p>
             <p>Ecosystem dispatch is Ray-correct in both directions: each experiment is a self-contained payload. The driver loads creatures from its local archive and ships them as part of the task input; workers simulate and render to bytes; the driver materializes outputs to its own local filesystem. No shared filesystem is assumed at any step, so experiments run correctly on real multi-node clusters without NFS or rsync setup.</p>
 
             <div class="diagram-frame">{{ svg_ecosystem_dispatch | safe }}</div>
@@ -728,12 +729,46 @@
 <span class="cmd">    --descriptors oscillation,compactness,png_compressibility</span></pre>
 
             <h2>Choosing descriptors</h2>
-            <p>Pass <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">--descriptors</code> with three comma-separated names to control which behavioral axes the archive uses. With 9 built-ins there are 84 possible configurations. You can also supply your own via <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">--descriptor-module path/to/file.py</code> — the file must define a list named <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">DESCRIPTORS</code> containing <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">Descriptor</code> objects.</p>
+            <p>Pass <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">--descriptors</code> with three comma-separated names to control which behavioral axes the archive uses. With 15 built-ins there are 455 possible configurations. You can also supply your own via <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">--descriptor-module path/to/file.py</code> — the file must define a list named <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">DESCRIPTORS</code> containing <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">Descriptor</code> objects.</p>
             <pre class="code-block"><span class="comment"># Default axes</span>
 <span class="cmd">uv run biota search --descriptors velocity,gyradius,spectral_entropy</span>
 
 <span class="comment"># Shape and complexity axes</span>
 <span class="cmd">uv run biota search --descriptors oscillation,compactness,png_compressibility</span></pre>
+
+            <h2>Ecosystem experiments</h2>
+            <p>Once you have an archive, define one or more ecosystem experiments in a YAML config. A homogeneous run spawns multiple copies of one creature; a heterogeneous run mixes creatures from different archive cells.</p>
+            <pre class="code-block"><span class="comment"># experiments.yaml</span>
+experiments:
+  - name: self-interaction
+    grid: 256
+    steps: 5000
+    snapshot_every: 50
+    border: torus
+    output_format: gif
+    spawn: {seed: 42, min_dist: 80, patch: 48}
+    sources:
+      - run: &lt;your-run-id&gt;
+        cell: [5, 23, 13]
+        n: 4
+
+  - name: two-species
+    grid: 256
+    steps: 5000
+    snapshot_every: 50
+    border: torus
+    output_format: gif
+    spawn: {seed: 42, min_dist: 100, patch: 48}
+    sources:
+      - run: &lt;your-run-id&gt;
+        cell: [5, 23, 13]
+        n: 2
+      - run: &lt;your-run-id&gt;
+        cell: [9, 14, 11]
+        n: 2</pre>
+            <pre class="code-block"><span class="comment"># Run experiments, then rebuild the atlas to include ecosystem results</span>
+<span class="cmd">biota ecosystem --config experiments.yaml --device cuda</span>
+<span class="cmd">python scripts/build_index.py --output-dir archive --ecosystem-dir ecosystem --publish</span></pre>
 
             <h2>More detail</h2>
             <div class="pill-row">

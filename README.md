@@ -26,6 +26,8 @@ The driver owns the archive and the search loop. Each Ray task evaluates B creat
 
 Once the archive is populated, `biota ecosystem` takes specific archive cells and runs them on a shared grid to see how creatures interact. A homogeneous run spawns `N` copies of one species. A heterogeneous run mixes two or more species, each with its own full parameter set (kernel radii, growth windows, weights), using species-indexed LocalizedFlowLenia: per-cell species ownership tracks which lineage owns the local mass, blends growth fields by ownership, and advects with the flow.
 
+After the simulation, a suite of spatial observables is computed from the captured snapshots -- no re-simulation required. For heterogeneous runs: patch count per species over time, interface area per species pair, center-of-mass distance per pair, and spatial entropy per species. For homogeneous runs: patch count over time, spatial entropy, and patch size distribution. Interaction coefficients are gated to snapshot windows where species actually co-occur, so they measure contact dynamics rather than spatial separation. A temporal outcome classifier assigns per-species labeled windows (coexistence, exclusion, merger, fragmentation for heterogeneous; stable_isolation, full_merger, partial_clustering, cannibalism, fragmentation for homogeneous) and derives a dominant run-level label shown as a badge in the viewer.
+
 Ecosystem dispatch is Ray-correct: each experiment is a self-contained payload. The driver loads creatures from its local archive and ships them with the config; workers simulate and render to bytes; the driver materializes outputs locally. No shared filesystem is assumed at any step, so experiments run correctly on real multi-node clusters without NFS or rsync setup.
 
 <p align="center"><img src="docs/ecosystem-dispatch.svg" alt="Ecosystem dispatch: driver loads creatures, workers simulate and render, driver materializes" width="95%"/></p>
@@ -227,17 +229,20 @@ archive/20260413-134355-hazy-creek/
 ```
 ecosystem/20260415-104007-096-dense-population/
 ├── config.json         # resolved experiment configuration
-├── summary.json        # mode, sources, measures (mass history, turnover)
+├── summary.json        # mode, sources, measures (mass history, spatial observables,
+│                       # interaction coefficients, outcome label and temporal sequence)
 ├── ecosystem.gif       # animated GIF output (gif mode)
 ├── frames/             # individual PNG snapshots (frames mode)
 ├── trajectory.npy      # raw float32 mass snapshots (n_snapshots, H, W)
-└── view.html           # ecosystem viewer with mass chart and animation
+└── view.html           # ecosystem viewer: mass/territory/patch count/entropy charts,
+                        #   interface area and COM distance per pair, interaction heatmap,
+                        #   outcome timeline
 ```
 
 ## Development
 
 ```bash
-just check       # ruff + pyright + pytest (273 tests)
+just check       # ruff + pyright + pytest (355 tests)
 just smoke-ray   # local-Ray integration smoke test
 ```
 
@@ -258,8 +263,8 @@ The test suite runs entirely in no-Ray mode. `just smoke-ray` exercises the Ray 
 - [x] v2.4.0 - Cluster-safe ecosystem dispatch: driver-side creature loading and driver-side output materialization; transport×device smoke test grid
 - [x] v2.5.0 - Species-colored ecosystem rendering, per-species territory and mass charts, mobile layout overhaul
 - [x] v3.0.0 - Growth field capture, empirical S×S interaction coefficient matrix, ecosystem outcome classification, interaction heatmap in viewer
-- [ ] v3.1.0 - Spatial observables for both run modes: patch count, interface area, COM distance, spatial entropy (from existing snapshots, no new simulation code)
-- [ ] v3.2.0 - Revised outcome classifier: temporal label sequence, patch-count-based fragmentation, separate taxonomies for homogeneous and heterogeneous runs
+- [x] v3.1.0 - Spatial observables for both run modes: patch count, interface area, COM distance, spatial entropy (from existing snapshots, no new simulation code); interaction coefficients gated to contact windows; blended pair colors in viewer
+- [x] v3.2.0 - Temporal outcome classifier: per-species labeled windows, patch-count-based fragmentation, separate taxonomies for homogeneous and heterogeneous runs, outcome timeline in viewer
 - [ ] v3.3.0 - Signal field: per-creature emission and sensing in a shared (H, W, 16) chemical field; mass exchange via signal; total mass conserved across mass + signal
 - [ ] v3.4.0 - Signal observables: net mass flux per species pair, signal overlap matrix, receptor-signal alignment; homogeneous self-signal flux
 - [ ] v3.5.0 - Ecosystem viewer overhaul: all new charts, signal GIF overlay, mode-specific panels, temporal outcome sequence
