@@ -198,6 +198,8 @@ def _params_from_creature(creature: RolloutResult, device: str) -> Params:
         receptor_profile=torch.tensor(p["receptor_profile"], dtype=torch.float32, device=device),  # type: ignore[typeddict-item]
         emission_rate=float(p["emission_rate"]),  # type: ignore[typeddict-item]
         decay_rates=torch.tensor(p["decay_rates"], dtype=torch.float32, device=device),  # type: ignore[typeddict-item]
+        alpha_coupling=float(p["alpha_coupling"]),  # type: ignore[typeddict-item]
+        beta_modulation=float(p["beta_modulation"]),  # type: ignore[typeddict-item]
         signal_kernel_r=float(p["signal_kernel_r"]),  # type: ignore[typeddict-item]
         signal_kernel_a=torch.tensor(p["signal_kernel_a"], dtype=torch.float32, device=device),  # type: ignore[typeddict-item]
         signal_kernel_b=torch.tensor(p["signal_kernel_b"], dtype=torch.float32, device=device),  # type: ignore[typeddict-item]

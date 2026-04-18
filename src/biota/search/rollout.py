@@ -137,6 +137,8 @@ def _params_dict_to_tensors(params: ParamDict, device: str) -> Params:
             dtype=torch.float32,
             device=device,
         ),
+        alpha_coupling=float(params["alpha_coupling"]),  # type: ignore[typeddict-item]
+        beta_modulation=float(params["beta_modulation"]),  # type: ignore[typeddict-item]
         signal_kernel_r=float(params["signal_kernel_r"]),  # type: ignore[typeddict-item]
         signal_kernel_a=torch.tensor(
             params["signal_kernel_a"],  # type: ignore[typeddict-item]

@@ -1046,7 +1046,11 @@ function buildParamsTable(params) {
     if (params.emission_vector && params.receptor_profile) {
         html += '<div class="params-scalar" style="margin-top:14px;padding-top:10px;border-top:1px solid rgba(60,220,200,0.15);color:#52525b;letter-spacing:0.07em;font-size:9px;">SIGNAL FIELD</div>';
         html += '<div class="params-scalar" style="color:#71717a;">emission_rate &nbsp;=&nbsp; '
-            + '<span style="color:#a1a1aa;">' + fmt3(params.emission_rate) + '</span>';
+            + '<span style="color:#a1a1aa;">' + fmt3(params.emission_rate) + '</span>'
+            + '&nbsp;&nbsp;&nbsp;α_coupling &nbsp;=&nbsp; '
+            + '<span style="color:#a1a1aa;">' + fmt3(params.alpha_coupling) + '</span>'
+            + '&nbsp;&nbsp;&nbsp;β_modulation &nbsp;=&nbsp; '
+            + '<span style="color:#a1a1aa;">' + fmt3(params.beta_modulation) + '</span>';
         html += '&nbsp;&nbsp;&nbsp;signal_kernel_r &nbsp;=&nbsp; '
             + '<span style="color:#a1a1aa;">' + fmt3(params.signal_kernel_r) + '</span>';
         html += '&nbsp;&nbsp;&nbsp;a=['  

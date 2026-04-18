@@ -283,7 +283,7 @@ ecosystem/20260415-104007-096-dense-population/
 ## Development
 
 ```bash
-just check       # ruff + pyright + pytest (401 tests, 0 warnings)
+just check       # ruff + pyright + pytest (406 tests, 0 warnings)
 just smoke-ray   # local-Ray integration smoke test
 ```
 

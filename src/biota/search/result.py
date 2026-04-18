@@ -23,19 +23,24 @@ class _SignalParams(TypedDict, total=False):
     """Optional signal field parameters. Present only in signal-enabled archives.
 
     emission_vector:  (C,) floats in [0, 1]. How the creature distributes
-                      emitted signal across the C channels. Emission is
-                      proportional to local growth field magnitude.
+                      emitted signal across the C channels.
     receptor_profile: (C,) floats in [-1, 1]. Dot product with the convolved
                       signal field produces a scalar growth boost. Negative
                       values produce an inhibitory (aversive) response.
     emission_rate:    Scalar in [0.001, 0.05]. Fraction of positive growth
-                      activity converted to signal per step. Controls how
-                      aggressively the creature emits; lower values reduce
-                      mass bleed over long ecosystem runs.
-    decay_rates:      (C,) floats in [0, 0.9]. Per-channel decay rate applied
-                      each step. Higher values dissipate signal faster.
-                      Creatures with low decay on key channels maintain
-                      longer-range chemical gradients.
+                      activity converted to signal per step.
+    decay_rates:      (C,) floats in [0, 0.9]. Per-channel decay rate.
+    alpha_coupling:   Scalar in [-1, 1]. Reception-to-growth coupling strength.
+                      Positive = chemotaxis (grow into favorable signal gradients,
+                      including other species' territory -- enables predation).
+                      Negative = chemorepulsion (grow away from signal).
+                      Zero = current additive behavior (no cross-species coupling).
+    beta_modulation:  Scalar in [-1, 1]. Adaptive emission modulation.
+                      Positive = quorum sensing (amplify emission when receiving
+                      high signal -- positive chemical feedback).
+                      Negative = feedback inhibition (suppress emission under
+                      high signal -- self-limiting, stabilizes coexistence).
+                      Zero = static emission rate.
     signal_kernel_r:  Kernel radius scale in [0.2, 1.0].
     signal_kernel_a:  (3,) ring centers in [0, 1].
     signal_kernel_b:  (3,) ring weights in [0, 1].
@@ -46,6 +51,8 @@ class _SignalParams(TypedDict, total=False):
     receptor_profile: list[float]
     emission_rate: float
     decay_rates: list[float]
+    alpha_coupling: float
+    beta_modulation: float
     signal_kernel_r: float
     signal_kernel_a: list[float]
     signal_kernel_b: list[float]

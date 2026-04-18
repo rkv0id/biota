@@ -70,6 +70,11 @@ class Params:
     signal_kernel_a: torch.Tensor | None = None  # (3,) ring centers
     signal_kernel_b: torch.Tensor | None = None  # (3,) ring weights
     signal_kernel_w: torch.Tensor | None = None  # (3,) ring widths
+    # Coupling parameters -- optional, default to zero (no coupling).
+    alpha_coupling: float | None = None  # scalar in [-1, 1]: chemotaxis (+) vs chemorepulsion (-)
+    beta_modulation: float | None = (
+        None  # scalar in [-1, 1]: quorum sensing (+) vs feedback inhibition (-)
+    )
 
     @property
     def has_signal(self) -> bool:
@@ -200,25 +205,44 @@ class FlowLenia:
             # does not emit signal.
             G_pos = U_sum.clamp(min=0.0)  # (H, W)
 
+            # Reception: convolve signal field, dot with receptor profile.
+            # Done before emission so beta_modulation can read the pre-emission field.
+            sig_t = signal.permute(2, 0, 1)  # (C, H, W)
+            fSig = torch.fft.fft2(sig_t)  # (C, H, W) complex
+            convolved = torch.fft.ifft2(self._fK_signal * fSig).real  # (C, H, W)
+            # Dot product with receptor profile -> (H, W) reception field.
+            receptor_response = (convolved * self.params.receptor_profile.view(-1, 1, 1)).sum(dim=0)
+
+            # Alpha coupling: multiplicative reception-to-growth.
+            # G *= (1 + alpha * reception) -- applies everywhere, not just own territory.
+            # Positive alpha = chemotaxis (grow toward favorable signal).
+            # Negative alpha = chemorepulsion (grow away from signal).
+            # Clamped to [0, inf) to prevent growth reversal.
+            alpha_c = self.params.alpha_coupling if self.params.alpha_coupling is not None else 0.0
+            if alpha_c != 0.0:
+                growth_multiplier = (1.0 + alpha_c * receptor_response).clamp(min=0.0)
+                U_sum = U_sum * growth_multiplier
+                G_pos = U_sum.clamp(min=0.0)  # recompute after coupling
+
+            # Adaptive emission via beta_modulation.
+            # Positive beta = quorum sensing: received signal amplifies emission.
+            # Negative beta = feedback inhibition: received signal suppresses emission.
+            base_rate = self.params.emission_rate if self.params.emission_rate is not None else 0.0
+            beta_m = self.params.beta_modulation if self.params.beta_modulation is not None else 0.0
+            if beta_m != 0.0:
+                received_mean = float(receptor_response.mean().item())
+                effective_rate = float(
+                    max(0.0, min(0.1, base_rate * (1.0 + beta_m * received_mean)))
+                )
+            else:
+                effective_rate = base_rate
+
             # Emission: drain from mass, add to signal field.
-            # emission_vector (C,) distributes the scalar emission across channels.
-            rate = self.params.emission_rate if self.params.emission_rate is not None else 0.0
-            emitted = G_pos * rate  # (H, W) scalar per cell
-            # Clamp emitted to available mass to avoid going negative.
+            emitted = G_pos * effective_rate  # (H, W) scalar per cell
             emitted = torch.minimum(emitted, A2.clamp(min=0.0))
             emit_per_channel = emitted.unsqueeze(-1) * self.params.emission_vector  # (H, W, C)
             signal = signal + emit_per_channel
             A2 = A2 - emitted  # drain from mass
-
-            # Reception: convolve signal field, dot with receptor profile.
-            # Convolve each channel independently using the signal kernel.
-            sig_t = signal.permute(2, 0, 1)  # (C, H, W)
-            fSig = torch.fft.fft2(sig_t)  # (C, H, W) complex
-            convolved = torch.fft.ifft2(self._fK_signal * fSig).real  # (C, H, W)
-            # Dot product with receptor profile: (H, W)
-            receptor_response = (convolved * self.params.receptor_profile.view(-1, 1, 1)).sum(dim=0)
-            # Add receptor response as growth boost (can be positive or negative).
-            U_sum = U_sum + receptor_response
 
         nabla_U = self._sobel(U_sum)
         nabla_A = self._sobel(A2)
