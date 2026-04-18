@@ -9,6 +9,12 @@ Parameter ranges follow the JAX reference (erwanplantec/FlowLenia)'s __init__,
 not paper Table 1: tighter on h, b, and s_growth to avoid degenerate kernels.
 Mutation sigma is 10% of each parameter's range width.
 
+Signal field parameters (emission_vector, receptor_profile, signal_kernel_*)
+are sampled and mutated only when signal_field=True is passed to sample_random
+or mutate. Standard searches omit these keys entirely; the ParamDict type
+declares them as optional so the rest of the codebase can gate on their
+presence without extra flags.
+
 Returns ParamDict (TypedDict of plain Python primitives) rather than the
 Params dataclass from biota.sim.flowlenia. The rollout function (step 6)
 converts ParamDict -> Params on the worker's device.
@@ -20,6 +26,10 @@ import numpy as np
 
 from biota.search.result import ParamDict
 
+SIGNAL_CHANNELS = 16
+"""Number of signal field channels. Fixed at the platform level -- changing
+this invalidates all existing signal-enabled archives."""
+
 
 @dataclass(frozen=True)
 class ParameterSpec:
@@ -27,7 +37,10 @@ class ParameterSpec:
     """Field name in the ParamDict."""
 
     shape: str
-    """One of 'scalar', 'k', 'k3'. Defines how the random sample is shaped."""
+    """One of 'scalar', 'k', 'k3', 'c', 'c_sym', 'k3_fixed'.
+    'c'       = length-C vector in [low, high].
+    'c_sym'   = length-C vector in [low, high] (symmetric range, e.g. [-1, 1]).
+    'k3_fixed'= (3,) vector (signal kernel has fixed 3-ring structure, not per-k)."""
 
     low: float
     high: float
@@ -38,8 +51,7 @@ class ParameterSpec:
         return self.high - self.low
 
 
-# Source of truth: ranges and sigmas. Used by in_range and as documentation
-# for the per-field sampling/mutation logic below.
+# Source of truth: ranges and sigmas for mass-kernel parameters.
 PARAMETER_SPECS: tuple[ParameterSpec, ...] = (
     ParameterSpec("R", "scalar", 2.0, 25.0, 2.3),
     ParameterSpec("r", "k", 0.2, 1.0, 0.08),
@@ -51,7 +63,20 @@ PARAMETER_SPECS: tuple[ParameterSpec, ...] = (
     ParameterSpec("w", "k3", 0.01, 0.5, 0.049),
 )
 
-_SPECS_BY_NAME: dict[str, ParameterSpec] = {spec.name: spec for spec in PARAMETER_SPECS}
+# Signal field parameter specs. Sampled/mutated only when signal_field=True.
+# sigma is ~10% of range width, matching the mass-kernel convention.
+SIGNAL_PARAMETER_SPECS: tuple[ParameterSpec, ...] = (
+    ParameterSpec("emission_vector", "c", 0.0, 1.0, 0.1),
+    ParameterSpec("receptor_profile", "c_sym", -1.0, 1.0, 0.2),
+    ParameterSpec("signal_kernel_r", "scalar", 0.2, 1.0, 0.08),
+    ParameterSpec("signal_kernel_a", "k3_fixed", 0.0, 1.0, 0.1),
+    ParameterSpec("signal_kernel_b", "k3_fixed", 0.001, 1.0, 0.0999),
+    ParameterSpec("signal_kernel_w", "k3_fixed", 0.01, 0.5, 0.049),
+)
+
+_SPECS_BY_NAME: dict[str, ParameterSpec] = {
+    spec.name: spec for spec in (*PARAMETER_SPECS, *SIGNAL_PARAMETER_SPECS)
+}
 
 
 def _uniform_scalar(rng: np.random.Generator, name: str) -> float:
@@ -69,13 +94,27 @@ def _uniform_k3(rng: np.random.Generator, name: str, kernels: int) -> list[list[
     return rng.uniform(spec.low, spec.high, size=(kernels, 3)).tolist()
 
 
-def sample_random(kernels: int = 10, seed: int = 0) -> ParamDict:
+def _uniform_c(rng: np.random.Generator, name: str) -> list[float]:
+    spec = _SPECS_BY_NAME[name]
+    return rng.uniform(spec.low, spec.high, size=SIGNAL_CHANNELS).tolist()
+
+
+def _uniform_k3_fixed(rng: np.random.Generator, name: str) -> list[float]:
+    """Sample a (3,) vector for the signal kernel's ring structure."""
+    spec = _SPECS_BY_NAME[name]
+    return rng.uniform(spec.low, spec.high, size=3).tolist()
+
+
+def sample_random(kernels: int = 10, seed: int = 0, signal_field: bool = False) -> ParamDict:
     """Draw a fresh ParamDict uniformly from the JAX-reference parameter prior.
 
     Same seed -> same output, regardless of host.
+
+    When signal_field=True, also samples signal parameters (emission_vector,
+    receptor_profile, signal_kernel_*). When False, these keys are absent.
     """
     rng = np.random.default_rng(seed)
-    return ParamDict(
+    params = ParamDict(
         R=_uniform_scalar(rng, "R"),
         r=_uniform_k(rng, "r", kernels),
         m=_uniform_k(rng, "m", kernels),
@@ -85,6 +124,14 @@ def sample_random(kernels: int = 10, seed: int = 0) -> ParamDict:
         b=_uniform_k3(rng, "b", kernels),
         w=_uniform_k3(rng, "w", kernels),
     )
+    if signal_field:
+        params["emission_vector"] = _uniform_c(rng, "emission_vector")
+        params["receptor_profile"] = _uniform_c(rng, "receptor_profile")
+        params["signal_kernel_r"] = _uniform_scalar(rng, "signal_kernel_r")
+        params["signal_kernel_a"] = _uniform_k3_fixed(rng, "signal_kernel_a")
+        params["signal_kernel_b"] = _uniform_k3_fixed(rng, "signal_kernel_b")
+        params["signal_kernel_w"] = _uniform_k3_fixed(rng, "signal_kernel_w")
+    return params
 
 
 def _perturb_scalar(rng: np.random.Generator, name: str, value: float) -> float:
@@ -109,13 +156,32 @@ def _perturb_k3(rng: np.random.Generator, name: str, value: list[list[float]]) -
     return perturbed.tolist()
 
 
+def _perturb_c(rng: np.random.Generator, name: str, value: list[float]) -> list[float]:
+    spec = _SPECS_BY_NAME[name]
+    arr = np.asarray(value, dtype=np.float64)
+    noise = rng.normal(0.0, spec.sigma, size=arr.shape)
+    perturbed = np.clip(arr + noise, spec.low, spec.high)
+    return perturbed.tolist()
+
+
+def _perturb_k3_fixed(rng: np.random.Generator, name: str, value: list[float]) -> list[float]:
+    spec = _SPECS_BY_NAME[name]
+    arr = np.asarray(value, dtype=np.float64)
+    noise = rng.normal(0.0, spec.sigma, size=arr.shape)
+    perturbed = np.clip(arr + noise, spec.low, spec.high)
+    return perturbed.tolist()
+
+
 def mutate(parent: ParamDict, seed: int = 0) -> ParamDict:
     """Return a perturbed copy of parent: per-field Gaussian noise, clipped to range.
 
     Same parent + same seed -> same child.
+
+    Signal parameters are mutated when present in the parent; their presence
+    is detected from the ParamDict keys, so no extra flag is needed.
     """
     rng = np.random.default_rng(seed)
-    return ParamDict(
+    child = ParamDict(
         R=_perturb_scalar(rng, "R", parent["R"]),
         r=_perturb_k(rng, "r", parent["r"]),
         m=_perturb_k(rng, "m", parent["m"]),
@@ -125,6 +191,35 @@ def mutate(parent: ParamDict, seed: int = 0) -> ParamDict:
         b=_perturb_k3(rng, "b", parent["b"]),
         w=_perturb_k3(rng, "w", parent["w"]),
     )
+    if "emission_vector" in parent:
+        child["emission_vector"] = _perturb_c(rng, "emission_vector", parent["emission_vector"])  # type: ignore[typeddict-item]
+        child["receptor_profile"] = _perturb_c(rng, "receptor_profile", parent["receptor_profile"])  # type: ignore[typeddict-item]
+        child["signal_kernel_r"] = _perturb_scalar(
+            rng,
+            "signal_kernel_r",
+            parent["signal_kernel_r"],  # type: ignore[typeddict-item]
+        )
+        child["signal_kernel_a"] = _perturb_k3_fixed(
+            rng,
+            "signal_kernel_a",
+            parent["signal_kernel_a"],  # type: ignore[typeddict-item]
+        )
+        child["signal_kernel_b"] = _perturb_k3_fixed(
+            rng,
+            "signal_kernel_b",
+            parent["signal_kernel_b"],  # type: ignore[typeddict-item]
+        )
+        child["signal_kernel_w"] = _perturb_k3_fixed(
+            rng,
+            "signal_kernel_w",
+            parent["signal_kernel_w"],  # type: ignore[typeddict-item]
+        )
+    return child
+
+
+def has_signal_field(params: ParamDict) -> bool:
+    """True if params contains signal field parameters."""
+    return "emission_vector" in params
 
 
 def in_range(params: ParamDict) -> bool:
@@ -147,6 +242,21 @@ def in_range(params: ParamDict) -> bool:
         rows: list[list[float]] = params[name]  # type: ignore[literal-required]
         for row in rows:
             for v in row:
+                if v < spec.low or v > spec.high:
+                    return False
+
+    if has_signal_field(params):
+        for name in ("emission_vector", "receptor_profile"):
+            spec = _SPECS_BY_NAME[name]
+            for v in params[name]:  # type: ignore[literal-required]
+                if v < spec.low or v > spec.high:
+                    return False
+        sk_r_spec = _SPECS_BY_NAME["signal_kernel_r"]
+        if not (sk_r_spec.low <= params["signal_kernel_r"] <= sk_r_spec.high):  # type: ignore[typeddict-item]
+            return False
+        for name in ("signal_kernel_a", "signal_kernel_b", "signal_kernel_w"):
+            spec = _SPECS_BY_NAME[name]
+            for v in params[name]:  # type: ignore[literal-required]
                 if v < spec.low or v > spec.high:
                     return False
 

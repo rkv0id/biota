@@ -19,13 +19,40 @@ import numpy as np
 # === type aliases ===
 
 
-class ParamDict(TypedDict):
+class _SignalParams(TypedDict, total=False):
+    """Optional signal field parameters. Present only in signal-enabled archives.
+
+    emission_vector:  (C,) floats in [0, 1]. How the creature distributes
+                      emitted signal across the C channels. Emission is
+                      proportional to local growth field magnitude.
+    receptor_profile: (C,) floats in [-1, 1]. Dot product with the convolved
+                      signal field produces a scalar growth boost. Negative
+                      values produce an inhibitory (aversive) response.
+    signal_kernel_r:  Kernel radius scale in [0.2, 1.0].
+    signal_kernel_a:  (3,) ring centers in [0, 1].
+    signal_kernel_b:  (3,) ring weights in [0, 1].
+    signal_kernel_w:  (3,) ring widths in [0.01, 0.5].
+    """
+
+    emission_vector: list[float]
+    receptor_profile: list[float]
+    signal_kernel_r: float
+    signal_kernel_a: list[float]
+    signal_kernel_b: list[float]
+    signal_kernel_w: list[float]
+
+
+class ParamDict(_SignalParams):
     """Parameters as plain Python primitives, suitable for pickling and JSON.
 
     Mirrors the Params dataclass in biota.sim.flowlenia but without torch
     tensors. Keys map directly to FlowLenia's parameter names. Field shapes
     follow the JAX reference: scalar R, length-k vectors for r/m/s/h,
     (k, 3)-shaped lists for a/b/w.
+
+    Signal field parameters (emission_vector, receptor_profile,
+    signal_kernel_*) are optional and only present in archives produced by
+    searches run with --signal-field. See _SignalParams for field semantics.
     """
 
     R: float

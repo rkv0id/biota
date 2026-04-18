@@ -57,13 +57,20 @@ smoke-noray-cpu-search:
     SMOKE_TRANSPORT=noray \
     ./scripts/smoke_search.sh
 
+smoke-noray-cpu-signal-search:
+    SMOKE_LABEL=smoke-noray-cpu-signal-search \
+    SMOKE_DEVICE=cpu \
+    SMOKE_TRANSPORT=noray \
+    SMOKE_SIGNAL_FIELD=1 \
+    ./scripts/smoke_search.sh
+
 smoke-noray-cpu-ecosystem:
     SMOKE_LABEL=smoke-noray-cpu-ecosystem \
     SMOKE_DEVICE=cpu \
     SMOKE_TRANSPORT=noray \
     ./scripts/smoke_ecosystem.sh
 
-smoke-noray-cpu: smoke-noray-cpu-search smoke-noray-cpu-ecosystem
+smoke-noray-cpu: smoke-noray-cpu-search smoke-noray-cpu-signal-search smoke-noray-cpu-ecosystem
 
 smoke-noray-mps-search:
     SMOKE_LABEL=smoke-noray-mps-search \

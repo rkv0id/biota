@@ -115,6 +115,12 @@ class SearchConfig:
     --descriptor-module). Controls both the archive axes and the rollout
     descriptor computation."""
 
+    signal_field: bool = False
+    """When True, signal field parameters (emission_vector, receptor_profile,
+    signal_kernel_*) are sampled and mutated alongside the mass-kernel params.
+    Produces a signal-enabled archive tagged in manifest.json. Incompatible
+    with non-signal archives in ecosystem runs."""
+
     def __post_init__(self) -> None:
         if self.local_ray and self.ray_address is not None:
             raise ValueError(
@@ -302,7 +308,11 @@ SamplerFn = Callable[[_LoopState, int], tuple[ParamDict, CellCoord | None]]
 
 def _random_sampler(state: _LoopState, seed: int) -> tuple[ParamDict, CellCoord | None]:
     """Phase 1 sampler: uniform from the prior, no parent."""
-    params = sample_random(kernels=state.config.rollout.sim.kernels, seed=seed)
+    params = sample_random(
+        kernels=state.config.rollout.sim.kernels,
+        seed=seed,
+        signal_field=state.config.signal_field,
+    )
     return params, None
 
 
@@ -311,9 +321,11 @@ def _make_mutation_sampler(state: _LoopState) -> SamplerFn:
 
     def sampler(state: _LoopState, seed: int) -> tuple[ParamDict, CellCoord | None]:
         if len(state.archive) == 0:
-            # Archive empty (e.g. all random-phase rollouts were rejected) -
-            # fall back to fresh random sampling so the search can keep moving.
-            params = sample_random(kernels=state.config.rollout.sim.kernels, seed=seed)
+            params = sample_random(
+                kernels=state.config.rollout.sim.kernels,
+                seed=seed,
+                signal_field=state.config.signal_field,
+            )
             return params, None
         rng_np = np.random.default_rng(seed)
         parent_cell, parent_result = state.archive.random_parent(rng_np)
@@ -481,6 +493,7 @@ def _write_manifest(state: _LoopState) -> None:
         "config": _config_to_jsonable(state.config),
         "host": os.uname().nodename if hasattr(os, "uname") else "unknown",
         "ray_active": False,  # set after init in a follow-up; not load-bearing
+        "signal_field": state.config.signal_field,
     }
     path = state.run_dir / "manifest.json"
     path.write_text(json.dumps(manifest, indent=2))

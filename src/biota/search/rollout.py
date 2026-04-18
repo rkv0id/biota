@@ -88,7 +88,9 @@ def pretty_preset() -> RolloutConfig:
 
 def _params_dict_to_tensors(params: ParamDict, device: str) -> Params:
     """Convert a pickle-safe ParamDict to a torch-tensor Params on the given device."""
-    return Params(
+    from biota.search.params import has_signal_field
+
+    base = Params(
         R=params["R"],
         r=torch.tensor(params["r"], dtype=torch.float32, device=device),
         m=torch.tensor(params["m"], dtype=torch.float32, device=device),
@@ -97,6 +99,44 @@ def _params_dict_to_tensors(params: ParamDict, device: str) -> Params:
         a=torch.tensor(params["a"], dtype=torch.float32, device=device),
         b=torch.tensor(params["b"], dtype=torch.float32, device=device),
         w=torch.tensor(params["w"], dtype=torch.float32, device=device),
+    )
+    if not has_signal_field(params):
+        return base
+    return Params(
+        R=base.R,
+        r=base.r,
+        m=base.m,
+        s=base.s,
+        h=base.h,
+        a=base.a,
+        b=base.b,
+        w=base.w,
+        emission_vector=torch.tensor(
+            params["emission_vector"],  # type: ignore[typeddict-item]
+            dtype=torch.float32,
+            device=device,
+        ),
+        receptor_profile=torch.tensor(
+            params["receptor_profile"],  # type: ignore[typeddict-item]
+            dtype=torch.float32,
+            device=device,
+        ),
+        signal_kernel_r=float(params["signal_kernel_r"]),  # type: ignore[typeddict-item]
+        signal_kernel_a=torch.tensor(
+            params["signal_kernel_a"],  # type: ignore[typeddict-item]
+            dtype=torch.float32,
+            device=device,
+        ),
+        signal_kernel_b=torch.tensor(
+            params["signal_kernel_b"],  # type: ignore[typeddict-item]
+            dtype=torch.float32,
+            device=device,
+        ),
+        signal_kernel_w=torch.tensor(
+            params["signal_kernel_w"],  # type: ignore[typeddict-item]
+            dtype=torch.float32,
+            device=device,
+        ),
     )
 
 
@@ -207,6 +247,15 @@ def rollout(
     )
     initial_mass = float(state.sum().item())
 
+    # Initialize signal field when creature has signal params.
+    # The background field is spatially varied so receptors have something
+    # to respond to during solo rollouts.
+    signal: torch.Tensor | None = None
+    initial_signal_mass = 0.0
+    if sim_params.has_signal:
+        signal = fl.make_initial_signal_field(seed=seed)
+        initial_signal_mass = float(signal.sum().item())
+
     # Clamp the thumbnail target to the sim grid so dev preset (small grid)
     # doesn't try to upsample - if the configured thumbnail size is larger
     # than the sim grid, cap it at the grid itself. This lets us keep a
@@ -238,9 +287,10 @@ def rollout(
         if step in frame_indices:
             thumb_buf.append(_downsample_frame(state, thumbnail_size))
         if step < config.steps:
-            state = fl.step(state)
+            state, signal = fl.step(state, signal)
 
     final_mass = float(state.sum().item())
+    final_signal_mass = float(signal.sum().item()) if signal is not None else 0.0
 
     # 6. Final state to numpy for descriptor functions
     final_state_np = state[:, :, 0].detach().cpu().numpy().astype(np.float32)
@@ -284,6 +334,8 @@ def rollout(
             initial_mass=initial_mass,
             final_mass=final_mass,
             trace=trace,
+            initial_total=initial_mass + initial_signal_mass,
+            final_signal_mass=final_signal_mass,
         ),
         active_descriptors=config.active_descriptors,
     )

@@ -32,6 +32,10 @@ ALIVE_LOWER = 0.5
 ALIVE_UPPER = 2.0
 LOCALIZED_THRESHOLD = 0.6
 PERSISTENT_DESCRIPTOR_DRIFT = 0.2
+# A creature that emits most of its mass into the signal field but maintains
+# a minimal mass-field structure still passes the total-mass conservation check.
+# This floor ensures the creature itself still exists as a mass-field entity.
+CREATURE_MASS_FLOOR = 0.1
 
 
 @dataclass(frozen=True)
@@ -39,15 +43,27 @@ class RolloutEvaluation:
     """Inputs the quality function needs to evaluate a rollout.
 
     Attributes:
-        initial_mass: Total mass at step 0.
-        final_mass: Total mass at the final step.
-        trace: RolloutTrace covering the last >=100 steps. The trace must have
-            at least 2*WINDOW steps for the persistent filter to be evaluable.
+        initial_mass:  Total mass at step 0 (mass field only; signal field
+                       starts from a known low background, not zero).
+        final_mass:    Mass field total at the final step.
+        trace:         RolloutTrace covering the last >=100 steps.
+        initial_total: initial_mass + initial_signal_mass. Used by the alive
+                       filter when signal field is active. Equal to initial_mass
+                       for non-signal rollouts (signal starts at 0).
+        final_signal_mass: Total signal field mass at the final step. Zero for
+                       non-signal rollouts.
     """
 
     initial_mass: float
     final_mass: float
     trace: RolloutTrace
+    initial_total: float = 0.0
+    final_signal_mass: float = 0.0
+
+    def __post_init__(self) -> None:
+        # Default initial_total to initial_mass when not supplied (non-signal path).
+        if self.initial_total == 0.0:
+            object.__setattr__(self, "initial_total", self.initial_mass)
 
 
 @dataclass(frozen=True)
@@ -63,8 +79,29 @@ class EvaluationResult:
     rejection_reason: str | None
 
 
-def _alive(initial_mass: float, final_mass: float) -> bool:
-    return ALIVE_LOWER * initial_mass <= final_mass <= ALIVE_UPPER * initial_mass
+def _alive(eval_input: RolloutEvaluation) -> bool:
+    """Two-part alive check for signal-aware rollouts.
+
+    1. Total conserved mass (mass + signal) stays within [0.5, 2.0] of
+       the initial total. This handles the signal field correctly: a creature
+       that emits into the signal field reduces its mass field mass but the
+       total should remain conserved.
+
+    2. Mass field alone must not collapse below CREATURE_MASS_FLOOR fraction
+       of initial_mass. Without this, a pure emitter that converts all mass
+       to signal passes condition 1 but has no creature left.
+
+    For non-signal rollouts, initial_total == initial_mass and
+    final_signal_mass == 0, so this reduces to the original check.
+    """
+    final_total = eval_input.final_mass + eval_input.final_signal_mass
+    init = eval_input.initial_total
+    if not (ALIVE_LOWER * init <= final_total <= ALIVE_UPPER * init):
+        return False
+    return not (
+        eval_input.initial_mass > 0
+        and eval_input.final_mass < CREATURE_MASS_FLOOR * eval_input.initial_mass
+    )
 
 
 def _localized(trace: RolloutTrace) -> bool:
@@ -143,7 +180,7 @@ def evaluate(
     active_descriptors controls which three descriptors are computed for the
     archive coordinates. When None, uses (velocity, gyradius, spectral_entropy).
     """
-    if not _alive(eval_input.initial_mass, eval_input.final_mass):
+    if not _alive(eval_input):
         return EvaluationResult(descriptors=None, quality=None, rejection_reason="dead")
 
     if not _localized(eval_input.trace):

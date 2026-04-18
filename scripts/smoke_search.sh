@@ -21,6 +21,7 @@
 #   SMOKE_BATCH_SIZE    defaults to 4 (cpu) or 16 (mps/cuda)
 #   SMOKE_WORKERS       defaults to 4 (local) or 3 (cluster); ignored for noray
 #   SMOKE_BUDGET        defaults to 20 (noray/local) or 30 (cluster)
+#   SMOKE_SIGNAL_FIELD  if set to '1', passes --signal-field to biota search
 #
 # All venv lives under /tmp and is cleaned up on exit.
 
@@ -101,11 +102,17 @@ fi
 log "running search (device=$SMOKE_DEVICE, transport=$SMOKE_TRANSPORT, batch=$SMOKE_BATCH_SIZE, budget=$SMOKE_BUDGET)..."
 # cd /tmp so we are NOT in the source tree - guards against any tool
 # inadvertently re-adding src/ to sys.path
+SIGNAL_ARGS=()
+if [ "${SMOKE_SIGNAL_FIELD:-}" = "1" ]; then
+    SIGNAL_ARGS+=(--signal-field)
+fi
+
 cd /tmp && ${ENV_ARGS[@]+"${ENV_ARGS[@]}"} "$SMOKE_VENV/bin/biota" search \
     --preset dev \
     --budget "$SMOKE_BUDGET" --random-phase "$SMOKE_RANDOM_PHASE" \
     --device "$SMOKE_DEVICE" --batch-size "$SMOKE_BATCH_SIZE" \
     --grid 32 --steps 110 \
-    ${TRANSPORT_ARGS[@]+"${TRANSPORT_ARGS[@]}"}
+    ${TRANSPORT_ARGS[@]+"${TRANSPORT_ARGS[@]}"} \
+    ${SIGNAL_ARGS[@]+"${SIGNAL_ARGS[@]}"}
 
 log "done."

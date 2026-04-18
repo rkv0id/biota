@@ -485,6 +485,7 @@
             <h2>Ecosystem dispatch</h2>
             <p>Once the archive is populated, <code>biota ecosystem</code> takes specific archive cells and runs them on a shared grid to see how creatures interact. A homogeneous run spawns N copies of one species. A heterogeneous run mixes two or more species, each with its own full parameter set — kernel radii, growth windows, weights — using species-indexed LocalizedFlowLenia: per-cell species ownership tracks which lineage owns the local mass, blends growth fields by ownership, and advects with the flow.</p>
             <p>After the simulation, a suite of spatial observables is computed from the captured snapshots without re-running the simulation. For heterogeneous runs: patch count per species over time, interface area and center-of-mass distance per species pair, and spatial entropy per species. For homogeneous runs: patch count over time, spatial entropy, and patch size distribution. Interaction coefficients between species are gated to snapshot windows where species actually co-occur, so they measure contact dynamics rather than spatial separation. A temporal outcome classifier assigns per-species labeled windows — coexistence, exclusion, merger, or fragmentation for heterogeneous runs; stable isolation, full merger, partial clustering, cannibalism, or fragmentation for homogeneous runs — and derives a dominant run-level label shown as a badge. The ecosystem viewer renders all charts alongside the animated GIF.</p>
+            <p>An optional signal field adds a shared chemical communication layer. When <code>--signal-field</code> is passed to <code>biota search</code>, each creature also searches emission and receptor parameters across 16 independent signal channels. In ecosystem runs, all species share a single (H, W, 16) field: each species emits into it proportional to its positive growth activity weighted by local ownership, and senses it through a dot product with its receptor profile (which can be negative, producing aversive responses). Signal decays per-channel at fixed rates. Total conserved quantity is mass + signal. Archive compatibility is enforced automatically: signal and non-signal archives cannot be mixed in a single ecosystem run.</p>
             <p>Ecosystem dispatch is Ray-correct in both directions: each experiment is a self-contained payload. The driver loads creatures from its local archive and ships them as part of the task input; workers simulate and render to bytes; the driver materializes outputs to its own local filesystem. No shared filesystem is assumed at any step, so experiments run correctly on real multi-node clusters without NFS or rsync setup.</p>
 
             <div class="diagram-frame">{{ svg_ecosystem_dispatch | safe }}</div>
@@ -726,7 +727,13 @@
 <span class="cmd">uv run biota search --ray-address head:6379 \</span>
 <span class="cmd">    --preset standard --budget 2000 \</span>
 <span class="cmd">    --device cuda --batch-size 64 --workers 3 \</span>
-<span class="cmd">    --descriptors oscillation,compactness,png_compressibility</span></pre>
+<span class="cmd">    --descriptors oscillation,compactness,png_compressibility</span>
+
+<span class="comment"># Signal field: adds emission, receptor, and kernel parameters to the search</span>
+<span class="cmd">uv run biota search --ray-address head:6379 \</span>
+<span class="cmd">    --preset standard --budget 2000 \</span>
+<span class="cmd">    --device cuda --batch-size 64 --workers 3 \</span>
+<span class="cmd">    --signal-field</span></pre>
 
             <h2>Choosing descriptors</h2>
             <p>Pass <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">--descriptors</code> with three comma-separated names to control which behavioral axes the archive uses. With 15 built-ins there are 455 possible configurations. You can also supply your own via <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">--descriptor-module path/to/file.py</code> — the file must define a list named <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">DESCRIPTORS</code> containing <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">Descriptor</code> objects.</p>

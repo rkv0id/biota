@@ -67,7 +67,7 @@ def test_single_species_matches_scalar_one_step() -> None:
     # the simplex-where-mass invariant the localized path produces.
     W0 = torch.where(A0 > 0, W0, torch.zeros_like(W0))
 
-    scalar_next = fl.step(A0)
+    scalar_next, _ = fl.step(A0, None)
     loc_next = lfl.step(LocalizedState(mass=A0, weights=W0))
 
     diff = (scalar_next - loc_next.mass).abs().max().item()
@@ -93,7 +93,7 @@ def test_single_species_matches_scalar_many_steps() -> None:
     A_scalar = A0
     state_loc = LocalizedState(mass=A0, weights=W0)
     for _ in range(20):
-        A_scalar = fl.step(A_scalar)
+        A_scalar, _ = fl.step(A_scalar, None)
         state_loc = lfl.step(state_loc)
 
     diff = (A_scalar - state_loc.mass).abs().max().item()

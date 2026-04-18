@@ -286,6 +286,16 @@ def search_cmd(
             "Custom descriptors are merged into the registry before --descriptors is resolved."
         ),
     ),
+    signal_field: bool = typer.Option(
+        False,
+        "--signal-field",
+        help=(
+            "Enable the signal field. Adds emission_vector, receptor_profile, and "
+            "signal_kernel_* to the searchable parameter space. Produces a signal-enabled "
+            "archive tagged in manifest.json. Signal archives are incompatible with "
+            "non-signal archives in ecosystem runs."
+        ),
+    ),
 ) -> None:
     """Run a MAP-Elites search over Flow-Lenia parameters."""
     if local_ray and ray_address is not None:
@@ -316,6 +326,7 @@ def search_cmd(
         base_seed=base_seed,
         checkpoint_every=checkpoint_every,
         descriptor_names=descriptor_names,
+        signal_field=signal_field,
     )
 
     def on_event(event: SearchEvent) -> None:

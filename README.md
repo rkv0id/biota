@@ -2,11 +2,11 @@
   <img src="docs/logo-512.svg" width="48" alt="" valign="middle" />&nbsp;biota
 </h1>
 
-Distributed Flow-Lenia discovery platform. MAP-Elites search, behavioral archive, ecosystem simulation.
+Distributed Flow-Lenia discovery platform. MAP-Elites search, behavioral archive, ecosystem simulation, chemical signal field.
 
 [![demo](docs/demo.gif)](https://youtu.be/LdY0mSIYzy8)
 
-biota runs MAP-Elites searches across a Ray cluster, dispatching batches of [Flow-Lenia](https://arxiv.org/abs/2212.07906) simulations as vectorized PyTorch forward passes to stateless GPU workers, producing a structured behavioral archive of distinct artificial life-forms. The full experimental loop: configure behavioral descriptors, search the parameter space, explore the archive, seed ecosystem simulations from selected creatures.
+biota runs MAP-Elites searches across a Ray cluster, dispatching batches of [Flow-Lenia](https://arxiv.org/abs/2212.07906) simulations as vectorized PyTorch forward passes to stateless GPU workers, producing a structured behavioral archive of distinct artificial life-forms. The full experimental loop: configure behavioral descriptors, search the parameter space, explore the archive, seed ecosystem simulations from selected creatures. An optional signal field adds a shared chemical medium to both search and ecosystem runs: each creature emits into and senses from a 16-channel field, enabling signal-mediated interaction alongside mass dynamics.
 
 ## How it works
 
@@ -138,6 +138,31 @@ python scripts/build_index.py \
     --publish
 ```
 
+## Signal field
+
+The signal field is an optional chemical communication layer that operates on top of the mass dynamics. Enable it at search time with `--signal-field`:
+
+```bash
+biota search --preset standard --budget 2000 \
+    --device cuda --batch-size 64 --workers 3 \
+    --signal-field
+```
+
+This adds six signal parameters to each creature's searchable parameter space:
+
+| Parameter | Shape | Range | Description |
+|---|---|---|---|
+| `emission_vector` | `(16,)` | `[0, 1]` | How emitted signal is distributed across the 16 channels |
+| `receptor_profile` | `(16,)` | `[-1, 1]` | Channel weights for sensing. Negative values produce inhibitory (aversive) responses |
+| `signal_kernel_r` | scalar | `[0.2, 1.0]` | Signal kernel radius scale |
+| `signal_kernel_a/b/w` | `(3,)` each | same as mass kernels | Ring function parameters for signal diffusion |
+
+**Physics.** At each step: (1) the creature emits signal proportional to local positive growth activity, draining from the mass field into the signal field; (2) the signal field is convolved with the creature's signal kernel; (3) the dot product of the convolved field with `receptor_profile` boosts (or inhibits) the growth field; (4) the signal field decays per-channel at fixed rates (0.15 / 0.05 / 0.01 / 0.002 per step across four channel groups). The total conserved quantity is `mass + signal`. Decay is the only leak.
+
+**Archive compatibility.** An archive produced with `--signal-field` is tagged `"signal_field": true` in `manifest.json`. Ecosystem runs detect this automatically from the creature params -- no YAML flag needed. If any source creature comes from a signal-enabled archive, all sources must too; mixing signal and non-signal archives raises an error at load time.
+
+**Quality metric.** The alive filter checks that total mass (`mass + signal`) stays within `[0.5, 2.0]` of the initial total, and that the mass field itself does not collapse below 10% of its initial value (so a creature that converts all its mass to signal does not score as alive). The initial signal field is spatially varied low-frequency noise (~0.01 amplitude) per channel, giving the receptor profile something to respond to during solo rollouts.
+
 ## Relationship to related work
 
 The closest published work is Plantec et al. 2025, [Exploring Flow-Lenia Universes](https://arxiv.org/abs/2506.08569). Both efforts run multi-rule Flow-Lenia on a shared grid, but the framing and mechanism are different.
@@ -192,6 +217,7 @@ Three presets: `dev` (64x64, 200 steps), `standard` (192x192, 300 steps), `prett
 | `--checkpoint-every` | `100` | Checkpoint cadence in rollouts |
 | `--descriptors` | `velocity,gyradius,spectral_entropy` | Three descriptor names, comma-separated |
 | `--descriptor-module` | none | Path to a Python file defining custom `Descriptor` objects |
+| `--signal-field` | off | Enable signal field parameters (emission, reception, kernel) in search. Produces a signal-enabled archive tagged in `manifest.json`. Signal and non-signal archives cannot be mixed in ecosystem runs |
 | `--output-dir` | `archive` | Directory for run output |
 
 ### `biota ecosystem`
@@ -242,7 +268,7 @@ ecosystem/20260415-104007-096-dense-population/
 ## Development
 
 ```bash
-just check       # ruff + pyright + pytest (355 tests)
+just check       # ruff + pyright + pytest (384 tests)
 just smoke-ray   # local-Ray integration smoke test
 ```
 
@@ -265,7 +291,7 @@ The test suite runs entirely in no-Ray mode. `just smoke-ray` exercises the Ray 
 - [x] v3.0.0 - Growth field capture, empirical S×S interaction coefficient matrix, ecosystem outcome classification, interaction heatmap in viewer
 - [x] v3.1.0 - Spatial observables for both run modes: patch count, interface area, COM distance, spatial entropy (from existing snapshots, no new simulation code); interaction coefficients gated to contact windows; blended pair colors in viewer
 - [x] v3.2.0 - Temporal outcome classifier: per-species labeled windows, patch-count-based fragmentation, separate taxonomies for homogeneous and heterogeneous runs, outcome timeline in viewer
-- [ ] v3.3.0 - Signal field: per-creature emission and sensing in a shared (H, W, 16) chemical field; mass exchange via signal; total mass conserved across mass + signal
+- [x] v3.3.0 - Signal field: per-creature emission and sensing in a shared (H, W, 16) chemical field; switchable via --signal-field; archive-level tagging; quality filter updated for mass+signal conservation; both homo and hetero ecosystem paths signal-aware
 - [ ] v3.4.0 - Signal observables: net mass flux per species pair, signal overlap matrix, receptor-signal alignment; homogeneous self-signal flux
 - [ ] v3.5.0 - Ecosystem viewer overhaul: all new charts, signal GIF overlay, mode-specific panels, temporal outcome sequence
 

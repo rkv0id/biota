@@ -25,6 +25,22 @@ from typing import cast
 import torch
 import torch.nn.functional as F
 
+# Number of signal field channels. Matches SIGNAL_CHANNELS in params.py --
+# kept as a local constant here so flowlenia.py has no search-layer dependency.
+SIGNAL_CHANNELS = 16
+
+# Emission rate: fraction of growth-field activity converted to signal per step.
+# Low enough not to destabilize mass dynamics; high enough to produce measurable
+# signal over a typical 200-300 step rollout.
+EMISSION_RATE = 0.02
+
+# Per-channel decay rates for the signal field: range from fast (local,
+# contact-range) to slow (diffuse, long-range). Fixed at the platform level --
+# this is a property of the signal medium, not of the creature.
+# Channels 0-3: fast decay (0.15/step), 4-7: medium (0.05), 8-11: slow (0.01),
+# 12-15: very slow (0.002). Analogous to chemical signal half-lives.
+_DECAY_RATES: list[float] = [0.15] * 4 + [0.05] * 4 + [0.01] * 4 + [0.002] * 4
+
 
 @dataclass(frozen=True)
 class Config:
@@ -57,6 +73,17 @@ class Params:
     a: torch.Tensor  # (k, 3) ring centers
     b: torch.Tensor  # (k, 3) ring weights
     w: torch.Tensor  # (k, 3) ring widths
+    # Signal field parameters -- optional. None for non-signal creatures.
+    emission_vector: torch.Tensor | None = None  # (C,) in [0, 1]
+    receptor_profile: torch.Tensor | None = None  # (C,) in [-1, 1]
+    signal_kernel_r: float | None = None
+    signal_kernel_a: torch.Tensor | None = None  # (3,) ring centers
+    signal_kernel_b: torch.Tensor | None = None  # (3,) ring weights
+    signal_kernel_w: torch.Tensor | None = None  # (3,) ring widths
+
+    @property
+    def has_signal(self) -> bool:
+        return self.emission_vector is not None
 
 
 class FlowLenia:
@@ -74,54 +101,150 @@ class FlowLenia:
             a=params.a.to(device),
             b=params.b.to(device),
             w=params.w.to(device),
+            emission_vector=params.emission_vector.to(device)
+            if params.emission_vector is not None
+            else None,
+            receptor_profile=params.receptor_profile.to(device)
+            if params.receptor_profile is not None
+            else None,
+            signal_kernel_r=params.signal_kernel_r,
+            signal_kernel_a=params.signal_kernel_a.to(device)
+            if params.signal_kernel_a is not None
+            else None,
+            signal_kernel_b=params.signal_kernel_b.to(device)
+            if params.signal_kernel_b is not None
+            else None,
+            signal_kernel_w=params.signal_kernel_w.to(device)
+            if params.signal_kernel_w is not None
+            else None,
         )
         self._fK = self._build_kernels_fft()
+        self._fK_signal: torch.Tensor | None = (
+            self._build_signal_kernel_fft() if self.params.has_signal else None
+        )
+        self._decay = torch.tensor(_DECAY_RATES, dtype=torch.float32, device=device)
         self._sobel_kx, self._sobel_ky = self._build_sobel_kernels()
         self._pos = self._build_position_grid()
 
-    def step(self, A: torch.Tensor) -> torch.Tensor:
+    def make_initial_signal_field(self, seed: int = 0) -> torch.Tensor:
+        """Build a spatially varied (H, W, C) float32 signal field background.
+
+        Each channel is independently sampled from filtered Gaussian noise --
+        low-frequency spatial structure so the receptor dot product varies
+        meaningfully across the grid. Amplitude is kept low (~0.01 mean
+        absolute value) to perturb without dominating mass dynamics.
+
+        Used to initialize the signal field before a rollout, giving the
+        receptor profile something to respond to in solo creature searches.
+        The initial total signal mass is small and known, so the alive filter
+        accounts for it correctly via initial_total.
+        """
+        rng = torch.Generator(device=self.device)
+        rng.manual_seed(seed)
+        h, w = self.config.grid_h, self.config.grid_w
+
+        # Sample independent Gaussian noise per channel.
+        noise = torch.randn(SIGNAL_CHANNELS, h, w, generator=rng, device=self.device)
+
+        # Lowpass filter: zero out the top 80% of spatial frequencies per channel.
+        # This gives smooth, spatially correlated patterns per channel.
+        noise_fft = torch.fft.fft2(noise)  # (C, H, W) complex
+        freq_h = torch.fft.fftfreq(h, device=self.device).abs()
+        freq_w = torch.fft.fftfreq(w, device=self.device).abs()
+        fh, fw = torch.meshgrid(freq_h, freq_w, indexing="ij")
+        freq_mag = torch.sqrt(fh**2 + fw**2)  # (H, W)
+        lowpass = (freq_mag < 0.2).float()  # keep low 20% of frequencies
+        filtered_fft = noise_fft * lowpass.unsqueeze(0)
+        signal = torch.fft.ifft2(filtered_fft).real  # (C, H, W)
+
+        # Normalize each channel to have mean absolute value ~0.01.
+        mean_abs = signal.abs().mean(dim=(1, 2), keepdim=True).clamp(min=1e-8)
+        signal = signal / mean_abs * 0.01
+        signal = signal.clamp(min=0.0)  # signal field is non-negative
+
+        return signal.permute(1, 2, 0)  # (H, W, C)
+
+    def step(
+        self, A: torch.Tensor, signal: torch.Tensor | None = None
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        """Advance the simulation by one step.
+
+        A:      (H, W, 1) mass field.
+        signal: (H, W, C) signal field, or None for non-signal creatures.
+
+        Returns (new_A, new_signal). new_signal is None when signal is None.
+
+        Signal physics (only when signal is not None and params.has_signal):
+          1. Compute growth field G as usual.
+          2. Emission: add emission_vector * G_magnitude * EMISSION_RATE to
+             the signal field at each cell, drain the same amount from mass.
+          3. Reception: compute dot(receptor_profile, conv(signal)) per cell,
+             add as a boost to the growth field before reintegration.
+          4. Reintegrate mass with the boosted growth field.
+          5. Decay signal field by per-channel decay rates.
+          Mass + signal total is conserved modulo decay (decay is the only leak).
+        """
         A2 = A[:, :, 0]
 
-        # Lenia: convolve, growth function, sum over kernels
         fA = torch.fft.fft2(A2)
-        U = torch.fft.ifft2(self._fK * fA.unsqueeze(0)).real  # (k, X, Y)
+        U = torch.fft.ifft2(self._fK * fA.unsqueeze(0)).real  # (k, H, W)
         m = self.params.m.view(-1, 1, 1)
         s = self.params.s.view(-1, 1, 1)
         h = self.params.h.view(-1, 1, 1)
         G = (torch.exp(-(((U - m) / s) ** 2) / 2.0) * 2.0 - 1.0) * h
-        U_sum = G.sum(dim=0)
+        U_sum = G.sum(dim=0)  # (H, W) blended growth field
 
-        # Sobel gradients of growth and density
+        if signal is not None and self.params.has_signal and self._fK_signal is not None:
+            assert self.params.emission_vector is not None
+            assert self.params.receptor_profile is not None
+
+            # G magnitude as emission driver: clamp to [0, inf) so only
+            # positive growth activity emits. Negative growth (dying regions)
+            # does not emit signal.
+            G_pos = U_sum.clamp(min=0.0)  # (H, W)
+
+            # Emission: drain from mass, add to signal field.
+            # emission_vector (C,) distributes the scalar emission across channels.
+            emitted = G_pos * EMISSION_RATE  # (H, W) scalar per cell
+            # Clamp emitted to available mass to avoid going negative.
+            emitted = torch.minimum(emitted, A2.clamp(min=0.0))
+            emit_per_channel = emitted.unsqueeze(-1) * self.params.emission_vector  # (H, W, C)
+            signal = signal + emit_per_channel
+            A2 = A2 - emitted  # drain from mass
+
+            # Reception: convolve signal field, dot with receptor profile.
+            # Convolve each channel independently using the signal kernel.
+            sig_t = signal.permute(2, 0, 1)  # (C, H, W)
+            fSig = torch.fft.fft2(sig_t)  # (C, H, W) complex
+            convolved = torch.fft.ifft2(self._fK_signal * fSig).real  # (C, H, W)
+            # Dot product with receptor profile: (H, W)
+            receptor_response = (convolved * self.params.receptor_profile.view(-1, 1, 1)).sum(dim=0)
+            # Add receptor response as growth boost (can be positive or negative).
+            U_sum = U_sum + receptor_response
+
         nabla_U = self._sobel(U_sum)
         nabla_A = self._sobel(A2)
-
-        # Affinity (single channel: alpha = clip(A^2, 0, 1))
         alpha = torch.clamp(A2**2, 0.0, 1.0)
-
-        # Flow
         F_flow = nabla_U * (1.0 - alpha) - nabla_A * alpha
-
-        # Reintegration tracking
         new_A2 = self._reintegration(A2, F_flow)
-        return new_A2.unsqueeze(-1)
+
+        if signal is not None and self.params.has_signal:
+            # Decay signal field by per-channel rates.
+            new_signal = signal * (1.0 - self._decay)  # (H, W, C)
+        else:
+            new_signal = signal  # None passthrough for non-signal path
+
+        return new_A2.unsqueeze(-1), new_signal
 
     def step_batch(self, A: torch.Tensor) -> torch.Tensor:
-        """Vectorized step over a batch of states.
+        """Vectorized step over a batch of states. Signal field not supported
+        in batch mode (search rollouts don't use it; ecosystem uses single-step).
 
         A: (B, H, W, 1) -> (B, H, W, 1)
-
-        Runs B Flow-Lenia simulations in one forward pass. All operations
-        broadcast over the leading batch dimension. Memory scales linearly
-        with B; at standard preset (192x192) each element is ~150KB so B=128
-        fits comfortably in 16GB VRAM.
         """
         B = A.shape[0]
         A2 = A[:, :, :, 0]  # (B, H, W)
 
-        # Convolve each batch element with all K kernels.
-        # fA: (B, H, W) -> unsqueeze to (B, 1, H, W)
-        # _fK: (K, H, W) -> unsqueeze to (1, K, H, W)
-        # product: (B, K, H, W); ifft2 over last two dims
         fA = torch.fft.fft2(A2)
         U = torch.fft.ifft2(
             self._fK.unsqueeze(0) * fA.unsqueeze(1), dim=(-2, -1)
@@ -133,13 +256,11 @@ class FlowLenia:
         G = (torch.exp(-(((U - m) / s) ** 2) / 2.0) * 2.0 - 1.0) * h
         U_sum = G.sum(dim=1)  # (B, H, W)
 
-        # Sobel over the batch: reshape to (B, 1, H, W) for F.conv2d
         nabla_U = self._sobel_batch(U_sum)  # (B, 2, H, W)
         nabla_A = self._sobel_batch(A2)  # (B, 2, H, W)
 
         alpha = torch.clamp(A2**2, 0.0, 1.0)  # (B, H, W)
 
-        # Flow: (B, 2, H, W)
         alpha4 = alpha.unsqueeze(1)
         F_flow = nabla_U * (1.0 - alpha4) - nabla_A * alpha4
 
@@ -147,35 +268,62 @@ class FlowLenia:
         return new_A2.unsqueeze(-1)
 
     def rollout(self, A0: torch.Tensor, steps: int) -> torch.Tensor:
-        A = A0
+        A: torch.Tensor = A0
         for _ in range(steps):
-            A = self.step(A)
+            A, _ = self.step(A, None)
         return A
 
     def kernel_tensors(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Return the pre-built simulation tensors needed for batched execution.
-
-        Returns (fK, sobel_kx, sobel_ky, pos) where:
-          fK:       (K, H, W) complex - Fourier-space kernels for this param set
-          sobel_kx: (1, 1, 3, 3) - x-Sobel kernel (param-independent)
-          sobel_ky: (1, 1, 3, 3) - y-Sobel kernel (param-independent)
-          pos:      (2, H, W)    - position grid (param-independent)
-
-        Used by rollout_batch to extract per-element fK tensors and borrow the
-        shared param-independent tensors without private attribute access.
-        """
+        """Return the pre-built simulation tensors needed for batched execution."""
         return self._fK, self._sobel_kx, self._sobel_ky, self._pos
 
     def rollout_with_mass(self, A0: torch.Tensor, steps: int) -> tuple[torch.Tensor, torch.Tensor]:
         masses = torch.empty(steps + 1, dtype=A0.dtype)
         masses[0] = A0.sum()
-        A = A0
+        A: torch.Tensor = A0
         for i in range(steps):
-            A = self.step(A)
+            A, _ = self.step(A, None)
             masses[i + 1] = A.sum()
         return A, masses
 
     # === private helpers ===
+
+    def _build_signal_kernel_fft(self) -> torch.Tensor:
+        """Build the Fourier-space signal convolution kernel (H, W) complex.
+
+        Uses the same ring-function parameterization as the mass kernels but
+        with the creature's signal_kernel_* params. Single kernel shared across
+        all C channels; the receptor dot product is what makes channels distinct.
+        """
+        p = self.params
+        assert p.signal_kernel_r is not None
+        assert p.signal_kernel_a is not None
+        assert p.signal_kernel_b is not None
+        assert p.signal_kernel_w is not None
+
+        cfg = self.config
+        mid_h = cfg.grid_h // 2
+        mid_w = cfg.grid_w // 2
+        coords_y = torch.arange(-mid_h, mid_h, device=self.device, dtype=torch.float32)
+        coords_x = torch.arange(-mid_w, mid_w, device=self.device, dtype=torch.float32)
+        yy, xx = torch.meshgrid(coords_y, coords_x, indexing="ij")
+        radius = torch.sqrt(xx**2 + yy**2)
+
+        scale = (p.R + 15.0) * p.signal_kernel_r
+        D = radius / max(scale, 1e-6)
+        mask = torch.sigmoid(-(D - 1.0) * 10.0)
+
+        a = p.signal_kernel_a.view(1, 1, 3)
+        b_ring = p.signal_kernel_b.view(1, 1, 3)
+        w_ring = p.signal_kernel_w.view(1, 1, 3)
+        D3 = D.unsqueeze(-1)
+        ring = (b_ring * torch.exp(-((D3 - a) ** 2) / w_ring)).sum(dim=-1)
+
+        K = mask * ring
+        total = K.sum()
+        nK = K / total if total > 0 else K
+        nK_shifted = torch.fft.fftshift(nK)
+        return cast(torch.Tensor, torch.fft.fft2(nK_shifted))
 
     def _build_kernels_fft(self) -> torch.Tensor:
         """Build the Fourier-space kernels following the reference parameterization.

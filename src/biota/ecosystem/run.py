@@ -132,10 +132,32 @@ def load_creature(source: CreatureSource) -> RolloutResult:
     return archive[source.coords]
 
 
+def validate_signal_consistency(creatures: list[RolloutResult]) -> None:
+    """Raise if creatures mix signal-enabled and non-signal archives.
+
+    All creatures in an ecosystem run must have the same signal field status.
+    A mixed run is physically incoherent: the signal field either exists for
+    all species or for none.
+    """
+    from biota.search.params import has_signal_field
+
+    has_signal = [has_signal_field(c.params) for c in creatures]
+    if any(has_signal) and not all(has_signal):
+        non_signal_indices = [i for i, h in enumerate(has_signal) if not h]
+        raise ValueError(
+            f"ecosystem run mixes signal-enabled and non-signal creatures. "
+            f"All sources must come from the same archive type. "
+            f"Non-signal species at source indices: {non_signal_indices}. "
+            f"Re-run with all sources from signal-enabled archives, or all from standard archives."
+        )
+
+
 def _params_from_creature(creature: RolloutResult, device: str) -> Params:
     """Build a Params on `device` from a RolloutResult's ParamDict."""
+    from biota.search.params import has_signal_field
+
     p = creature.params
-    return Params(
+    base = Params(
         R=p["R"],
         r=torch.tensor(p["r"], dtype=torch.float32, device=device),
         m=torch.tensor(p["m"], dtype=torch.float32, device=device),
@@ -144,6 +166,24 @@ def _params_from_creature(creature: RolloutResult, device: str) -> Params:
         a=torch.tensor(p["a"], dtype=torch.float32, device=device),
         b=torch.tensor(p["b"], dtype=torch.float32, device=device),
         w=torch.tensor(p["w"], dtype=torch.float32, device=device),
+    )
+    if not has_signal_field(p):
+        return base
+    return Params(
+        R=base.R,
+        r=base.r,
+        m=base.m,
+        s=base.s,
+        h=base.h,
+        a=base.a,
+        b=base.b,
+        w=base.w,
+        emission_vector=torch.tensor(p["emission_vector"], dtype=torch.float32, device=device),  # type: ignore[typeddict-item]
+        receptor_profile=torch.tensor(p["receptor_profile"], dtype=torch.float32, device=device),  # type: ignore[typeddict-item]
+        signal_kernel_r=float(p["signal_kernel_r"]),  # type: ignore[typeddict-item]
+        signal_kernel_a=torch.tensor(p["signal_kernel_a"], dtype=torch.float32, device=device),  # type: ignore[typeddict-item]
+        signal_kernel_b=torch.tensor(p["signal_kernel_b"], dtype=torch.float32, device=device),  # type: ignore[typeddict-item]
+        signal_kernel_w=torch.tensor(p["signal_kernel_w"], dtype=torch.float32, device=device),  # type: ignore[typeddict-item]
     )
 
 
@@ -454,6 +494,7 @@ def _run_homogeneous(
     """Scalar-path simulation loop. Returns SimOutput with n_species=1."""
     source = config.sources[0]
     creature = creatures[0] if creatures is not None else load_creature(source)
+    validate_signal_consistency([creature])
     sim_cfg = _build_sim_config(creature, config)
     sim_params = _params_from_creature(creature, config.device)
     fl = FlowLenia(sim_cfg, sim_params, device=config.device)
@@ -468,12 +509,17 @@ def _run_homogeneous(
     )
     initial_mass = float(state.sum().item())
 
+    # Initialize signal field when creature has signal params.
+    signal: torch.Tensor | None = None
+    if sim_params.has_signal:
+        signal = fl.make_initial_signal_field(seed=config.spawn.seed or 0)
+
     snapshots: list[np.ndarray] = []
     steps_taken: list[int] = []
     mass_history: list[float] = [initial_mass]
 
     for step in range(1, config.steps + 1):
-        state = fl.step(state)
+        state, signal = fl.step(state, signal)
         mass_history.append(float(state.sum().item()))
 
         if step % config.snapshot_every == 0 or step == config.steps:
@@ -501,10 +547,8 @@ def _run_heterogeneous(
     if creatures is None:
         creatures = [load_creature(s) for s in config.sources]
 
-    # All species must share the same kernel count: LocalizedFlowLenia's per-step
-    # FFT path expects each species' fK to have the same K dim as the others.
-    # The Plantec convention is one global K; biota's species-indexed extension
-    # keeps each species' own kernels but they still need to be parallel-shaped.
+    validate_signal_consistency(creatures)
+
     k_counts = [len(c.params["r"]) for c in creatures]
     if len(set(k_counts)) != 1:
         raise ValueError(
@@ -517,7 +561,6 @@ def _run_heterogeneous(
     lfl = LocalizedFlowLenia(sim_cfg, species_params, device=config.device)
 
     counts = [s.n for s in config.sources]
-    # Per-species patch: source override if set, otherwise the experiment default.
     patches = [s.patch if s.patch is not None else config.spawn.patch for s in config.sources]
     mass, weights = build_initial_state_multi_species(
         config.spawn,
@@ -527,20 +570,28 @@ def _run_heterogeneous(
         config.device,
         patches=patches,
     )
-    state = LocalizedState(mass=mass, weights=weights)
+
+    # Initialize signal field when any species has signal params.
+    signal: torch.Tensor | None = None
+    if any(sp.has_signal for sp in species_params):
+        # Use the first signal-capable species' FlowLenia instance to generate
+        # the background field (make_initial_signal_field is param-independent
+        # for everything except the grid size, which is shared).
+        for sp_fl in lfl._species:  # pyright: ignore[reportPrivateUsage]
+            if sp_fl.params.has_signal:
+                signal = sp_fl.make_initial_signal_field(seed=config.spawn.seed or 0)
+                break
+
+    state = LocalizedState(mass=mass, weights=weights, signal=signal)
     initial_mass = float(state.mass.sum().item())
     n_species = len(creatures)
 
     snapshots: list[np.ndarray] = []
     ownership_snapshots: list[np.ndarray] = []
-    # Outer list: snapshot index. Inner list: species index. Each element is
-    # (H, W) float32 G_s_total for species s before ownership blending.
     growth_snapshots: list[list[np.ndarray]] = []
     steps_taken: list[int] = []
     mass_history: list[float] = [initial_mass]
-    # Per-species mass: outer list indexed by species, inner by step.
     species_mass: list[list[float]] = []
-    # Per-species territory: effective area = sum of ownership weights.
     species_territory: list[list[float]] = []
     for s in range(n_species):
         sp_mass = float((state.mass[:, :, 0] * state.weights[:, :, s]).sum().item())
@@ -556,7 +607,6 @@ def _run_heterogeneous(
         else:
             state = lfl.step(state)
         mass_history.append(float(state.mass.sum().item()))
-        # Per-species mass and territory at every step for smooth charts.
         for s in range(n_species):
             sp_mass = float((state.mass[:, :, 0] * state.weights[:, :, s]).sum().item())
             species_mass[s].append(sp_mass)
