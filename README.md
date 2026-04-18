@@ -159,11 +159,24 @@ This adds six signal parameters to each creature's searchable parameter space:
 | `signal_kernel_r` | scalar | `[0.2, 1.0]` | Signal kernel radius scale |
 | `signal_kernel_a/b/w` | `(3,)` each | same as mass kernels | Ring function parameters for signal diffusion |
 
+![signal field mechanics](docs/signal-field.svg)
+
 **Physics.** At each step: (1) the creature emits signal proportional to local positive growth activity scaled by `emission_rate`, draining from the mass field into the signal field; (2) the signal field is convolved with the creature's signal kernel; (3) the dot product of the convolved field with `receptor_profile` boosts (or inhibits) the growth field; (4) the signal field decays per-channel at the creature's own `decay_rates`. The total conserved quantity is `mass + signal`. Decay is the only leak.
 
 **Archive compatibility.** An archive produced with `--signal-field` is tagged `"signal_field": true` in `manifest.json`. Ecosystem runs detect this automatically from the creature params -- no YAML flag needed. If any source creature comes from a signal-enabled archive, all sources must too; mixing signal and non-signal archives raises an error at load time.
 
-**Quality metric.** The alive filter checks that total mass (`mass + signal`) stays within `[0.5, 2.0]` of the initial total, and that the mass field itself does not collapse below 20% of its initial value (stricter than non-signal to create selection pressure against mass bleed). The quality score blends compactness (70%) with signal retention -- `final_mass / initial_mass` (30%) -- directly rewarding creatures that emit efficiently without depleting themselves. The initial signal field is spatially varied low-frequency noise (~0.01 amplitude) per channel, giving the receptor profile something to respond to during solo rollouts. Signal searches automatically use 800 steps (vs 500 for standard) so emission/reception dynamics have time to build up meaningful gradients.
+**Quality metric.** Three hard filters gate entry: (1) conserved mass within [0.5, 2.0] × initial; (2) bounding-box fraction < 0.6 (not scattered); (3) descriptor drift across adjacent 50-step windows ≤ 0.2. Survivors are ranked by a three-component score:
+
+```
+non-signal:  q = 0.6 × compactness  +  0.4 × stability
+signal:      q = 0.5 × compactness  +  0.3 × stability  +  0.2 × retention
+
+compactness = min( compact(state_T/2),  compact(state_T) )
+stability   = clip( 1 − drift / 0.2,  0,  1 )
+retention   = clip( final_mass / initial_mass,  0,  1 )
+```
+
+The two-point compactness term is the key addition. Almost all viable solitons score >0.95 at the final step, making a single-snapshot metric nearly constant across the population. Taking the minimum with the midpoint state catches creatures that peak early and gradually become diffuse -- the type of instability that matters most for long ecosystem runs. The continuous stability term rewards low-drift creatures above borderline survivors. For signal runs, the 0.2 creature mass floor and the retention term together penalise runaway emission. The initial signal field is low-frequency Gaussian noise (~0.01 amplitude) per channel; signal searches auto-select 800 steps.
 
 ## Relationship to related work
 
@@ -270,7 +283,7 @@ ecosystem/20260415-104007-096-dense-population/
 ## Development
 
 ```bash
-just check       # ruff + pyright + pytest (397 tests, 0 warnings)
+just check       # ruff + pyright + pytest (401 tests, 0 warnings)
 just smoke-ray   # local-Ray integration smoke test
 ```
 

@@ -93,6 +93,29 @@
         /* === tab panels === */
         .tab-panel { display: none; padding: 44px 0 80px 0; }
         .tab-panel.active { display: block; }
+        .system-nav {
+            display: flex; gap: 6px; flex-wrap: wrap;
+            margin-bottom: 36px; padding-bottom: 16px;
+            border-bottom: 1px solid #1e2030;
+        }
+        .system-nav a {
+            font-size: 11px; font-weight: 500; letter-spacing: 0.05em;
+            text-transform: uppercase; padding: 3px 10px; border-radius: 10px;
+            color: #71717a; background: #16181f; border: 1px solid #2e3044;
+            text-decoration: none; transition: color 0.15s, border-color 0.15s;
+        }
+        .system-nav a:hover { color: #3cdcc8; border-color: #3cdcc8; }
+        .math-block {
+            background: #16181f; border: 1px solid #2e3044; border-radius: 6px;
+            padding: 16px 20px; margin: 16px 0; font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 13px; color: #e4e4e7; line-height: 1.9;
+        }
+        .math-block .eq-label { color: #52525b; font-size: 11px; display: block; margin-bottom: 4px; }
+        .math-block em { color: #a78bfa; font-style: normal; }
+        .math-block .teal { color: #3cdcc8; }
+        .math-block .amber { color: #fbbf77; }
+        .math-block .red { color: #ff6464; }
+        .math-block .dim { color: #52525b; }
 
         /* === shared prose styles === */
         .prose {
@@ -454,7 +477,15 @@
     <div class="tab-panel active" id="panel-system">
     <div class="page-wrap">
         <div class="prose">
-            <h2>Architecture</h2>
+            <nav class="system-nav" aria-label="System sections">
+                <a href="#sys-arch">Architecture</a>
+                <a href="#sys-search">Search</a>
+                <a href="#sys-quality">Quality metric</a>
+                <a href="#sys-ecosystem">Ecosystem</a>
+                <a href="#sys-signal">Signal field</a>
+                <a href="#sys-descriptors">Descriptors</a>
+            </nav>
+            <h2 id="sys-arch">Architecture</h2>
             <p>biota is a distributed quality-diversity search platform for <a class="pill amber" href="https://arxiv.org/abs/2212.07906" target="_blank" style="display:inline;padding:2px 6px;border-radius:3px;font-size:inherit;">Flow-Lenia</a>. Two subsystems share the same vectorized PyTorch runtime and the same Ray cluster: a MAP-Elites <em>search</em> that fills a behavioral archive, and an <em>ecosystem</em> dispatch that runs selected archive creatures on shared canvases. Both run on consumer-grade hardware — a 3-node RTX 5060 Ti cluster with Thunderbolt OCuLink GPU attach.</p>
 
             <div class="stat-row">
@@ -472,7 +503,7 @@
                 </div>
             </div>
 
-            <h2>MAP-Elites search</h2>
+            <h2 id="sys-search">MAP-Elites search</h2>
             <p><a class="pill amber" href="https://arxiv.org/abs/1504.04909" target="_blank" style="display:inline;padding:2px 6px;border-radius:3px;font-size:inherit;">MAP-Elites</a> runs a loop: sample parameters, simulate a creature, measure its behavior, insert it into the matching archive cell if it beats whatever is already there. After thousands of rollouts the archive fills with creatures covering the behavioral space as broadly as possible — not optimizing toward one solution, but toward diversity.</p>
             <p>The archive is a three-dimensional behavioral grid. Each axis holds one descriptor chosen from a library of fifteen, all normalized to [0, 1] and empirically calibrated against real cluster runs. Each cell holds the highest-quality creature found with that behavioral fingerprint.</p>
 
@@ -482,15 +513,60 @@
 
             <div class="diagram-frame">{{ svg_search_loop | safe }}</div>
 
-            <h2>Ecosystem dispatch</h2>
+            <h2 id="sys-quality">Quality metric</h2>
+            <p>Every rollout passes three hard filters before it can enter the archive. First, the conserved quantity (mass + signal for signal runs, mass alone otherwise) must stay within [0.5, 2.0] of its initial value — creatures that explode or die are rejected. Second, the mean bounding-box fraction over the trailing window must be below 0.6 — creatures that spread across the entire grid are rejected. Third, the three behavioral descriptors measured over adjacent 50-step windows must not drift by more than 0.2 in normalized units — creatures that are still changing shape or speed are rejected.</p>
+            <p>Survivors are ranked by a three-component quality score that creates genuine selection pressure within the viable population:</p>
+            <div class="math-block">
+                <span class="eq-label">quality score (non-signal)</span>
+                <em>q</em> = 0.6 &middot; <span class="teal">compactness</span> + 0.4 &middot; <span class="amber">stability</span>
+                <br/>
+                <span class="eq-label" style="margin-top:10px;">quality score (signal)</span>
+                <em>q</em> = 0.5 &middot; <span class="teal">compactness</span> + 0.3 &middot; <span class="amber">stability</span> + 0.2 &middot; <span class="red">retention</span>
+            </div>
+            <div class="math-block">
+                <span class="eq-label">compactness &nbsp;&mdash;&nbsp; two-point minimum</span>
+                <span class="teal">compactness</span> = min( compact(<em>state</em><sub>T/2</sub>),  compact(<em>state</em><sub>T</sub>) )
+                <br/>
+                <span class="dim">where</span>  compact(<em>s</em>) = mass inside bounding box / total mass
+                <br/><br/>
+                <span class="eq-label">stability &nbsp;&mdash;&nbsp; continuous drift score</span>
+                <span class="amber">stability</span> = clip( 1 &minus; drift / 0.2,  0,  1 )
+                <br/>
+                <span class="dim">where</span>  drift = max descriptor change across adjacent 50-step windows
+                <br/><br/>
+                <span class="eq-label">retention &nbsp;&mdash;&nbsp; signal runs only</span>
+                <span class="red">retention</span> = clip( final_mass / initial_mass,  0,  1 )
+            </div>
+            <p>The two-point compactness term is the key addition over a naive single-snapshot metric. Almost all viable Flow-Lenia solitons score above 0.95 compactness at the final step, making a single-point measurement nearly constant across the population and providing no selection pressure. By taking the minimum of the midpoint and final compactness, creatures that peak early and gradually become diffuse score below creatures that maintain their structure throughout — exactly the property that matters for long ecosystem runs.</p>
+            <p>The stability term converts the binary persistent filter into a continuous reward: a creature that barely passes (drift = 0.19) scores near zero, while a rock-stable creature (drift = 0.01) scores near 1.0. This ensures the archive prioritises behaviorally consistent creatures over lucky borderline survivors.</p>
+
+            <h2 id="sys-ecosystem">Ecosystem dispatch</h2>
             <p>Once the archive is populated, <code>biota ecosystem</code> takes specific archive cells and runs them on a shared grid to see how creatures interact. A homogeneous run spawns N copies of one species. A heterogeneous run mixes two or more species, each with its own full parameter set — kernel radii, growth windows, weights — using species-indexed LocalizedFlowLenia: per-cell species ownership tracks which lineage owns the local mass, blends growth fields by ownership, and advects with the flow.</p>
             <p>After the simulation, a suite of spatial observables is computed from the captured snapshots without re-running the simulation. For heterogeneous runs: patch count per species over time, interface area and center-of-mass distance per species pair, and spatial entropy per species. For homogeneous runs: patch count over time, spatial entropy, and patch size distribution. Interaction coefficients between species are gated to snapshot windows where species actually co-occur, so they measure contact dynamics rather than spatial separation. A temporal outcome classifier assigns per-species labeled windows — coexistence, exclusion, merger, or fragmentation for heterogeneous runs; stable isolation, full merger, partial clustering, cannibalism, or fragmentation for homogeneous runs — and derives a dominant run-level label shown as a badge. The ecosystem viewer renders all charts alongside the animated GIF.</p>
-            <p>An optional signal field adds a shared chemical communication layer. When <code>--signal-field</code> is passed to <code>biota search</code>, eight additional parameters become searchable per creature: <code>emission_vector</code> (16 channels, controls how signal is distributed across channels), <code>receptor_profile</code> (16 channels, negative values produce inhibitory responses), <code>emission_rate</code> (scalar, fraction of positive growth activity converted to signal per step), <code>decay_rates</code> (16 channels, per-channel signal dissipation rate), and signal kernel parameters. Searches with <code>--signal-field</code> automatically use 800 steps so signal dynamics have time to build spatial gradients. The quality metric blends compactness with signal retention (how much mass the creature keeps) to select against runaway emission. In ecosystem runs, all species share one (H, W, 16) field: each species emits by its own <code>emission_rate</code>, senses through its receptor profile, and decays by its own <code>decay_rates</code>. Total conserved quantity is mass + signal. Archive compatibility is enforced: signal and non-signal archives cannot be mixed.</p>
             <p>Ecosystem dispatch is Ray-correct in both directions: each experiment is a self-contained payload. The driver loads creatures from its local archive and ships them as part of the task input; workers simulate and render to bytes; the driver materializes outputs to its own local filesystem. No shared filesystem is assumed at any step, so experiments run correctly on real multi-node clusters without NFS or rsync setup.</p>
 
             <div class="diagram-frame">{{ svg_ecosystem_dispatch | safe }}</div>
 
-            <h2>Behavioral descriptors</h2>
+            <h2 id="sys-signal">Signal field</h2>
+            <p>An optional chemical communication layer adds a shared <code>(H, W, 16)</code> signal field to the simulation. When <code>--signal-field</code> is passed to <code>biota search</code>, eight additional parameters become searchable per creature across 16 independent channels:</p>
+            <div class="math-block">
+                <span class="eq-label">per-creature signal parameters</span>
+                <span class="teal">emission_vector</span>   (C,)  in [0, 1]       <span class="dim"># how emitted signal distributes across channels</span>
+                <br/>
+                <span class="teal">receptor_profile</span>  (C,)  in [&minus;1, 1]  <span class="dim"># channel weights; negative = inhibitory (GABA-like)</span>
+                <br/>
+                <span class="amber">emission_rate</span>     scalar in [0.001, 0.05] <span class="dim"># fraction of G&sup+; converted to signal per step</span>
+                <br/>
+                <span class="amber">decay_rates</span>       (C,)  in [0, 0.9]     <span class="dim"># per-channel dissipation; low = long-range gradients</span>
+                <br/>
+                <span class="dim">signal_kernel_r / a / b / w              # spatial diffusion kernel (per-creature)</span>
+            </div>
+            <p>One simulation step with the signal field active proceeds as follows: (1) the creature convolves its mass field with its growth kernel to compute growth G(H,W); (2) the signal field is convolved with the signal diffusion kernel; (3) the dot product of the convolved signal with <code>receptor_profile</code> produces a spatial growth boost that is added to G — negative receptor weights produce inhibitory responses; (4) positive growth activity G&sup+ is scaled by <code>emission_rate</code> and <code>emission_vector</code> to produce emitted signal, which is added to the signal field and drained from the mass field; (5) the mass reintegrates via the standard Flow-Lenia advection step; (6) the signal field decays per-channel at <code>decay_rates</code>. The total conserved quantity is mass + signal; decay is the only leak.</p>
+            <div class="diagram-frame">{{ svg_signal_field | safe }}</div>
+            <p>Searches with <code>--signal-field</code> automatically use 800 steps (vs 500 for standard) so emission and reception dynamics have time to build meaningful gradients. The quality metric gains a retention term: <code>clip(final_mass / initial_mass, 0, 1)</code> weighted at 0.2, penalising creatures that bleed all their mass into the signal field. A creature mass floor of 0.2 × initial_mass is enforced as a hard filter. In ecosystem runs, all species share one signal field: each species emits and decays by its own parameters, ownership-weighted. Signal archives and non-signal archives cannot be mixed in a single ecosystem run.</p>
+            <p>The ecosystem viewer exposes signal-specific observables: total signal mass history, signal mass fraction per step (signal / (mass + signal)), receptor alignment per species per snapshot (dot(receptor_profile, mean signal received in territory)), and an emission-reception compatibility matrix (dot(emission_vector[i], receptor_profile[j])) showing which species pairs have chemically compatible signal profiles.</p>
+
+            <h2 id="sys-descriptors">Behavioral descriptors</h2>
             <p>Three scalars measured from each rollout index the archive's three axes. The active set is chosen per run — any three from the built-in library of fifteen.</p>
             <div class="descriptor-grid">
                 <div class="descriptor-card">

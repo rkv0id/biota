@@ -197,7 +197,7 @@ def test_alive_filter_fails_when_creature_mass_collapses() -> None:
     """Creature converted almost all mass to signal -- below creature floor."""
     trace = _minimal_trace()
     initial_mass = 100.0
-    # Creature mass dropped to 5% of initial -- below CREATURE_MASS_FLOOR (10%)
+    # Creature mass dropped to 5% of initial -- below CREATURE_MASS_FLOOR (20%)
     eval_input = RolloutEvaluation(
         initial_mass=initial_mass,
         final_mass=5.0,

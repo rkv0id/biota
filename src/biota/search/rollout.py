@@ -294,6 +294,8 @@ def rollout(
     thumb_buf: list[torch.Tensor] = []
 
     # 5. Run the loop, capturing stats and frames as we go
+    midpoint_step = config.steps // 2
+    midpoint_state_np: np.ndarray | None = None
     for step in range(history_len):
         com_y, com_x, bbox, gyr = _step_stats(state)
         com_y_np[step] = com_y
@@ -302,6 +304,8 @@ def rollout(
         gyradius_np[step] = gyr
         if step in frame_indices:
             thumb_buf.append(_downsample_frame(state, thumbnail_size))
+        if step == midpoint_step:
+            midpoint_state_np = state[:, :, 0].detach().cpu().numpy().astype(np.float32)
         if step < config.steps:
             state, signal = fl.step(state, signal)
 
@@ -342,6 +346,7 @@ def rollout(
         final_state=final_state_np,
         grid_size=config.sim.grid_h,
         total_steps=config.steps,
+        midpoint_state=midpoint_state_np,
     )
 
     # 8. Evaluate quality

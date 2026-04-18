@@ -1,0 +1,149 @@
+<svg width="100%" viewBox="0 0 720 420" role="img" xmlns="http://www.w3.org/2000/svg">
+  <title>biota signal field mechanics</title>
+  <desc>One simulation step with signal field active. Mass field and signal field evolve together: the creature emits signal proportional to positive growth activity (draining mass), receives a growth boost by dotting the convolved signal with its receptor profile, then the mass reintegrates and the signal decays per-channel.</desc>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <marker id="arr-teal" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="#3cdcc8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <marker id="arr-amber" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="#fbbf77" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <marker id="arr-purple" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="#a78bfa" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+      .th     { font-size: 13px; font-weight: 500; fill: #e4e4e7; }
+      .ts     { font-size: 11px; font-weight: 400; fill: #a1a1aa; }
+      .tsa    { font-size: 10px; font-weight: 400; fill: #71717a; }
+      .tlabel { font-size: 10px; font-weight: 500; fill: #52525b; letter-spacing: 0.07em; }
+      .tcode  { font-size: 10px; font-family: "SF Mono", "Fira Code", monospace; fill: #71717a; }
+      .tformula { font-size: 11px; font-family: "SF Mono", "Fira Code", monospace; fill: #a1a1aa; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="720" height="420" fill="#0e1015"/>
+
+  <!-- ── Left column: Mass field ─────────────────────────────────── -->
+  <!-- Mass field input box -->
+  <rect x="28" y="28" width="140" height="48" rx="6" fill="#16181f" stroke="#2e3044" stroke-width="1"/>
+  <text class="tlabel" x="44" y="46">MASS FIELD</text>
+  <text class="ts" x="44" y="64">A(H, W)  t</text>
+
+  <!-- Convolve mass with fK -->
+  <rect x="28" y="108" width="140" height="40" rx="6" fill="#16181f" stroke="#2e3044" stroke-width="1"/>
+  <text class="ts" x="98" y="124" text-anchor="middle">convolve</text>
+  <text class="tcode" x="98" y="138" text-anchor="middle">fft(A) × fK</text>
+
+  <!-- Growth field G -->
+  <rect x="28" y="182" width="140" height="48" rx="6" fill="#1a2228" stroke="#3cdcc8" stroke-width="1"/>
+  <text class="tlabel" x="44" y="200" fill="#3cdcc8">GROWTH G</text>
+  <text class="ts" x="44" y="216">G(H, W)</text>
+
+  <!-- Emission label mid-column -->
+  <rect x="28" y="266" width="140" height="36" rx="6" fill="#16181f" stroke="#fbbf77" stroke-width="1"/>
+  <text class="ts" x="98" y="280" text-anchor="middle" fill="#fbbf77">emission</text>
+  <text class="tcode" x="98" y="294" text-anchor="middle">G⁺ × rate × ev</text>
+
+  <!-- Reintegrate -->
+  <rect x="28" y="334" width="140" height="40" rx="6" fill="#16181f" stroke="#2e3044" stroke-width="1"/>
+  <text class="ts" x="98" y="350" text-anchor="middle">reintegrate</text>
+  <text class="tcode" x="98" y="364" text-anchor="middle">flow + pull</text>
+
+  <!-- Mass field output -->
+  <rect x="28" y="400" width="140" height="0" rx="6" fill="none"/>
+
+  <!-- ── Right column: Signal field ────────────────────────────── -->
+  <!-- Signal field input box -->
+  <rect x="552" y="28" width="140" height="48" rx="6" fill="#16181f" stroke="#3cdcc8" stroke-width="1"/>
+  <text class="tlabel" x="568" y="46" fill="#3cdcc8">SIGNAL FIELD</text>
+  <text class="ts" x="568" y="64">S(H, W, C)  t</text>
+
+  <!-- Convolve signal with fK_sig -->
+  <rect x="552" y="108" width="140" height="40" rx="6" fill="#16181f" stroke="#2e3044" stroke-width="1"/>
+  <text class="ts" x="622" y="124" text-anchor="middle">convolve</text>
+  <text class="tcode" x="622" y="138" text-anchor="middle">fft(S) × fK_sig</text>
+
+  <!-- Reception -->
+  <rect x="552" y="182" width="140" height="48" rx="6" fill="#1a1a2e" stroke="#a78bfa" stroke-width="1"/>
+  <text class="tlabel" x="568" y="200" fill="#a78bfa">RECEPTION</text>
+  <text class="tcode" x="568" y="216">dot(S̃, rp) → ΔG</text>
+
+  <!-- Decay -->
+  <rect x="552" y="266" width="140" height="36" rx="6" fill="#16181f" stroke="#ff6464" stroke-width="1"/>
+  <text class="ts" x="622" y="280" text-anchor="middle" fill="#ff6464">decay</text>
+  <text class="tcode" x="622" y="294" text-anchor="middle">S × (1 − dr)</text>
+
+  <!-- Signal field output -->
+  <rect x="552" y="334" width="140" height="48" rx="6" fill="#16181f" stroke="#3cdcc8" stroke-width="1"/>
+  <text class="tlabel" x="568" y="352" fill="#3cdcc8">SIGNAL FIELD</text>
+  <text class="ts" x="568" y="370">S(H, W, C)  t+1</text>
+
+  <!-- Mass output -->
+  <rect x="28" y="334" width="140" height="48" rx="6" fill="#16181f" stroke="#2e3044" stroke-width="1"/>
+  <text class="tlabel" x="44" y="352">MASS FIELD</text>
+  <text class="ts" x="44" y="370">A(H, W)  t+1</text>
+
+  <!-- ── Centre column: conservation note ───────────────────────── -->
+  <rect x="220" y="334" width="280" height="48" rx="6" fill="#16181f" stroke="#2e3044" stroke-width="1"/>
+  <text class="ts" x="360" y="352" text-anchor="middle">conservation</text>
+  <text class="tformula" x="360" y="370" text-anchor="middle">Σ A(t+1) + Σ S(t+1) ≤ Σ A(t) + Σ S(t)</text>
+
+  <!-- ── Vertical arrows left column ───────────────────────────── -->
+  <!-- Mass field → convolve -->
+  <line x1="98" y1="76" x2="98" y2="106" stroke="#a1a1aa" stroke-width="1.2" marker-end="url(#arr)"/>
+  <!-- convolve → growth G -->
+  <line x1="98" y1="148" x2="98" y2="180" stroke="#3cdcc8" stroke-width="1.2" marker-end="url(#arr-teal)"/>
+  <!-- growth → emission -->
+  <line x1="98" y1="230" x2="98" y2="264" stroke="#fbbf77" stroke-width="1.2" marker-end="url(#arr-amber)"/>
+  <!-- emission (mass drain) → reintegrate -->
+  <line x1="98" y1="302" x2="98" y2="332" stroke="#a1a1aa" stroke-width="1.2" marker-end="url(#arr)"/>
+
+  <!-- ── Vertical arrows right column ─────────────────────────── -->
+  <!-- Signal field → convolve -->
+  <line x1="622" y1="76" x2="622" y2="106" stroke="#3cdcc8" stroke-width="1.2" marker-end="url(#arr-teal)"/>
+  <!-- convolve → reception -->
+  <line x1="622" y1="148" x2="622" y2="180" stroke="#a78bfa" stroke-width="1.2" marker-end="url(#arr-purple)"/>
+  <!-- reception → decay (signal passes through) -->
+  <line x1="622" y1="230" x2="622" y2="264" stroke="#3cdcc8" stroke-width="1.2" marker-end="url(#arr-teal)"/>
+  <!-- decay → signal output -->
+  <line x1="622" y1="302" x2="622" y2="332" stroke="#3cdcc8" stroke-width="1.2" marker-end="url(#arr-teal)"/>
+
+  <!-- ── Cross arrows ───────────────────────────────────────────── -->
+  <!-- Emission: mass field → signal field (add emitted signal) -->
+  <path d="M168 284 C280 284 440 284 550 284" fill="none" stroke="#fbbf77" stroke-width="1.4"
+        stroke-dasharray="5 3" marker-end="url(#arr-amber)"/>
+  <text class="tsa" x="360" y="278" text-anchor="middle" fill="#fbbf77">+ emission → signal</text>
+  <!-- drain label -->
+  <text class="tsa" x="360" y="298" text-anchor="middle" fill="#71717a">− emission from mass</text>
+
+  <!-- Reception: convolved signal → growth field boost (signal → mass col) -->
+  <path d="M552 206 C460 206 340 206 170 206" fill="none" stroke="#a78bfa" stroke-width="1.4"
+        stroke-dasharray="5 3" marker-end="url(#arr-purple)"/>
+  <text class="tsa" x="360" y="200" text-anchor="middle" fill="#a78bfa">+ growth boost → ΔG</text>
+
+  <!-- Conservation arrows to centre bottom box -->
+  <line x1="168" y1="358" x2="218" y2="358" stroke="#2e3044" stroke-width="1" marker-end="url(#arr)"/>
+  <line x1="552" y1="358" x2="502" y2="358" stroke="#2e3044" stroke-width="1" marker-end="url(#arr)"/>
+
+  <!-- ── Legend ─────────────────────────────────────────────────── -->
+  <rect x="220" y="28" width="280" height="60" rx="6" fill="#16181f" stroke="#2e3044" stroke-width="1"/>
+  <text class="tlabel" x="236" y="46">LEGEND</text>
+  <line x1="236" y1="57" x2="266" y2="57" stroke="#fbbf77" stroke-width="1.4" stroke-dasharray="4 2"/>
+  <text class="tsa" x="272" y="61" fill="#fbbf77">emission  (mass → signal)</text>
+  <line x1="236" y1="74" x2="266" y2="74" stroke="#a78bfa" stroke-width="1.4" stroke-dasharray="4 2"/>
+  <text class="tsa" x="272" y="78" fill="#a78bfa">reception  (signal → growth boost)</text>
+
+  <!-- ── Parameter labels ───────────────────────────────────────── -->
+  <!-- emission_vector label near emission arrow -->
+  <text class="tcode" x="234" y="270" fill="#fbbf77">ev: emission_vector (C,)</text>
+  <text class="tcode" x="234" y="284" fill="#fbbf77">rate: emission_rate</text>
+  <!-- receptor_profile label near reception arrow -->
+  <text class="tcode" x="234" y="192" fill="#a78bfa">rp: receptor_profile (C,)  [−1, 1]</text>
+  <!-- decay_rates label near decay box -->
+  <text class="tcode" x="434" y="254" fill="#ff6464">dr: decay_rates (C,)  [0, 0.9]</text>
+</svg>

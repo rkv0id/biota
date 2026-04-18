@@ -566,7 +566,7 @@ def _build_index_html(
     # (no assumption about whether docs/ gets shipped alongside index.html).
     docs_dir = Path(__file__).resolve().parent.parent / "docs"
     svgs: dict[str, str] = {}
-    for name in ("archive-grid", "search-loop", "ecosystem-dispatch"):
+    for name in ("archive-grid", "search-loop", "ecosystem-dispatch", "signal-field"):
         path = docs_dir / f"{name}.svg"
         svgs[name.replace("-", "_")] = path.read_text(encoding="utf-8") if path.exists() else ""
     return template.render(
@@ -577,6 +577,7 @@ def _build_index_html(
         svg_archive_grid=svgs["archive_grid"],
         svg_search_loop=svgs["search_loop"],
         svg_ecosystem_dispatch=svgs["ecosystem_dispatch"],
+        svg_signal_field=svgs["signal_field"],
     )
 
 

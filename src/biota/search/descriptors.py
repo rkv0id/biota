@@ -150,6 +150,11 @@ class RolloutTrace:
     final_state: np.ndarray
     grid_size: int
     total_steps: int
+    midpoint_state: np.ndarray | None = None
+    """State at the midpoint step (total_steps // 2). Used by the multi-
+    point compactness term in the quality metric to penalise creatures that
+    peak early and degrade. None when not captured (older code paths and
+    rollout_batch, which does not support per-element midpoint capture)."""
 
     def slice(self, start: int, end: int) -> "RolloutTrace":
         """Return a trace covering steps [start, end) within the original window.
