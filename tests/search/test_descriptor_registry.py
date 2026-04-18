@@ -73,8 +73,8 @@ def _write_module(content: str) -> Path:
 # === REGISTRY ===
 
 
-def test_registry_has_fifteen_built_ins() -> None:
-    assert len(REGISTRY) == 15
+def test_registry_has_eighteen_built_ins() -> None:
+    assert len(REGISTRY) == 18
 
 
 def test_registry_contains_all_expected_names() -> None:
@@ -94,6 +94,9 @@ def test_registry_contains_all_expected_names() -> None:
         "morphological_instability",
         "activity",
         "spatial_entropy",
+        "emission_activity",
+        "receptor_sensitivity",
+        "signal_retention",
     }
     assert set(REGISTRY.keys()) == expected
 

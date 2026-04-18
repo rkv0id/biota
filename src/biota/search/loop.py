@@ -208,6 +208,16 @@ def search(
     # Inject active descriptors into the rollout config so workers compute
     # the right three axes.
     active = resolve_descriptors(config.descriptor_names)
+
+    # Validate: signal-only descriptors require --signal-field.
+    signal_only_names = [d.name for d in active if d.signal_only]
+    if signal_only_names and not config.signal_field:
+        raise ValueError(
+            f"descriptor(s) {signal_only_names} require a signal-enabled search. "
+            f"Pass --signal-field (or set signal_field=True in SearchConfig) to "
+            f"activate the signal field, or choose non-signal descriptors instead."
+        )
+
     rollout_with_descriptors = dc_replace(config.rollout, active_descriptors=active)
     config = dc_replace(config, rollout=rollout_with_descriptors)
     state = _LoopState(

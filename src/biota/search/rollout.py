@@ -293,6 +293,10 @@ def rollout(
     com_x_np = np.zeros(history_len, dtype=np.float32)
     bbox_np = np.zeros(history_len, dtype=np.float32)
     gyradius_np = np.zeros(history_len, dtype=np.float32)
+    # Signal history buffers -- only allocated for signal rollouts.
+    is_signal_rollout = signal is not None and sim_params.has_signal
+    emission_np = np.zeros(history_len, dtype=np.float32) if is_signal_rollout else None
+    reception_np = np.zeros(history_len, dtype=np.float32) if is_signal_rollout else None
     thumb_buf: list[torch.Tensor] = []
 
     # 5. Run the loop, capturing stats and frames as we go
@@ -304,6 +308,20 @@ def rollout(
         com_x_np[step] = com_x
         bbox_np[step] = bbox
         gyradius_np[step] = gyr
+        if (
+            emission_np is not None
+            and signal is not None
+            and sim_params.receptor_profile is not None
+        ):
+            # Emission activity: mean positive-growth signal emission this step.
+            g_pos_mean = float(state[:, :, 0].clamp(min=0.0).mean().item())
+            rate = sim_params.emission_rate if sim_params.emission_rate is not None else 0.0
+            emission_np[step] = g_pos_mean * rate
+            # Reception: mean |dot(signal_sum, receptor)| as a scalar.
+            if reception_np is not None:
+                sig_mean = signal.mean(dim=(0, 1))  # (C,)
+                rec_resp = float((sig_mean * sim_params.receptor_profile).sum().abs().item())
+                reception_np[step] = rec_resp
         if step in frame_indices:
             thumb_buf.append(_downsample_frame(state, thumbnail_size))
         if step == midpoint_step:
@@ -341,6 +359,11 @@ def rollout(
 
     # 7. Build the trace covering the last TRACE_TAIL_STEPS steps
     tail = min(TRACE_TAIL_STEPS, history_len)
+    # Signal retention scalar for the signal_retention descriptor.
+    signal_retention_val: float | None = None
+    if is_signal_rollout and initial_mass > 0:
+        signal_retention_val = float(np.clip(final_mass / initial_mass, 0.0, 1.0))
+
     trace = RolloutTrace(
         com_history=com_history[-tail:].astype(np.float32),
         bbox_fraction_history=bbox_np[-tail:].astype(np.float32),
@@ -349,6 +372,9 @@ def rollout(
         grid_size=config.sim.grid_h,
         total_steps=config.steps,
         midpoint_state=midpoint_state_np,
+        signal_emission_history=emission_np[-tail:] if emission_np is not None else None,
+        signal_reception_history=reception_np[-tail:] if reception_np is not None else None,
+        signal_retention=signal_retention_val,
     )
 
     # 8. Evaluate quality
