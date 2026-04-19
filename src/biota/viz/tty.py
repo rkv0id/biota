@@ -182,10 +182,9 @@ class SearchDisplay:
 
     def on_search_started(self, run_id: str, config: object) -> None:
         self._run_id = run_id
-        if self._tty:
-            # Print the header block -- will be overwritten on each update
-            self._render_search_block()
-        else:
+        # Non-TTY only: print a single start line. TTY rendering begins on the
+        # first RolloutCompleted so Ray/CUDA init noise lands before the block.
+        if not self._tty:
             print(
                 f"[search] starting run {run_id}  budget={self._budget}  device={self._device}",
                 file=sys.stderr,
