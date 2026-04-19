@@ -345,6 +345,9 @@ def rollout(
 
     # 6. Final state to numpy for descriptor functions
     final_state_np = state[:, :, 0].detach().cpu().numpy().astype(np.float32)
+    final_signal_state_np: np.ndarray | None = None
+    if signal is not None and is_signal_rollout:
+        final_signal_state_np = signal.detach().cpu().numpy().astype(np.float32)
 
     if not np.isfinite(final_mass) or not np.isfinite(com_y_np).all():
         # Defensive: NaN/inf in the state means the sim went off the rails.
@@ -387,6 +390,8 @@ def rollout(
         signal_emission_history=emission_np[-tail:] if emission_np is not None else None,
         signal_reception_history=reception_np[-tail:] if reception_np is not None else None,
         signal_retention=signal_retention_val,
+        final_signal_state=final_signal_state_np,
+        initial_signal_mass=initial_signal_mass,
     )
 
     # 8. Evaluate quality
@@ -395,8 +400,9 @@ def rollout(
             initial_mass=initial_mass,
             final_mass=final_mass,
             trace=trace,
-            initial_total=initial_mass + initial_signal_mass,
+            initial_total=initial_mass,
             final_signal_mass=final_signal_mass,
+            initial_signal_mass=initial_signal_mass,
         ),
         active_descriptors=config.active_descriptors,
     )
@@ -611,6 +617,149 @@ def _batched_sim_step(
     return new_A2.unsqueeze(-1)
 
 
+def _build_batched_signal_params(
+    params_list: list["ParamDict"],
+    config: SimConfig,
+    device: str,
+) -> tuple[
+    bool,
+    torch.Tensor | None,
+    torch.Tensor | None,
+    torch.Tensor | None,
+    torch.Tensor | None,
+    list[float],
+    list[float],
+    list[float],
+]:
+    """Extract and stack per-element signal params for batched signal stepping.
+
+    Returns (any_signal, fK_signal_batch, emission_vec_batch, receptor_batch,
+             decay_batch, emission_rates, alpha_couplings, beta_modulations).
+    fK_signal_batch is (B, H, W) complex -- single kernel shared across channels.
+    Others are (B, C) or list[float].
+    Returns (False, None, ...) when no creature has signal params.
+    """
+    from biota.search.params import has_signal_field
+    from biota.sim.flowlenia import SIGNAL_CHANNELS
+
+    has_signals = [has_signal_field(p) for p in params_list]
+    if not any(has_signals):
+        return False, None, None, None, None, [], [], []
+
+    H, W = config.grid_h, config.grid_w
+
+    fK_signal_list: list[torch.Tensor] = []
+    emission_vec_list: list[torch.Tensor] = []
+    receptor_list: list[torch.Tensor] = []
+    decay_list: list[torch.Tensor] = []
+    emission_rates: list[float] = []
+    alpha_couplings: list[float] = []
+    beta_modulations: list[float] = []
+
+    for p in params_list:
+        if has_signal_field(p):
+            # Build signal kernel FFT for this creature
+            fl_params = _params_dict_to_tensors(p, device=device)
+            fl_tmp = FlowLenia(config, fl_params, device=device)
+            sig_t = fl_tmp.signal_tensors()
+            assert sig_t is not None
+            fk_sig, decay_sig = sig_t
+            fK_signal_list.append(fk_sig)  # (C, H, W) complex
+            assert fl_params.emission_vector is not None
+            emission_vec_list.append(fl_params.emission_vector)  # (C,)
+            assert fl_params.receptor_profile is not None
+            receptor_list.append(fl_params.receptor_profile)  # (C,)
+            decay_list.append(decay_sig)  # (C,)
+            emission_rates.append(
+                float(fl_params.emission_rate) if fl_params.emission_rate is not None else 0.0
+            )
+            alpha_couplings.append(
+                float(fl_params.alpha_coupling) if fl_params.alpha_coupling is not None else 0.0
+            )
+            beta_modulations.append(
+                float(fl_params.beta_modulation) if fl_params.beta_modulation is not None else 0.0
+            )
+        else:
+            # Non-signal creature: zero-filled placeholders
+            fK_signal_list.append(torch.zeros(H, W, dtype=torch.complex64, device=device))
+            emission_vec_list.append(torch.zeros(SIGNAL_CHANNELS, device=device))
+            receptor_list.append(torch.zeros(SIGNAL_CHANNELS, device=device))
+            decay_list.append(torch.zeros(SIGNAL_CHANNELS, device=device))
+            emission_rates.append(0.0)
+            alpha_couplings.append(0.0)
+            beta_modulations.append(0.0)
+
+    return (
+        True,
+        torch.stack(fK_signal_list, dim=0),  # (B, C, H, W) complex
+        torch.stack(emission_vec_list, dim=0),  # (B, C)
+        torch.stack(receptor_list, dim=0),  # (B, C)
+        torch.stack(decay_list, dim=0),  # (B, C)
+        emission_rates,
+        alpha_couplings,
+        beta_modulations,
+    )
+
+
+def _batched_signal_step(
+    signals: torch.Tensor,  # (B, H, W, C)
+    A2: torch.Tensor,  # (B, H, W) current mass (pre-reintegration)
+    U_sum: torch.Tensor,  # (B, H, W) net growth field
+    fK_signal: torch.Tensor,  # (B, C, H, W) complex
+    emission_vec: torch.Tensor,  # (B, C)
+    receptor: torch.Tensor,  # (B, C)
+    decay: torch.Tensor,  # (B, C)
+    emission_rates: list[float],
+    alpha_couplings: list[float],
+    beta_modulations: list[float],
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Apply signal physics for B creatures in parallel.
+
+    Returns (new_signals, new_A2, new_U_sum) where new_A2 and new_U_sum
+    have signal effects applied (emission drain, alpha coupling).
+    """
+    B = signals.shape[0]
+
+    # sig_t: (B, C, H, W) for FFT
+    sig_t = signals.permute(0, 3, 1, 2)  # (B, C, H, W)
+    fSig = torch.fft.fft2(sig_t)  # (B, C, H, W) complex
+    # fK_signal is (B, H, W) -- single kernel shared across channels.
+    # Unsqueeze to (B, 1, H, W) to broadcast across C channels.
+    convolved = torch.fft.ifft2(fK_signal.unsqueeze(1) * fSig).real  # (B, C, H, W)
+    # Receptor response: dot(receptor, convolved) -> (B, H, W)
+    receptor_response = (convolved * receptor.view(B, -1, 1, 1)).sum(dim=1)  # (B, H, W)
+
+    # Alpha coupling: per-element scalar
+    alpha_t = torch.tensor(alpha_couplings, device=signals.device).view(B, 1, 1)
+    growth_mult = (1.0 + alpha_t * receptor_response).clamp(min=0.0)
+    U_sum_new = U_sum * growth_mult
+    G_pos = U_sum_new.clamp(min=0.0)  # (B, H, W)
+
+    # Adaptive emission rate via beta_modulation
+    effective_rates = torch.zeros(B, device=signals.device)
+    for i in range(B):
+        base = emission_rates[i]
+        beta = beta_modulations[i]
+        if beta != 0.0:
+            received_mean = float(receptor_response[i].mean().item())
+            effective_rates[i] = max(0.0, min(0.1, base * (1.0 + beta * received_mean)))
+        else:
+            effective_rates[i] = base
+
+    # Emission: (B, H, W) * rate -> drain from mass, add to signal
+    rate_t = effective_rates.view(B, 1, 1)
+    emitted = (G_pos * rate_t).clamp(max=A2.clamp(min=0.0))  # (B, H, W)
+    # emit_per_channel: (B, H, W, C)
+    emit_per_channel = emitted.unsqueeze(-1) * emission_vec.view(B, 1, 1, -1)
+    new_signals = signals + emit_per_channel
+    new_A2 = A2 - emitted
+
+    # Decay: (B, H, W, C) * (B, 1, 1, C)
+    new_signals = new_signals * (1.0 - decay.view(B, 1, 1, -1))
+
+    return new_signals, new_A2, U_sum_new
+
+
 def rollout_batch(
     params_list: list[ParamDict],
     seeds: list[int],
@@ -681,6 +830,38 @@ def rollout_batch(
 
     initial_masses = [float(states[i].sum().item()) for i in range(B)]
 
+    # Signal field initialization (when any creature has signal params)
+    (
+        any_signal,
+        fK_signal_batch,
+        emission_vec_batch,
+        receptor_batch,
+        decay_batch,
+        emission_rates,
+        alpha_couplings,
+        beta_modulations,
+    ) = _build_batched_signal_params(params_list, config.sim, device)
+    signals: torch.Tensor | None = None
+    initial_signal_masses: list[float] = [0.0] * B
+    if any_signal and fK_signal_batch is not None:
+        from biota.sim.flowlenia import SIGNAL_CHANNELS
+
+        H, W = config.sim.grid_h, config.sim.grid_w
+        # Initialize one signal field per element using its seed
+        sig_list = []
+        for i, p in enumerate(params_list):
+            from biota.search.params import has_signal_field
+
+            if has_signal_field(p):
+                fl_i = FlowLenia(
+                    config.sim, _params_dict_to_tensors(p, device=device), device=device
+                )
+                sig_list.append(fl_i.make_initial_signal_field(seed=seeds[i]))
+            else:
+                sig_list.append(torch.zeros(H, W, SIGNAL_CHANNELS, device=device))
+        signals = torch.stack(sig_list, dim=0)  # (B, H, W, C)
+        initial_signal_masses = [float(signals[i].sum().item()) for i in range(B)]
+
     # Per-element history buffers
     history_len = config.steps + 1
     com_y_hist = np.zeros((B, history_len), dtype=np.float32)
@@ -714,6 +895,35 @@ def rollout_batch(
                 pos,
                 config.sim,
             )
+            if (
+                signals is not None
+                and fK_signal_batch is not None
+                and emission_vec_batch is not None
+                and receptor_batch is not None
+                and decay_batch is not None
+            ):
+                A2_cur = states[:, :, :, 0]  # (B, H, W)
+                # Compute U_sum from current states for signal physics
+                fA_cur = torch.fft.fft2(A2_cur)
+                U_cur_full = torch.fft.ifft2(fK * fA_cur.unsqueeze(1), dim=(-2, -1)).real
+                m_ = m_batch.view(B, -1, 1, 1)
+                s_ = s_batch.view(B, -1, 1, 1)
+                h_ = h_batch.view(B, -1, 1, 1)
+                G_cur = (torch.exp(-(((U_cur_full - m_) / s_) ** 2) / 2.0) * 2.0 - 1.0) * h_
+                U_sum_cur = G_cur.sum(dim=1)  # (B, H, W)
+                signals, new_A2, _ = _batched_signal_step(
+                    signals,
+                    A2_cur,
+                    U_sum_cur,
+                    fK_signal_batch,
+                    emission_vec_batch,
+                    receptor_batch,
+                    decay_batch,
+                    emission_rates,
+                    alpha_couplings,
+                    beta_modulations,
+                )
+                states = torch.cat([new_A2.unsqueeze(-1), states[:, :, :, 1:]], dim=-1)
 
     final_masses = [float(states[i].sum().item()) for i in range(B)]
 
@@ -749,6 +959,9 @@ def rollout_batch(
             continue
 
         tail = min(TRACE_TAIL_STEPS, history_len)
+        final_signal_state_np: np.ndarray | None = None
+        if signals is not None:
+            final_signal_state_np = signals[i].detach().cpu().numpy().astype(np.float32)
         trace = RolloutTrace(
             com_history=com_history[-tail:].astype(np.float32),
             bbox_fraction_history=bbox_hist[i, -tail:].astype(np.float32),
@@ -756,13 +969,19 @@ def rollout_batch(
             final_state=final_state_np,
             grid_size=config.sim.grid_h,
             total_steps=config.steps,
+            final_signal_state=final_signal_state_np,
+            initial_signal_mass=initial_signal_masses[i],
         )
 
+        final_signal_mass_i = float(signals[i].sum().item()) if signals is not None else 0.0
         eval_result = evaluate(
             RolloutEvaluation(
                 initial_mass=initial_masses[i],
                 final_mass=final_masses[i],
                 trace=trace,
+                initial_total=initial_masses[i],
+                final_signal_mass=final_signal_mass_i,
+                initial_signal_mass=initial_signal_masses[i],
             ),
             active_descriptors=config.active_descriptors,
         )

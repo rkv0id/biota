@@ -37,12 +37,12 @@ from biota.search.descriptors import (
     compute_angular_velocity,
     compute_descriptors,
     compute_displacement_ratio,
-    compute_emission_activity,
+    compute_dominant_channel_fraction,
     compute_growth_gradient,
     compute_gyradius,
     compute_morphological_instability,
-    compute_receptor_sensitivity,
-    compute_signal_retention,
+    compute_signal_field_variance,
+    compute_signal_mass_ratio,
     compute_spatial_entropy,
     compute_spectral_entropy,
     compute_velocity,
@@ -538,13 +538,15 @@ C = 16  # signal channels
 
 
 def _make_signal_trace(
-    emission_history: np.ndarray | None = None,
-    reception_history: np.ndarray | None = None,
-    retention: float | None = None,
+    final_signal_state: np.ndarray | None = None,
+    initial_signal_mass: float = 1.0,
 ) -> RolloutTrace:
-    """Build a RolloutTrace with signal history fields populated."""
+    """Build a RolloutTrace with signal state fields populated."""
     state = np.zeros((GRID, GRID), dtype=np.float32)
     state[40:56, 40:56] = 1.0
+    if final_signal_state is None:
+        final_signal_state = np.zeros((GRID, GRID, C), dtype=np.float32)
+        final_signal_state[40:56, 40:56, 0] = 0.5  # dominant channel 0
     return RolloutTrace(
         com_history=np.full((TRACE_LEN, 2), 48.0, dtype=np.float32),
         bbox_fraction_history=np.full(TRACE_LEN, 0.04, dtype=np.float32),
@@ -552,95 +554,100 @@ def _make_signal_trace(
         final_state=state,
         grid_size=GRID,
         total_steps=STEPS,
-        signal_emission_history=emission_history,
-        signal_reception_history=reception_history,
-        signal_retention=retention,
+        final_signal_state=final_signal_state,
+        initial_signal_mass=initial_signal_mass,
     )
 
 
-# --- emission_activity ---
+# --- signal_field_variance ---
 
 
-def test_emission_activity_zero_for_non_signal() -> None:
+def test_signal_field_variance_zero_for_non_signal() -> None:
     trace = _make_trace()
-    assert compute_emission_activity(trace) == 0.0
+    assert compute_signal_field_variance(trace) == 0.0
 
 
-def test_emission_activity_zero_for_empty_history() -> None:
-    trace = _make_signal_trace(emission_history=np.array([], dtype=np.float32))
-    assert compute_emission_activity(trace) == 0.0
+def test_signal_field_variance_zero_for_uniform_field() -> None:
+    field = np.ones((GRID, GRID, C), dtype=np.float32) * 0.1
+    trace = _make_signal_trace(final_signal_state=field)
+    assert compute_signal_field_variance(trace) == pytest.approx(0.0, abs=1e-6)
 
 
-def test_emission_activity_scales_with_emission() -> None:
-    low = _make_signal_trace(emission_history=np.full(TRACE_LEN, 0.002, dtype=np.float32))
-    high = _make_signal_trace(emission_history=np.full(TRACE_LEN, 0.008, dtype=np.float32))
-    assert compute_emission_activity(low) < compute_emission_activity(high)
+def test_signal_field_variance_localized_beats_diffuse() -> None:
+    localized = np.zeros((GRID, GRID, C), dtype=np.float32)
+    localized[44:52, 44:52, 0] = 1.0
+    diffuse = np.ones((GRID, GRID, C), dtype=np.float32) * (8 * 8 / (GRID * GRID))
+    lo = compute_signal_field_variance(_make_signal_trace(final_signal_state=diffuse))
+    hi = compute_signal_field_variance(_make_signal_trace(final_signal_state=localized))
+    assert hi > lo
 
 
-def test_emission_activity_clipped_to_unit() -> None:
-    # History above normalizer -> clips to 100.0
-    trace = _make_signal_trace(emission_history=np.full(TRACE_LEN, 1.0, dtype=np.float32))
-    assert compute_emission_activity(trace) == 1.0
+def test_signal_field_variance_nonnegative() -> None:
+    rng = np.random.default_rng(42)
+    field = rng.random((GRID, GRID, C)).astype(np.float32)
+    assert compute_signal_field_variance(_make_signal_trace(final_signal_state=field)) >= 0.0
 
 
-def test_emission_activity_in_unit_interval() -> None:
-    trace = _make_signal_trace(
-        emission_history=np.random.default_rng(7).random(TRACE_LEN).astype(np.float32) * 0.05
+# --- signal_mass_ratio ---
+
+
+def test_signal_mass_ratio_zero_for_non_signal() -> None:
+    trace = _make_trace()
+    assert compute_signal_mass_ratio(trace) == 0.0
+
+
+def test_signal_mass_ratio_zero_when_initial_signal_zero() -> None:
+    trace = _make_signal_trace(initial_signal_mass=0.0)
+    assert compute_signal_mass_ratio(trace) == 0.0
+
+
+def test_signal_mass_ratio_reflects_accumulation() -> None:
+    # Field with more mass -> higher ratio
+    small = np.zeros((GRID, GRID, C), dtype=np.float32)
+    small[44:52, 44:52, 0] = 0.1
+    large = np.zeros((GRID, GRID, C), dtype=np.float32)
+    large[44:52, 44:52, 0] = 1.0
+    lo = compute_signal_mass_ratio(
+        _make_signal_trace(final_signal_state=small, initial_signal_mass=1.0)
     )
-    val = compute_emission_activity(trace)
-    assert 0.0 <= val <= 100.0
-
-
-# --- receptor_sensitivity ---
-
-
-def test_receptor_sensitivity_zero_for_non_signal() -> None:
-    trace = _make_trace()
-    assert compute_receptor_sensitivity(trace) == 0.0
-
-
-def test_receptor_sensitivity_zero_for_empty_history() -> None:
-    trace = _make_signal_trace(reception_history=np.array([], dtype=np.float32))
-    assert compute_receptor_sensitivity(trace) == 0.0
-
-
-def test_receptor_sensitivity_scales_with_response() -> None:
-    low = _make_signal_trace(reception_history=np.full(TRACE_LEN, 0.003, dtype=np.float32))
-    high = _make_signal_trace(reception_history=np.full(TRACE_LEN, 0.010, dtype=np.float32))
-    assert compute_receptor_sensitivity(low) < compute_receptor_sensitivity(high)
-
-
-def test_receptor_sensitivity_in_unit_interval() -> None:
-    trace = _make_signal_trace(
-        reception_history=np.random.default_rng(9).random(TRACE_LEN).astype(np.float32) * 0.010
+    hi = compute_signal_mass_ratio(
+        _make_signal_trace(final_signal_state=large, initial_signal_mass=1.0)
     )
-    val = compute_receptor_sensitivity(trace)
-    assert 0.0 <= val <= 100.0
+    assert hi > lo
 
 
-# --- signal_retention ---
+def test_signal_mass_ratio_nonnegative() -> None:
+    rng = np.random.default_rng(7)
+    field = rng.random((GRID, GRID, C)).astype(np.float32)
+    assert compute_signal_mass_ratio(_make_signal_trace(final_signal_state=field)) >= 0.0
 
 
-def test_signal_retention_one_for_non_signal() -> None:
-    """Non-signal rollout: no mass was lost, retention = 1.0."""
+# --- dominant_channel_fraction ---
+
+
+def test_dominant_channel_fraction_zero_for_non_signal() -> None:
     trace = _make_trace()
-    assert compute_signal_retention(trace) == 1.0  # non-signal returns exactly 1.0
+    assert compute_dominant_channel_fraction(trace) == 0.0
 
 
-def test_signal_retention_reflects_mass_loss() -> None:
-    # 70% retained -> 0.7
-    trace = _make_signal_trace(retention=0.7)
-    assert abs(compute_signal_retention(trace) - 0.7) < 1e-6
+def test_dominant_channel_fraction_one_for_single_channel() -> None:
+    field = np.zeros((GRID, GRID, C), dtype=np.float32)
+    field[:, :, 3] = 0.5  # all mass in channel 3
+    trace = _make_signal_trace(final_signal_state=field)
+    assert compute_dominant_channel_fraction(trace) == pytest.approx(1.0, abs=1e-6)
 
 
-def test_signal_retention_clipped_to_100() -> None:
-    # Clip bound is now 100.0 (raw value), not 1.0
-    assert compute_signal_retention(_make_signal_trace(retention=150.0)) == 100.0
-    assert compute_signal_retention(_make_signal_trace(retention=1.5)) == 1.5
-    assert compute_signal_retention(_make_signal_trace(retention=-0.1)) == 0.0
+def test_dominant_channel_fraction_uniform_returns_one_over_c() -> None:
+    field = np.ones((GRID, GRID, C), dtype=np.float32)
+    trace = _make_signal_trace(final_signal_state=field)
+    assert compute_dominant_channel_fraction(trace) == pytest.approx(1.0 / C, abs=1e-6)
 
 
-def test_signal_retention_high_beats_low() -> None:
-    high = _make_signal_trace(retention=0.95)
-    low = _make_signal_trace(retention=0.40)
-    assert compute_signal_retention(high) > compute_signal_retention(low)
+def test_dominant_channel_fraction_specialist_beats_generalist() -> None:
+    specialist = np.zeros((GRID, GRID, C), dtype=np.float32)
+    specialist[:, :, 0] = 0.9
+    specialist[:, :, 1] = 0.1
+    generalist = np.ones((GRID, GRID, C), dtype=np.float32)
+    hi = compute_dominant_channel_fraction(_make_signal_trace(final_signal_state=specialist))
+    lo = compute_dominant_channel_fraction(_make_signal_trace(final_signal_state=generalist))
+    assert hi > lo

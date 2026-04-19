@@ -173,6 +173,11 @@ class RolloutTrace:
     """final_mass / initial_mass for signal rollouts. Measures how much
     mass the creature retained vs bled into the signal field.
     None for non-signal rollouts."""
+    final_signal_state: np.ndarray | None = None
+    """Final signal field (H, W, C) float32, summed to (H, W) for spatial
+    descriptors. None for non-signal rollouts."""
+    initial_signal_mass: float = 0.0
+    """Total signal field mass at step 0. Zero for non-signal rollouts."""
 
     def slice(self, start: int, end: int) -> "RolloutTrace":
         """Return a trace covering steps [start, end) within the original window.
@@ -200,6 +205,8 @@ class RolloutTrace:
                 else None
             ),
             signal_retention=self.signal_retention,
+            final_signal_state=self.final_signal_state,
+            initial_signal_mass=self.initial_signal_mass,
         )
 
 
@@ -670,64 +677,62 @@ def compute_spatial_entropy(trace: "RolloutTrace") -> float:
 # === signal descriptors ===
 
 
-def compute_emission_activity(trace: RolloutTrace) -> float:
-    """Mean emission activity over the trace tail, normalized to [0, 1].
+def compute_signal_field_variance(trace: RolloutTrace) -> float:
+    """Spatial variance of the total signal field at the end of the rollout.
 
-    Measures how much signal the creature actually emitted during its rollout,
-    not just what its emission_rate parameter is. A creature with high
-    emission_rate but low positive growth activity barely emits.
+    Measures how structured and localized the creature's chemical footprint
+    is. High variance = signal is concentrated near the creature body (strong
+    local emission, fast decay). Low variance = signal has diffused evenly
+    across the grid or barely accumulated.
 
-    Returns 0.0 for non-signal rollouts (signal_emission_history is None).
-    Normalized against a typical peak of 0.02 (2x the max emission_rate).
+    Computed from final_signal_state summed across channels to a (H, W)
+    scalar field. Returns 0.0 for non-signal rollouts.
     """
-    if trace.signal_emission_history is None or len(trace.signal_emission_history) == 0:
+    if trace.final_signal_state is None:
         return 0.0
-    mean_activity = float(trace.signal_emission_history.mean())
-    # Normalizer calibrated against observed rollout distributions:
-    # emit values span ~0.000-0.010 in practice. 0.012 maps the typical
-    # max (~0.010) to ~0.83, giving good bin spread across the 32-bin axis.
-    # Typical observed range: 0.000-0.010. CVT handles scale.
-    return float(np.clip(mean_activity, 0.0, 100.0))
+    # Sum across channels -> (H, W) total signal per cell
+    field = trace.final_signal_state.sum(axis=-1)
+    return float(np.var(field))
 
 
-def compute_receptor_sensitivity(trace: RolloutTrace) -> float:
-    """Mean absolute reception response over the trace tail, normalized to [0, 1].
+def compute_signal_mass_ratio(trace: RolloutTrace) -> float:
+    """Ratio of final signal field mass to creature mass at step 0.
 
-    Measures how strongly the creature actually responded to the chemical
-    environment it encountered during its solo rollout. High = the creature's
-    receptor profile was well-aligned with the signal it encountered and
-    produced strong growth modulation. Low = chemical mismatch or inert.
+    Measures how much chemical substance has accumulated in the field
+    relative to the creature's body. Varies with emission_rate, decay_rates,
+    and how long the run lasted. A pure listener (no emission) scores near 0;
+    a broadcaster scores high.
 
     Returns 0.0 for non-signal rollouts.
-    # Normalizer calibrated against observed rollout distributions:
-    # reception values span ~0.000-0.014 in practice. 0.016 maps the
-    # typical max (~0.014) to ~0.875, giving good bin spread.
     """
-    if trace.signal_reception_history is None or len(trace.signal_reception_history) == 0:
+    if trace.final_signal_state is None or trace.initial_signal_mass == 0.0:
         return 0.0
-    mean_response = float(np.abs(trace.signal_reception_history).mean())
-    # Typical observed range: 0.000-0.014. CVT handles scale.
-    return float(np.clip(mean_response, 0.0, 100.0))
+    final_signal = float(trace.final_signal_state.sum())
+    # Normalize by initial signal mass so the ratio is relative to the
+    # background field that was present at the start of the rollout.
+    return float(np.clip(final_signal / max(trace.initial_signal_mass, 1e-9), 0.0, 100.0))
 
 
-def compute_signal_retention(trace: RolloutTrace) -> float:
-    """Mass retained vs bled into the signal field: final_mass / initial_mass.
+def compute_dominant_channel_fraction(trace: RolloutTrace) -> float:
+    """Fraction of total signal mass carried by the dominant channel.
 
-    High retention (near 1.0) = chemically conservative creature; keeps most
-    of its mass and emits sparingly. Low retention (near 0.0) = aggressive
-    emitter; broadcasts heavily at the cost of mass.
+    Captures the effective emission_vector direction: a creature that
+    strongly emits into one chemical channel scores near 1.0; one whose
+    signal spreads evenly across all channels scores near 1/C (~0.25 for
+    C=4 channels).
 
-    Together with emission_activity and receptor_sensitivity this creates a
-    three-axis chemical behavior space:
-      high emission + low retention = broadcaster
-      low emission + high sensitivity = listener
-      high emission + high sensitivity + high alpha = predator candidate
-
-    Returns 1.0 for non-signal rollouts (no mass was lost to signal field).
+    High values = chemical specialists; low values = generalists.
+    Returns 1/C (uniform prior) for non-signal rollouts or zero signal.
     """
-    if trace.signal_retention is None:
-        return 1.0
-    return float(np.clip(trace.signal_retention, 0.0, 100.0))
+    if trace.final_signal_state is None:
+        return 0.0
+    # Sum over spatial dims -> (C,) total per channel
+    per_channel = trace.final_signal_state.sum(axis=(0, 1))
+    total = float(per_channel.sum())
+    if total <= 0.0:
+        C = trace.final_signal_state.shape[-1]
+        return 1.0 / max(C, 1)
+    return float(per_channel.max() / total)
 
 
 REGISTRY: dict[str, Descriptor] = {
@@ -822,25 +827,25 @@ REGISTRY: dict[str, Descriptor] = {
         compute=compute_spatial_entropy,
     ),
     # --- signal-only descriptors ---
-    "emission_activity": Descriptor(
-        name="emission activity",
-        short_name="emit.act.",
-        direction_label="more active emission",
-        compute=compute_emission_activity,
+    "signal_field_variance": Descriptor(
+        name="signal field variance",
+        short_name="sig.var.",
+        direction_label="more localized",
+        compute=compute_signal_field_variance,
         signal_only=True,
     ),
-    "receptor_sensitivity": Descriptor(
-        name="receptor sensitivity",
-        short_name="recep.sens.",
-        direction_label="more sensitive",
-        compute=compute_receptor_sensitivity,
+    "signal_mass_ratio": Descriptor(
+        name="signal mass ratio",
+        short_name="sig.ratio",
+        direction_label="more accumulated",
+        compute=compute_signal_mass_ratio,
         signal_only=True,
     ),
-    "signal_retention": Descriptor(
-        name="signal retention",
-        short_name="sig.ret.",
-        direction_label="more conservative",
-        compute=compute_signal_retention,
+    "dominant_channel_fraction": Descriptor(
+        name="dominant channel fraction",
+        short_name="dom.ch.",
+        direction_label="more specialized",
+        compute=compute_dominant_channel_fraction,
         signal_only=True,
     ),
 }

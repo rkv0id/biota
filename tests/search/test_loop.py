@@ -226,7 +226,7 @@ def test_signal_only_descriptor_without_signal_field_raises() -> None:
     cfg = _cheap_config(
         budget=5,
         random_phase_size=5,
-        descriptor_names=("emission_activity", "gyradius", "spectral_entropy"),
+        descriptor_names=("signal_field_variance", "gyradius", "spectral_entropy"),
         signal_field=False,
     )
     import tempfile
@@ -240,7 +240,7 @@ def test_signal_only_descriptor_with_signal_field_does_not_raise() -> None:
     cfg = _cheap_config(
         budget=5,
         random_phase_size=5,
-        descriptor_names=("emission_activity", "gyradius", "spectral_entropy"),
+        descriptor_names=("signal_field_variance", "gyradius", "spectral_entropy"),
         signal_field=True,
     )
     import tempfile

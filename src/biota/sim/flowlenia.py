@@ -128,6 +128,19 @@ class FlowLenia:
         self._sobel_kx, self._sobel_ky = self._build_sobel_kernels()
         self._pos = self._build_position_grid()
 
+    def signal_tensors(self) -> tuple[torch.Tensor, torch.Tensor] | None:
+        """Return (fK_signal, decay) for external batched signal stepping.
+
+        Returns None when this instance has no signal field.
+        fK_signal: (H, W) complex -- signal convolution kernel in freq domain.
+        Single kernel shared across all C channels; channels are differentiated
+        by the receptor dot product and emission vector, not the kernel.
+        decay:     (C,) float -- per-channel decay rates.
+        """
+        if self._fK_signal is None:
+            return None
+        return self._fK_signal, self._decay
+
     def make_initial_signal_field(self, seed: int = 0) -> torch.Tensor:
         """Build a spatially varied (H, W, C) float32 signal field background.
 

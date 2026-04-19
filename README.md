@@ -34,7 +34,7 @@ Ecosystem dispatch is Ray-correct: each experiment is a self-contained payload. 
 
 ## Behavioral descriptors
 
-The archive grid has three axes, each a scalar measured empirically from the rollout. Choose any three from the built-in library of fifteen:
+The archive grid has three axes, each a scalar measured empirically from the rollout. Choose any three from the built-in library of eighteen:
 
 | Descriptor | What it captures |
 |---|---|
@@ -53,8 +53,11 @@ The archive grid has three axes, each a scalar measured empirically from the rol
 | `morphological_instability` | Variance of gyradius over the trace tail (shape stability) |
 | `activity` | Mean absolute gyradius change per step (internal work rate) |
 | `spatial_entropy` | Shannon entropy of coarse spatial mass distribution |
+| `signal_field_variance` | Spatial variance of the total signal field at end of rollout. High = signal concentrated near creature body; low = diffused. **Signal-only.** |
+| `signal_mass_ratio` | Final signal mass / initial signal mass. Measures chemical accumulation relative to the background field. **Signal-only.** |
+| `dominant_channel_fraction` | Fraction of signal mass in the dominant channel. High = chemical specialist; low ≈ 1/C = generalist. **Signal-only.** |
 
-With 15 built-ins there are C(15,3) = 455 possible archive configurations. Supply your own via `--descriptor-module`. The archive viewer renders all three axes: two as the spatial grid, the third as an interactive slice slider.
+With 18 built-ins (15 general + 3 signal-only) there are C(18,3) = 816 possible archive configurations. Signal-only descriptors require `--signal-field` and work best combined with at least one morphological axis -- pure signal-only combos require larger budgets since creatures cluster more tightly in signal space. Supply custom descriptors via `--descriptor-module`. The archive viewer renders all three axes with histogram and correlation panels.
 
 ## Quickstart
 
@@ -163,22 +166,22 @@ This adds six signal parameters to each creature's searchable parameter space:
 
 ![signal field mechanics](docs/signal-field.svg)
 
-**Physics.** At each step: (1) convolve mass to get G(H,W); (2) convolve signal field; (3) compute reception `dot(convolved_signal, receptor_profile)`; (4) apply `alpha_coupling`: `G *= (1 + alpha * reception).clamp(min=0)` -- positive alpha is chemotaxis (grow into favorable signal, including other species' territory, enabling cross-species predation); negative alpha is chemorepulsion; (5) modulate emission rate via `beta_modulation`: `rate_eff = rate * (1 + beta * mean(reception))` clipped to [0, 0.1] -- positive beta is quorum sensing, negative beta is feedback inhibition; (6) emit `G_pos * rate_eff * emission_vector`, draining mass into signal field; (7) reintegrate mass; (8) decay signal at `decay_rates`. Total conserved: mass + signal.
+**Physics.** At each step: (1) convolve mass to get G(H,W); (2) convolve signal field; (3) compute reception `dot(convolved_signal, receptor_profile)`; (4) apply `alpha_coupling`: `G *= (1 + alpha * reception).clamp(min=0)` -- positive alpha is chemotaxis (grow into favorable signal, including other species' territory, enabling cross-species predation); negative alpha is chemorepulsion; (5) modulate emission rate via `beta_modulation`: `rate_eff = rate * (1 + beta * mean(reception))` clipped to [0, 0.1] -- positive beta is quorum sensing, negative beta is feedback inhibition; (6) emit `G_pos * rate_eff * emission_vector`, draining mass into signal field; (7) reintegrate mass; (8) decay signal at `decay_rates`. Note: signal mass decays each step by design -- total mass+signal is not conserved. Creature mass alone is conserved modulo emission (which transfers mass into the signal field).
 
 **Archive compatibility.** An archive produced with `--signal-field` is tagged `"signal_field": true` in `manifest.json`. Ecosystem runs detect this automatically from the creature params -- no YAML flag needed. If any source creature comes from a signal-enabled archive, all sources must too; mixing signal and non-signal archives raises an error at load time.
 
-**Quality metric.** Three hard filters gate entry: (1) conserved mass within [0.5, 2.0] × initial; (2) bounding-box fraction < 0.6 (not scattered); (3) descriptor drift across adjacent 50-step windows ≤ 0.2. Survivors are ranked by a three-component score:
+**Quality metric.** Three hard filters gate entry: (1) creature mass within [0.5, 2.0] × initial (signal field decays by design and is excluded from this check); (2) bounding-box fraction < 0.6 (not scattered); (3) descriptor drift across adjacent 50-step windows ≤ 0.2. Survivors are ranked by a three-component score:
 
 ```
 non-signal:  q = 0.6 × compactness  +  0.4 × stability
-signal:      q = 0.5 × compactness  +  0.2 × stability  +  0.3 × retention
+signal:      q = 0.5 × compactness  +  0.3 × stability  +  0.2 × signal_activity
 
-compactness = min( compact(state_T/2),  compact(state_T) )
-stability   = clip( 1 − drift / 0.2,  0,  1 )
-retention   = clip( final_mass / initial_mass,  0,  1 )
+compactness      = min( compact(state_T/2),  compact(state_T) )
+stability        = clip( 1 − drift / 0.2,  0,  1 )
+signal_activity  = clip( final_signal_mass / initial_signal_mass,  0,  1 )
 ```
 
-The two-point compactness term is the key addition. Almost all viable solitons score >0.95 at the final step, making a single-snapshot metric nearly constant across the population. Taking the minimum with the midpoint state catches creatures that peak early and gradually become diffuse -- the type of instability that matters most for long ecosystem runs. The continuous stability term rewards low-drift creatures above borderline survivors. For signal runs, the 0.2 creature mass floor and the retention term together penalise runaway emission. The initial signal field is low-frequency Gaussian noise (~0.01 amplitude) per channel; signal searches auto-select 800 steps.
+The two-point compactness term is the key addition. Almost all viable solitons score >0.95 at the final step, making a single-snapshot metric nearly constant across the population. Taking the minimum with the midpoint state catches creatures that peak early and gradually become diffuse -- the type of instability that matters most for long ecosystem runs. The `signal_activity` term rewards creatures that maintain or replenish the background chemical field rather than letting it decay away -- selecting for genuine emitters over chemically passive creatures. The initial signal field is low-frequency Gaussian noise (~0.01 amplitude) per channel; signal searches auto-select 800 steps.
 
 ## Relationship to related work
 
@@ -300,7 +303,7 @@ The test suite runs entirely in no-Ray mode. `just smoke-ray` exercises the Ray 
 - [x] v1.0.0 - Lineage view, atlas site, public launch at [biota-atlas.pages.dev](https://biota-atlas.pages.dev)
 - [x] v1.1.0 - 9 built-in descriptors, `--descriptors` CLI, per-axis archive filtering, custom descriptor API
 - [x] v2.0.0 - Ecosystem simulation: spawn archive creatures on a shared grid, animated GIF output, rectangular grids
-- [x] v2.1.0 - 15 built-in descriptors (displacement ratio, angular velocity, growth gradient, morphological instability, activity, spatial entropy)
+- [x] v2.1.0 - 15 general built-in descriptors (displacement ratio, angular velocity, growth gradient, morphological instability, activity, spatial entropy)
 - [x] v2.2.0 - Heterogeneous ecosystems: multi-source YAML configs, species-indexed parameter localization, per-cell ownership tracking
 - [x] v2.3.0 - Per-source `patch` override; parallel ecosystem dispatch via Ray (`--local-ray`, `--ray-address`, `--workers`, `--gpu-fraction`); sidebar layout with pan/zoom canvas
 - [x] v2.4.0 - Cluster-safe ecosystem dispatch: driver-side creature loading and driver-side output materialization; transport×device smoke test grid
@@ -316,7 +319,13 @@ The test suite runs entirely in no-Ray mode. `just smoke-ray` exercises the Ray 
   signal overlay checkbox on ecosystem GIF; outcome label tooltips
 - [x] v3.5.0 - Chemical coupling (alpha_coupling [-1,1]: multiplicative growth, enables
   cross-species predation) + adaptive emission (beta_modulation [-1,1]: quorum sensing /
-  feedback inhibition); 3 signal-only descriptors; descriptor library 15→18
+  feedback inhibition); descriptor library 15→18
+- [x] v4.0.0 - CVT-MAP-Elites archive (calibration phase fits k-means centroids from observed
+  descriptor distribution; per-axis scale normalization; creature_id replaces grid coords);
+  signal descriptors rebuilt (signal_field_variance, signal_mass_ratio, dominant_channel_fraction
+  replace emission_activity/receptor_sensitivity/signal_retention -- new descriptors measure
+  final field state and work correctly for equilibrium solitons); batched signal physics in
+  rollout_batch; archive viewer rebuilt (card list + histogram + Pearson correlation panels)
 
 ## References
 

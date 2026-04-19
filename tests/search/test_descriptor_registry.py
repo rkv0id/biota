@@ -94,9 +94,9 @@ def test_registry_contains_all_expected_names() -> None:
         "morphological_instability",
         "activity",
         "spatial_entropy",
-        "emission_activity",
-        "receptor_sensitivity",
-        "signal_retention",
+        "signal_field_variance",
+        "signal_mass_ratio",
+        "dominant_channel_fraction",
     }
     assert set(REGISTRY.keys()) == expected
 
