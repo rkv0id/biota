@@ -5,71 +5,64 @@
     <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
       <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
     </marker>
-    <style>
-      text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
-      .th     { font-size: 13px; font-weight: 500; fill: #e4e4e7; }
-      .ts     { font-size: 11px; font-weight: 400; fill: #a1a1aa; }
-      .tsa    { font-size: 10px; font-weight: 400; fill: #71717a; }
-      .tlabel { font-size: 10px; font-weight: 500; fill: #52525b; letter-spacing: 0.07em; }
-    </style>
-  </defs>
+</defs>
 
   <!-- Driver process panel -->
   <rect x="28" y="20" width="624" height="148" rx="8" fill="#16181f" stroke="#2e3044" stroke-width="1"/>
-  <text class="tlabel" x="44" y="38">DRIVER PROCESS</text>
+  <text font-size="10" font-weight="500" fill="#52525b" letter-spacing="0.07em" x="44" y="38">DRIVER PROCESS</text>
 
   <!-- Archive box -->
   <rect x="44" y="48" width="172" height="104" rx="6" fill="#1f1a0e" stroke="#ba7517" stroke-width="0.5"/>
-  <text class="th" x="130" y="82" text-anchor="middle" dominant-baseline="central">MAP-Elites archive</text>
-  <text class="ts" x="130" y="102" text-anchor="middle" dominant-baseline="central">1,024 CVT centroids</text>
-  <text class="tsa" x="130" y="120" text-anchor="middle" dominant-baseline="central">any 3 from 18 descriptors</text>
-  <text class="tsa" x="130" y="136" text-anchor="middle" dominant-baseline="central">one best creature per cell</text>
+  <text font-size="13" font-weight="500" fill="#e4e4e7" x="130" y="82" text-anchor="middle" dominant-baseline="central">MAP-Elites archive</text>
+  <text font-size="11" font-weight="400" fill="#a1a1aa" x="130" y="102" text-anchor="middle" dominant-baseline="central">1,024 CVT centroids</text>
+  <text font-size="10" font-weight="400" fill="#71717a" x="130" y="120" text-anchor="middle" dominant-baseline="central">any 3 from 18 descriptors</text>
+  <text font-size="10" font-weight="400" fill="#71717a" x="130" y="136" text-anchor="middle" dominant-baseline="central">one best creature per cell</text>
 
   <!-- Search loop box -->
   <rect x="256" y="48" width="148" height="104" rx="6" fill="#1c1e27" stroke="#3e4160" stroke-width="0.5"/>
-  <text class="th" x="330" y="90" text-anchor="middle" dominant-baseline="central">search loop</text>
-  <text class="ts" x="330" y="112" text-anchor="middle" dominant-baseline="central">mutate · select · queue</text>
+  <text font-size="13" font-weight="500" fill="#e4e4e7" x="330" y="90" text-anchor="middle" dominant-baseline="central">search loop</text>
+  <text font-size="11" font-weight="400" fill="#a1a1aa" x="330" y="112" text-anchor="middle" dominant-baseline="central">mutate · select · queue</text>
 
   <!-- Result handler box -->
   <rect x="448" y="48" width="172" height="104" rx="6" fill="#1c1e27" stroke="#3e4160" stroke-width="0.5"/>
-  <text class="th" x="534" y="90" text-anchor="middle" dominant-baseline="central">result handler</text>
-  <text class="ts" x="534" y="112" text-anchor="middle" dominant-baseline="central">score · place · checkpoint</text>
+  <text font-size="13" font-weight="500" fill="#e4e4e7" x="534" y="90" text-anchor="middle" dominant-baseline="central">result handler</text>
+  <text font-size="11" font-weight="400" fill="#a1a1aa" x="534" y="112" text-anchor="middle" dominant-baseline="central">score · place · checkpoint</text>
 
   <!-- Arrow: archive -> search loop -->
   <path d="M216 100 L254 100" fill="none" stroke="#ba7517" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
-  <text class="tsa" x="235" y="92" text-anchor="middle">select parent</text>
+  <text font-size="10" font-weight="400" fill="#71717a" x="235" y="92" text-anchor="middle">select parent</text>
 
   <!-- Arrow: search loop -> result handler -->
   <path d="M404 100 L446 100" fill="none" stroke="#4a4e6a" stroke-width="1" marker-end="url(#arrow)"/>
-  <text class="tsa" x="425" y="92" text-anchor="middle">params</text>
+  <text font-size="10" font-weight="400" fill="#71717a" x="425" y="92" text-anchor="middle">params</text>
 
   <!-- Insertion arc: result handler -> archive -->
   <path d="M534 152 L534 188 L130 188 L130 154" fill="none" stroke="#ba7517" stroke-width="1" marker-end="url(#arrow)"/>
-  <text class="tsa" x="332" y="200" text-anchor="middle">insert or replace</text>
+  <text font-size="10" font-weight="400" fill="#71717a" x="332" y="200" text-anchor="middle">insert or replace</text>
 
   <!-- Workers panel -->
   <rect x="28" y="216" width="624" height="164" rx="8" fill="#141820" stroke="#2e3044" stroke-width="1"/>
-  <text class="tlabel" x="44" y="234">RAY WORKERS — stateless, local or cluster, CPU or GPU — one task evaluates B rollouts</text>
+  <text font-size="10" font-weight="500" fill="#52525b" letter-spacing="0.07em" x="44" y="234">RAY WORKERS — stateless, local or cluster, CPU or GPU — one task evaluates B rollouts</text>
 
   <!-- Worker boxes: 3 × 168px + 2 × 20px gap = 544, left offset = 28 + (624-544)/2 = 68 -->
   <rect x="68"  y="244" width="168" height="120" rx="6" fill="#141a26" stroke="#185fa5" stroke-width="0.5"/>
-  <text class="th" x="152" y="278" text-anchor="middle" dominant-baseline="central">Flow-Lenia rollout</text>
-  <text class="ts" x="152" y="298" text-anchor="middle" dominant-baseline="central">B × 300 steps, one fwd pass</text>
-  <text class="tsa" x="152" y="316" text-anchor="middle" dominant-baseline="central">state (B, H, W) · PyTorch</text>
-  <text class="tsa" x="152" y="334" text-anchor="middle" dominant-baseline="central">CPU or GPU · mass-conserving</text>
-  <text class="tsa" x="152" y="350" text-anchor="middle" dominant-baseline="central">--batch-size B · --workers N</text>
+  <text font-size="13" font-weight="500" fill="#e4e4e7" x="152" y="278" text-anchor="middle" dominant-baseline="central">Flow-Lenia rollout</text>
+  <text font-size="11" font-weight="400" fill="#a1a1aa" x="152" y="298" text-anchor="middle" dominant-baseline="central">B × 300 steps, one fwd pass</text>
+  <text font-size="10" font-weight="400" fill="#71717a" x="152" y="316" text-anchor="middle" dominant-baseline="central">state (B, H, W) · PyTorch</text>
+  <text font-size="10" font-weight="400" fill="#71717a" x="152" y="334" text-anchor="middle" dominant-baseline="central">CPU or GPU · mass-conserving</text>
+  <text font-size="10" font-weight="400" fill="#71717a" x="152" y="350" text-anchor="middle" dominant-baseline="central">--batch-size B · --workers N</text>
 
   <rect x="256" y="244" width="168" height="120" rx="6" fill="#121e1c" stroke="#0f6e56" stroke-width="0.5"/>
-  <text class="th" x="340" y="278" text-anchor="middle" dominant-baseline="central">descriptors</text>
-  <text class="ts" x="340" y="296" text-anchor="middle" dominant-baseline="central">3 behavioral axes</text>
-  <text class="tsa" x="340" y="314" text-anchor="middle" dominant-baseline="central">velocity · gyradius · entropy</text>
-  <text class="tsa" x="340" y="330" text-anchor="middle" dominant-baseline="central">signal · spatial · +14 more</text>
+  <text font-size="13" font-weight="500" fill="#e4e4e7" x="340" y="278" text-anchor="middle" dominant-baseline="central">descriptors</text>
+  <text font-size="11" font-weight="400" fill="#a1a1aa" x="340" y="296" text-anchor="middle" dominant-baseline="central">3 behavioral axes</text>
+  <text font-size="10" font-weight="400" fill="#71717a" x="340" y="314" text-anchor="middle" dominant-baseline="central">velocity · gyradius · entropy</text>
+  <text font-size="10" font-weight="400" fill="#71717a" x="340" y="330" text-anchor="middle" dominant-baseline="central">signal · spatial · +14 more</text>
 
   <rect x="444" y="244" width="168" height="120" rx="6" fill="#1a1626" stroke="#7c3aed" stroke-width="0.5"/>
-  <text class="th" x="528" y="284" text-anchor="middle" dominant-baseline="central">quality</text>
-  <text class="ts" x="528" y="306" text-anchor="middle" dominant-baseline="central">filter · score</text>
-  <text class="tsa" x="528" y="324" text-anchor="middle" dominant-baseline="central">persistence · mass</text>
-  <text class="tsa" x="528" y="342" text-anchor="middle" dominant-baseline="central">smoothness</text>
+  <text font-size="13" font-weight="500" fill="#e4e4e7" x="528" y="284" text-anchor="middle" dominant-baseline="central">quality</text>
+  <text font-size="11" font-weight="400" fill="#a1a1aa" x="528" y="306" text-anchor="middle" dominant-baseline="central">filter · score</text>
+  <text font-size="10" font-weight="400" fill="#71717a" x="528" y="324" text-anchor="middle" dominant-baseline="central">persistence · mass</text>
+  <text font-size="10" font-weight="400" fill="#71717a" x="528" y="342" text-anchor="middle" dominant-baseline="central">smoothness</text>
 
   <!-- Arrows between worker boxes -->
   <path d="M236 304 L254 304" fill="none" stroke="#185fa5" stroke-width="1" marker-end="url(#arrow)"/>
@@ -77,9 +70,9 @@
 
   <!-- Dispatch arrow: search loop down into rollout worker -->
   <path d="M330 152 L330 206 L152 206 L152 242" fill="none" stroke="#185fa5" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
-  <text class="tsa" x="248" y="202" text-anchor="middle">B params</text>
+  <text font-size="10" font-weight="400" fill="#71717a" x="248" y="202" text-anchor="middle">B params</text>
 
   <!-- Return arrow: quality worker up to result handler -->
   <path d="M528 242 L528 206 L534 206 L534 152" fill="none" stroke="#ba7517" stroke-width="1" marker-end="url(#arrow)"/>
-  <text class="tsa" x="578" y="202" text-anchor="start">B results</text>
+  <text font-size="10" font-weight="400" fill="#71717a" x="578" y="202" text-anchor="start">B results</text>
 </svg>

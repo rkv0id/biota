@@ -5,20 +5,7 @@
     <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
       <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
     </marker>
-    <style>
-      text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
-      .tsh  { font-size: 11px; font-weight: 600; fill: #3f3f46; }
-      .tsa  { font-size: 10px; font-weight: 400; fill: #71717a; }
-      .tsax { font-size: 10px; font-weight: 500; fill: #52525b; }
-      .axis-line { stroke: #d4d4d8; }
-      @media (prefers-color-scheme: dark) {
-        .tsh  { fill: #e4e4e7; }
-        .tsa  { fill: #a1a1aa; }
-        .tsax { fill: #71717a; }
-        .axis-line { stroke: #52525b; }
-      }
-    </style>
-  </defs>
+</defs>
 
   <!-- Calibration survivors: small grey dots scattered in behavioral space -->
   <!-- fast region -->
@@ -102,30 +89,30 @@
   <circle cx="298" cy="248" r="5"   fill="#140814" stroke="#27272a" stroke-width="0.4"/>
 
   <!-- Velocity axis (left) -->
-  <line class="axis-line" x1="138" y1="44" x2="138" y2="268" stroke-width="0.75" marker-end="url(#arrow)"/>
-  <text class="tsa" x="132" y="48"  text-anchor="end" dominant-baseline="central">fast</text>
-  <text class="tsa" x="132" y="264" text-anchor="end" dominant-baseline="central">slow</text>
-  <text class="tsh" x="54" y="156" text-anchor="middle" dominant-baseline="central" transform="rotate(-90 54 156)">velocity</text>
+  <line stroke="#a1a1aa" x1="138" y1="44" x2="138" y2="268" stroke-width="0.75" marker-end="url(#arrow)"/>
+  <text font-size="10" font-weight="400" fill="#71717a" x="132" y="48"  text-anchor="end" dominant-baseline="central">fast</text>
+  <text font-size="10" font-weight="400" fill="#71717a" x="132" y="264" text-anchor="end" dominant-baseline="central">slow</text>
+  <text font-size="11" font-weight="600" fill="#3f3f46" x="54" y="156" text-anchor="middle" dominant-baseline="central" transform="rotate(-90 54 156)">velocity</text>
 
   <!-- Gyradius axis (bottom) -->
-  <line class="axis-line" x1="148" y1="280" x2="438" y2="280" stroke-width="0.75" marker-end="url(#arrow)"/>
-  <text class="tsa" x="148" y="294" text-anchor="start">compact</text>
-  <text class="tsa" x="438" y="294" text-anchor="end">spread</text>
-  <text class="tsh" x="293" y="312" text-anchor="middle">gyradius</text>
+  <line stroke="#a1a1aa" x1="148" y1="280" x2="438" y2="280" stroke-width="0.75" marker-end="url(#arrow)"/>
+  <text font-size="10" font-weight="400" fill="#71717a" x="148" y="294" text-anchor="start">compact</text>
+  <text font-size="10" font-weight="400" fill="#71717a" x="438" y="294" text-anchor="end">spread</text>
+  <text font-size="11" font-weight="600" fill="#3f3f46" x="293" y="312" text-anchor="middle">gyradius</text>
 
   <!-- Spectral entropy: right-side bracket annotation -->
-  <line class="axis-line" x1="448" y1="44" x2="448" y2="264" stroke-width="0.75" stroke-dasharray="4 3"/>
-  <line class="axis-line" x1="448" y1="44"  x2="454" y2="44"  stroke-width="0.75"/>
-  <line class="axis-line" x1="448" y1="264" x2="454" y2="264" stroke-width="0.75"/>
-  <text class="tsa" x="460" y="48"  text-anchor="start" dominant-baseline="central">high entropy (sharp)</text>
-  <text class="tsa" x="460" y="264" text-anchor="start" dominant-baseline="central">low entropy (smooth)</text>
-  <text class="tsh" x="636" y="156" text-anchor="middle" dominant-baseline="central" transform="rotate(90 636 156)">spectral entropy</text>
+  <line stroke="#a1a1aa" x1="448" y1="44" x2="448" y2="264" stroke-width="0.75" stroke-dasharray="4 3"/>
+  <line stroke="#a1a1aa" x1="448" y1="44"  x2="454" y2="44"  stroke-width="0.75"/>
+  <line stroke="#a1a1aa" x1="448" y1="264" x2="454" y2="264" stroke-width="0.75"/>
+  <text font-size="10" font-weight="400" fill="#71717a" x="460" y="48"  text-anchor="start" dominant-baseline="central">high entropy (sharp)</text>
+  <text font-size="10" font-weight="400" fill="#71717a" x="460" y="264" text-anchor="start" dominant-baseline="central">low entropy (smooth)</text>
+  <text font-size="11" font-weight="600" fill="#3f3f46" x="636" y="156" text-anchor="middle" dominant-baseline="central" transform="rotate(90 636 156)">spectral entropy</text>
 
   <!-- Legend row -->
   <circle cx="154" cy="21" r="5.5" fill="#fcd880" stroke="#d4d4d8" stroke-width="0.5"/>
-  <text class="tsax" x="164" y="24" dominant-baseline="central">occupied — best creature in this Voronoi cell</text>
+  <text font-size="10" font-weight="500" fill="#52525b" x="164" y="24" dominant-baseline="central">occupied — best creature in this Voronoi cell</text>
   <circle cx="154" cy="37" r="3.5" fill="#140814" stroke="#52525b" stroke-width="0.5"/>
-  <text class="tsax" x="164" y="40" dominant-baseline="central">empty — search has not reached this region yet</text>
+  <text font-size="10" font-weight="500" fill="#52525b" x="164" y="40" dominant-baseline="central">empty — search has not reached this region yet</text>
   <circle cx="410" cy="21" r="2.2" fill="#71717a" opacity="0.45"/>
-  <text class="tsax" x="420" y="24" dominant-baseline="central">calibration survivor</text>
+  <text font-size="10" font-weight="500" fill="#52525b" x="420" y="24" dominant-baseline="central">calibration survivor</text>
 </svg>
