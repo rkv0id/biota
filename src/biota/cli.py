@@ -104,8 +104,12 @@ def _make_event_handler(
     def on_cal_progress(completed: int, total: int, n_survivors: int) -> None:
         display.on_calibration_progress(completed, total, n_survivors)
 
-    def on_cal_done(n_survivors: int, descriptor_names: tuple[str, str, str]) -> None:
-        display.on_calibration_done(n_survivors, descriptor_names)
+    def on_cal_done(
+        n_survivors: int,
+        descriptor_names: tuple[str, str, str],
+        axis_ranges: "list[tuple[float,float]] | None" = None,
+    ) -> None:
+        display.on_calibration_done(n_survivors, descriptor_names, axis_ranges)
 
     def on_event(event: SearchEvent) -> None:
         if isinstance(event, SearchStarted):

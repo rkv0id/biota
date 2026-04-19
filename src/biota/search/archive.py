@@ -87,6 +87,10 @@ class Archive:
         self._centroids: np.ndarray | None = None  # shape (n_centroids, 3)
         self._tree: Any = None  # cKDTree after calibration
         self._cells: dict[CellCoord, RolloutResult] = {}
+        # Per-axis scale factors fitted from calibration survivors so all
+        # axes contribute equally to centroid distances. Each factor is
+        # 1/span where span = p95 - p5 of observed values; span=0 -> scale=1.
+        self._axis_scale: np.ndarray = np.ones(3, dtype=np.float64)
 
     def __len__(self) -> int:
         return len(self._cells)
@@ -109,6 +113,11 @@ class Archive:
         return self._centroids
 
     @property
+    def axis_scale(self) -> np.ndarray:
+        """Per-axis scale factors (3,) applied before centroid lookup."""
+        return self._axis_scale
+
+    @property
     def total_cells(self) -> int:
         return self.n_centroids
 
@@ -116,27 +125,36 @@ class Archive:
     def fill_fraction(self) -> float:
         return len(self) / self.n_centroids
 
-    def attach_centroids(self, centroids: np.ndarray) -> None:
+    def attach_centroids(
+        self,
+        centroids: np.ndarray,
+        axis_scale: np.ndarray | None = None,
+    ) -> None:
         """Attach fitted centroid positions and build the lookup tree.
 
-        centroids must be shape (k, 3) float32/float64. Called once by
-        loop.py after the calibration phase completes. Rebuilding is allowed
-        (e.g. after loading a checkpoint) but any existing cells remain.
+        centroids must be shape (k, 3) -- already scaled by axis_scale.
+        axis_scale is shape (3,) with 1/span per axis fitted from calibration
+        survivors so all axes contribute equally to centroid distances.
+        Called once by loop.py after calibration completes.
         """
         if centroids.ndim != 2 or centroids.shape[1] != 3:
             raise ValueError(f"centroids must be shape (k, 3), got {centroids.shape}")
         self._centroids = centroids.astype(np.float64)
         self._tree = cKDTree(self._centroids)
         self.n_centroids = len(centroids)
+        if axis_scale is not None:
+            self._axis_scale = np.array(axis_scale, dtype=np.float64)
 
     def cell_for(self, descriptors: Descriptors) -> CellCoord:
         """Return the centroid index nearest to this descriptor triple.
 
+        Applies per-axis scaling before the lookup so all axes contribute
+        equally to centroid distances regardless of their raw value range.
         Raises RuntimeError if the archive has not been calibrated.
         """
         if self._tree is None:
             raise RuntimeError("archive has not been calibrated yet")
-        pt = np.array(descriptors, dtype=np.float64)
+        pt = np.array(descriptors, dtype=np.float64) * self._axis_scale
         _, idx = self._tree.query(pt)
         return int(idx)
 

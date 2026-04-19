@@ -154,29 +154,32 @@ class SearchDisplay:
                 file=sys.stderr,
             )
 
-    def on_calibration_done(self, n_survivors: int, descriptor_names: tuple[str, str, str]) -> None:
+    def on_calibration_done(
+        self,
+        n_survivors: int,
+        descriptor_names: tuple[str, str, str],
+        axis_ranges: list[tuple[float, float]] | None = None,
+    ) -> None:
         """Call once after calibration completes to print the summary line."""
         self._cal_done = True
+        elapsed = time.monotonic() - self._cal_start
+        range_str = ""
+        if axis_ranges:
+            parts = []
+            for (lo, hi), name in zip(axis_ranges, descriptor_names, strict=False):
+                short = name[:6]
+                parts.append(f"{short}=[{lo:.3g},{hi:.3g}]")
+            range_str = "  " + "  ".join(parts)
+        msg = (
+            f"[calibrated]   {self._calibration} rollouts  "
+            f"{n_survivors} survivors  "
+            f"{elapsed:.1f}s{range_str}"
+        )
         if self._tty:
-            # Overwrite the spinner line with a clean summary
-            elapsed = time.monotonic() - self._cal_start
-            d0, d1, d2 = descriptor_names
-            msg = (
-                f"[calibrated]   {self._calibration} rollouts  "
-                f"{n_survivors} survivors  "
-                f"{elapsed:.1f}s  "
-                f"axes: {d0} / {d1} / {d2}"
-            )
             sys.stderr.write(f"{_COL0}{_CLEAR}{msg}\n")
             sys.stderr.flush()
         else:
-            elapsed = time.monotonic() - self._cal_start
-            print(
-                f"[calibrated]  {self._calibration} rollouts  "
-                f"{n_survivors} survivors  "
-                f"{elapsed:.1f}s",
-                file=sys.stderr,
-            )
+            print(msg, file=sys.stderr)
 
     # === search event callbacks ===
 

@@ -300,8 +300,9 @@ class FlowLenia:
             convolved = torch.fft.ifft2(self._fK_signal * fSig).real
             receptor_response = (convolved * self.params.receptor_profile.view(-1, 1, 1)).sum(dim=0)
 
-            # receptor_sensitivity: mean absolute reception response over the grid
-            receptor_sensitivity_scalar = float(receptor_response.abs().mean().item())
+            # receptor_sensitivity: sum of absolute reception response over the grid.
+            # sum() avoids dilution by empty cells.
+            receptor_sensitivity_scalar = float(receptor_response.abs().sum().item())
 
             alpha_c = self.params.alpha_coupling if self.params.alpha_coupling is not None else 0.0
             if alpha_c != 0.0:
@@ -319,8 +320,11 @@ class FlowLenia:
             else:
                 effective_rate = base_rate
 
-            # emission_activity: mean(G_pos * effective_rate) -- actual emission per cell
-            emission_activity_scalar = float((G_pos * effective_rate).mean().item())
+            # emission_activity: sum(G_pos * effective_rate) over the grid.
+            # sum() rather than mean() avoids dilution by empty cells, which
+            # makes the value proportional to actual creature output regardless
+            # of grid size (dev vs standard vs pretty).
+            emission_activity_scalar = float((G_pos * effective_rate).sum().item())
 
             emitted = G_pos * effective_rate
             emitted = torch.minimum(emitted, A2.clamp(min=0.0))

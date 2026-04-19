@@ -190,7 +190,7 @@ CalibrationProgressFn = Callable[[int, int, int], None]
 """Callback(completed, total, n_survivors) called after each calibration batch drains.
 Purely for display; return value is ignored."""
 
-CalibrationDoneFn = Callable[[int, tuple[str, str, str]], None]
+CalibrationDoneFn = Callable[[int, tuple[str, str, str], "list[tuple[float, float]] | None"], None]
 """Callback(n_survivors, descriptor_names) called once after calibration completes."""
 
 
@@ -204,7 +204,7 @@ def search(
     archive: Archive | None = None,
     run_id: str | None = None,
     on_calibration_progress: CalibrationProgressFn | None = None,
-    on_calibration_done: CalibrationDoneFn | None = None,
+    on_calibration_done: "CalibrationDoneFn | None" = None,
 ) -> Archive:
     """Run a complete MAP-Elites search to budget and return the populated archive.
 
@@ -335,7 +335,7 @@ class _LoopState:
     rng: random.Random
     started_at: float = 0.0
     on_calibration_progress: CalibrationProgressFn | None = None
-    on_calibration_done: CalibrationDoneFn | None = None
+    on_calibration_done: "CalibrationDoneFn | None" = None
 
 
 def _emit(state: _LoopState, event: SearchEvent) -> None:
@@ -462,18 +462,43 @@ def _calibration_phase(state: _LoopState, start_seed: int) -> None:
             file=sys.stderr,
         )
 
-    k = min(n_centroids, len(pts))
+    # Fit per-axis scale factors (1/span) so all axes contribute equally to
+    # centroid distances. Use actual survivors when available for scale, since
+    # the uniform fallback pts are synthetic and may not reflect real ranges.
+    axis_scale = np.ones(3, dtype=np.float64)
+    scale_src = np.array(survivors, dtype=np.float64) if len(survivors) >= 2 else pts
+    if len(scale_src) >= 2:
+        p5 = np.percentile(scale_src, 5, axis=0)
+        p95 = np.percentile(scale_src, 95, axis=0)
+        span = p95 - p5
+        for i in range(3):
+            axis_scale[i] = 1.0 / span[i] if span[i] > 0 else 1.0
+
+    # Scale survivors before fitting centroids so the space is isotropic.
+    pts_scaled = pts * axis_scale
+
+    k = min(n_centroids, len(pts_scaled))
     np.random.seed(state.config.base_seed)
-    centroids, _ = kmeans2(pts, k, minit="points", iter=30)
-    state.archive.attach_centroids(centroids.astype(np.float64))
+    centroids_scaled, _ = kmeans2(pts_scaled, k, minit="points", iter=30)
+    state.archive.attach_centroids(centroids_scaled.astype(np.float64), axis_scale=axis_scale)
 
     # Update manifest with calibration results.
     _append_calibration_manifest(
-        state, n_cal=n_cal, n_survivors=len(survivors), centroids=centroids
+        state, n_cal=n_cal, n_survivors=len(survivors), centroids=centroids_scaled
     )
 
+    axis_ranges = (
+        [
+            (float(np.percentile(scale_src[:, i], 5)), float(np.percentile(scale_src[:, i], 95)))
+            if len(scale_src) >= 2
+            else (0.0, 1.0)
+            for i in range(3)
+        ]
+        if len(survivors) > 0
+        else None
+    )
     if state.on_calibration_done is not None:
-        state.on_calibration_done(len(survivors), state.config.descriptor_names)
+        state.on_calibration_done(len(survivors), state.config.descriptor_names, axis_ranges)
 
 
 def _submit_phase(
