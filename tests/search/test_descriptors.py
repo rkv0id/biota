@@ -580,8 +580,8 @@ def test_emission_activity_zero_for_empty_history() -> None:
 
 
 def test_emission_activity_scales_with_emission() -> None:
-    low = _make_signal_trace(emission_history=np.full(TRACE_LEN, 0.00005, dtype=np.float32))
-    high = _make_signal_trace(emission_history=np.full(TRACE_LEN, 0.00015, dtype=np.float32))
+    low = _make_signal_trace(emission_history=np.full(TRACE_LEN, 0.002, dtype=np.float32))
+    high = _make_signal_trace(emission_history=np.full(TRACE_LEN, 0.008, dtype=np.float32))
     assert compute_emission_activity(low) < compute_emission_activity(high)
 
 
@@ -613,14 +613,14 @@ def test_receptor_sensitivity_zero_for_empty_history() -> None:
 
 
 def test_receptor_sensitivity_scales_with_response() -> None:
-    low = _make_signal_trace(reception_history=np.full(TRACE_LEN, 0.001, dtype=np.float32))
-    high = _make_signal_trace(reception_history=np.full(TRACE_LEN, 0.003, dtype=np.float32))
+    low = _make_signal_trace(reception_history=np.full(TRACE_LEN, 0.003, dtype=np.float32))
+    high = _make_signal_trace(reception_history=np.full(TRACE_LEN, 0.010, dtype=np.float32))
     assert compute_receptor_sensitivity(low) < compute_receptor_sensitivity(high)
 
 
 def test_receptor_sensitivity_in_unit_interval() -> None:
     trace = _make_signal_trace(
-        reception_history=np.random.default_rng(9).random(TRACE_LEN).astype(np.float32) * 0.003
+        reception_history=np.random.default_rng(9).random(TRACE_LEN).astype(np.float32) * 0.010
     )
     val = compute_receptor_sensitivity(trace)
     assert 0.0 <= val <= 1.0
