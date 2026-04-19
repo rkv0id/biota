@@ -1,102 +1,165 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+
   <!-- Background -->
   <rect width="1280" height="640" fill="#0d0221"/>
 
-  <!-- Subtle grid texture in background -->
-  <rect width="1280" height="640" fill="none" stroke="#ffffff" stroke-width="0.3" opacity="0.03"/>
+  <!-- CVT archive scatter left side: calibration survivors + occupied centroids -->
+  <!-- Survivors: small grey dots scattered in behavioral space -->
+  <circle cx="108" cy="148" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="142" cy="135" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="178" cy="142" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="212" cy="130" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="248" cy="138" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="288" cy="144" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="326" cy="135" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="368" cy="148" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="408" cy="140" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="448" cy="152" r="3.5" fill="#3b0f70" opacity="0.5"/>
 
-  <!-- Logo grid - left side, centered vertically, 5x5 cells -->
-  <!-- cell=72px gap=14px total=5*72+4*14=416, x offset=80, y offset=(640-416)/2=112 -->
+  <circle cx="96"  cy="210" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="130" cy="222" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="165" cy="208" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="204" cy="218" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="242" cy="205" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="280" cy="215" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="316" cy="208" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="354" cy="220" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="392" cy="210" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="432" cy="218" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="466" cy="205" r="3.5" fill="#3b0f70" opacity="0.5"/>
 
-  <!-- row 0 -->
-  <rect x="80"  y="112" width="72" height="72" rx="10" fill="#0d0221" opacity="0.5"/>
-  <rect x="166" y="112" width="72" height="72" rx="10" fill="#3b0f70" opacity="0.6"/>
-  <rect x="252" y="112" width="72" height="72" rx="10" fill="#3b0f70"/>
-  <rect x="338" y="112" width="72" height="72" rx="10" fill="#0d0221" opacity="0.35"/>
-  <rect x="424" y="112" width="72" height="72" rx="10" fill="#0d0221" opacity="0.2"/>
+  <circle cx="88"  cy="278" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="120" cy="288" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="156" cy="275" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="192" cy="284" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="228" cy="278" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="264" cy="286" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="300" cy="275" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="338" cy="284" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="376" cy="278" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="412" cy="288" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="450" cy="276" r="3.5" fill="#3b0f70" opacity="0.5"/>
 
-  <!-- row 1 -->
-  <rect x="80"  y="198" width="72" height="72" rx="10" fill="#3b0f70"/>
-  <rect x="166" y="198" width="72" height="72" rx="10" fill="#8c2981"/>
-  <rect x="252" y="198" width="72" height="72" rx="10" fill="#8c2981"/>
-  <rect x="338" y="198" width="72" height="72" rx="10" fill="#3b0f70" opacity="0.7"/>
-  <rect x="424" y="198" width="72" height="72" rx="10" fill="#0d0221" opacity="0.35"/>
+  <circle cx="100" cy="348" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="136" cy="358" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="172" cy="344" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="208" cy="354" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="244" cy="348" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="280" cy="356" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="316" cy="345" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="352" cy="355" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="388" cy="348" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="428" cy="357" r="3.5" fill="#3b0f70" opacity="0.5"/>
 
-  <!-- row 2 - peak -->
-  <rect x="80"  y="284" width="72" height="72" rx="10" fill="#8c2981"/>
-  <rect x="166" y="284" width="72" height="72" rx="10" fill="#de4968"/>
-  <rect x="252" y="284" width="72" height="72" rx="10" fill="#fe9f6d"/>
-  <rect x="338" y="284" width="72" height="72" rx="10" fill="#de4968"/>
-  <rect x="424" y="284" width="72" height="72" rx="10" fill="#8c2981"/>
+  <circle cx="112" cy="418" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="150" cy="428" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="188" cy="415" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="224" cy="424" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="260" cy="418" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="296" cy="426" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="332" cy="416" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="368" cy="425" r="3.5" fill="#3b0f70" opacity="0.5"/>
 
-  <!-- row 3 -->
-  <rect x="80"  y="370" width="72" height="72" rx="10" fill="#3b0f70" opacity="0.7"/>
-  <rect x="166" y="370" width="72" height="72" rx="10" fill="#8c2981"/>
-  <rect x="252" y="370" width="72" height="72" rx="10" fill="#de4968"/>
-  <rect x="338" y="370" width="72" height="72" rx="10" fill="#fece91"/>
-  <rect x="424" y="370" width="72" height="72" rx="10" fill="#fe9f6d"/>
+  <circle cx="128" cy="488" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="166" cy="498" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="204" cy="484" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="242" cy="494" r="3.5" fill="#3b0f70" opacity="0.5"/>
+  <circle cx="278" cy="488" r="3.5" fill="#3b0f70" opacity="0.5"/>
 
-  <!-- row 4 -->
-  <rect x="80"  y="456" width="72" height="72" rx="10" fill="#0d0221" opacity="0.35"/>
-  <rect x="166" y="456" width="72" height="72" rx="10" fill="#3b0f70" opacity="0.6"/>
-  <rect x="252" y="456" width="72" height="72" rx="10" fill="#8c2981" opacity="0.8"/>
-  <rect x="338" y="456" width="72" height="72" rx="10" fill="#de4968"/>
-  <rect x="424" y="456" width="72" height="72" rx="10" fill="#fe9f6d"/>
+  <!-- CVT centroids: occupied (magma colors), sized by quality -->
+  <!-- fast + compact -->
+  <circle cx="108" cy="148" r="14" fill="#b02840" stroke="#de4968" stroke-width="1"/>
+  <!-- fast + medium -->
+  <circle cx="212" cy="130" r="14" fill="#de4968" stroke="#fe9f6d" stroke-width="1"/>
+  <!-- fast + spread -->
+  <circle cx="326" cy="135" r="14" fill="#fe9f6d" stroke="#fece91" stroke-width="1"/>
+  <!-- fast + very spread: empty -->
+  <circle cx="448" cy="152" r="9"  fill="#1a0535" stroke="#3b0f70" stroke-width="0.8"/>
+  <!-- med-fast + compact -->
+  <circle cx="96"  cy="210" r="14" fill="#fe9f6d" stroke="#fece91" stroke-width="1"/>
+  <!-- med-fast + medium -->
+  <circle cx="204" cy="218" r="14" fill="#fece91" stroke="#fece91" stroke-width="1.2"/>
+  <!-- med-fast + spread -->
+  <circle cx="316" cy="208" r="14" fill="#fe9f6d" stroke="#fece91" stroke-width="1"/>
+  <!-- med-fast + very spread -->
+  <circle cx="432" cy="218" r="14" fill="#de4968" stroke="#fe9f6d" stroke-width="1"/>
+  <!-- medium + compact -->
+  <circle cx="88"  cy="278" r="14" fill="#fe9f6d" stroke="#fece91" stroke-width="1"/>
+  <!-- medium + medium: BEST -->
+  <circle cx="228" cy="278" r="18" fill="#fece91" stroke="#ffffff" stroke-width="1.5"/>
+  <!-- medium + spread -->
+  <circle cx="376" cy="278" r="14" fill="#fe9f6d" stroke="#fece91" stroke-width="1"/>
+  <!-- medium + very spread -->
+  <circle cx="450" cy="276" r="14" fill="#8c2981" stroke="#de4968" stroke-width="1"/>
+  <!-- slow + compact -->
+  <circle cx="100" cy="348" r="14" fill="#de4968" stroke="#fe9f6d" stroke-width="1"/>
+  <!-- slow + medium -->
+  <circle cx="244" cy="348" r="14" fill="#de4968" stroke="#fe9f6d" stroke-width="1"/>
+  <!-- slow + spread -->
+  <circle cx="388" cy="348" r="14" fill="#8c2981" stroke="#de4968" stroke-width="1"/>
+  <!-- slow + very spread: empty -->
+  <circle cx="428" cy="357" r="9"  fill="#1a0535" stroke="#3b0f70" stroke-width="0.8"/>
+  <!-- very slow + compact -->
+  <circle cx="150" cy="428" r="12" fill="#3b0f70" stroke="#8c2981" stroke-width="1"/>
+  <!-- very slow + medium: empty -->
+  <circle cx="296" cy="426" r="9"  fill="#1a0535" stroke="#3b0f70" stroke-width="0.8"/>
+
+  <!-- Axis labels -->
+  <text x="80" y="526"
+    font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+    font-size="18" fill="#3b0f70" opacity="0.7"
+    letter-spacing="0.05em">compact</text>
+  <text x="400" y="526"
+    font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+    font-size="18" fill="#3b0f70" opacity="0.7"
+    letter-spacing="0.05em">spread</text>
+  <text x="80" y="555"
+    font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+    font-size="14" fill="#3b0f70" opacity="0.5">gyradius →</text>
 
   <!-- Vertical divider -->
-  <line x1="576" y1="80" x2="576" y2="560" stroke="#ffffff" stroke-width="1" opacity="0.08"/>
+  <line x1="576" y1="80" x2="576" y2="560" stroke="#ffffff" stroke-width="1" opacity="0.06"/>
 
-  <!-- Right side: text content -->
   <!-- biota wordmark -->
   <text x="648" y="248"
     font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace"
-    font-size="120"
-    font-weight="700"
-    fill="#ffffff"
-    opacity="0.95"
+    font-size="120" font-weight="700"
+    fill="#ffffff" opacity="0.95"
     letter-spacing="-4">biota</text>
 
   <!-- Tagline -->
-  <text x="652" y="310"
+  <text x="652" y="308"
     font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
-    font-size="28"
-    font-weight="400"
-    fill="#a78bfa"
-    opacity="0.9">Quality-diversity search over Flow-Lenia</text>
+    font-size="26" font-weight="400"
+    fill="#a78bfa" opacity="0.9">CVT-MAP-Elites + signal field ecosystem</text>
 
-  <!-- Divider line -->
-  <line x1="652" y1="348" x2="1180" y2="348" stroke="#ffffff" stroke-width="1" opacity="0.1"/>
+  <!-- Divider -->
+  <line x1="652" y1="346" x2="1180" y2="346" stroke="#ffffff" stroke-width="1" opacity="0.08"/>
 
-  <!-- Stats row -->
-  <text x="652" y="400"
+  <!-- Stats -->
+  <text x="652" y="396"
     font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
-    font-size="22"
-    fill="#fe9f6d"
-    font-weight="600">500 rollouts · 3 nodes · 97 seconds</text>
+    font-size="22" fill="#fe9f6d" font-weight="600">1,024 cells · 18 descriptors · 3 nodes</text>
 
-  <!-- Feature pills -->
-  <!-- MAP-Elites pill -->
-  <rect x="652" y="430" width="152" height="36" rx="18" fill="#3b0f70" opacity="0.8"/>
-  <text x="728" y="454"
+  <!-- Pills -->
+  <rect x="652" y="424" width="212" height="36" rx="18" fill="#3b0f70" opacity="0.8"/>
+  <text x="758" y="448"
     font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
-    font-size="16" fill="#c4b5fd" text-anchor="middle">MAP-Elites</text>
+    font-size="16" fill="#c4b5fd" text-anchor="middle">CVT-MAP-Elites</text>
 
-  <!-- Flow-Lenia pill -->
-  <rect x="816" y="430" width="152" height="36" rx="18" fill="#3b0f70" opacity="0.8"/>
-  <text x="892" y="454"
+  <rect x="876" y="424" width="152" height="36" rx="18" fill="#3b0f70" opacity="0.8"/>
+  <text x="952" y="448"
     font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
     font-size="16" fill="#c4b5fd" text-anchor="middle">Flow-Lenia</text>
 
-  <!-- Ray pill -->
-  <rect x="980" y="430" width="100" height="36" rx="18" fill="#3b0f70" opacity="0.8"/>
-  <text x="1030" y="454"
+  <rect x="1040" y="424" width="132" height="36" rx="18" fill="#1a0f2e" opacity="0.8"/>
+  <text x="1106" y="448"
     font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
-    font-size="16" fill="#c4b5fd" text-anchor="middle">Ray</text>
+    font-size="16" fill="#3cdcc8" text-anchor="middle">Signal Field</text>
 
   <!-- URL -->
-  <text x="652" y="530"
+  <text x="652" y="528"
     font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace"
-    font-size="20"
-    fill="#ffffff"
-    opacity="0.3">biota-atlas.pages.dev</text>
+    font-size="20" fill="#ffffff" opacity="0.28">biota-atlas.pages.dev</text>
+
 </svg>

@@ -195,7 +195,7 @@ The closest published work is Plantec et al. 2025, [Exploring Flow-Lenia Univers
 
 Plantec's setup is a **universe search**: random P-field initialization, random kernel sets, and per-cell parameter embeddings that drift under the dynamics. Speciation emerges in-simulation because the P field itself evolves and can carve out distinct regions over time. Only the growth-window vector `h` is localized; kernel parameters (R, r, a, b, w) are shared across the grid because spatial variation in those would break the FFT factorization the step relies on.
 
-biota's heterogeneous mode is a **curated gene-pool ecosystem**. The creatures are not random; they come from a MAP-Elites archive built by the search loop, each one a behavioral variant validated by descriptors and quality. A heterogeneous run picks specific archive cells, treats each as a species, and gives every species its own complete parameter set: R, r, a, b, w, and the h vector. The cost is one FFT pass per species per step; the upshot is that the species in the run are interpretable, reproducible, and selectable from the same descriptor space the atlas exposes. Species ownership is tracked per cell as a simplex weight that advects with the mass; growth fields blend by ownership. There is no in-simulation speciation in v2.2.0: the species count is fixed at the start of the run.
+biota's heterogeneous mode is a **curated gene-pool ecosystem**. The creatures are not random; they come from a MAP-Elites archive built by the search loop, each one a behavioral variant validated by descriptors and quality. A heterogeneous run picks specific archive cells, treats each as a species, and gives every species its own complete parameter set: R, r, a, b, w, and the h vector. The cost is one FFT pass per species per step; the upshot is that the species in the run are interpretable, reproducible, and selectable from the same descriptor space the atlas exposes. Species ownership is tracked per cell as a simplex weight that advects with the mass; growth fields blend by ownership. There is no in-simulation speciation in the current implementation: the species count is fixed at the start of the run.
 
 The two approaches answer different questions. Plantec asks "what kinds of universes does Flow-Lenia generate from random initial conditions?". biota asks "what happens when these specific creatures, found by search, are placed together?". The first is open-ended exploration of universe space; the second is hypothesis-driven study of the archive. They are complementary, and the heterogeneous code path here borrows the per-cell ownership idea from Plantec while keeping each species' parameters intact.
 
@@ -223,7 +223,7 @@ biota search --ray-address <ip>:6379 \
     --descriptors oscillation,compactness,png_compressibility
 ```
 
-Three presets: `dev` (64x64, 200 steps), `standard` (192x192, 300 steps), `pretty` (384x384, 500 steps).
+Three presets: `dev` (64×64, 200 steps), `standard` (192×192, 300 steps), `pretty` (384×384, 500 steps). Signal searches (`--signal-field`) automatically override to 500/800/1200 steps respectively.
 
 ## CLI reference
 
@@ -234,6 +234,7 @@ Three presets: `dev` (64x64, 200 steps), `standard` (192x192, 300 steps), `prett
 | `--preset` | `standard` | `dev`, `standard`, or `pretty` |
 | `--budget` | `500` | Total rollouts |
 | `--random-phase` | `200` | Uniform random rollouts before mutation |
+| `--centroids` | `1024` | CVT archive capacity (number of Voronoi cells) |
 | `--batch-size` | `1` | Rollouts per dispatch. 32-128 on cuda/mps |
 | `--workers` | `1` | Concurrent batch dispatches. 1 = synchronous MAP-Elites |
 | `--device` | `cpu` | `cpu`, `mps`, or `cuda` |
