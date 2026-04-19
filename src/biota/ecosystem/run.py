@@ -862,6 +862,13 @@ def compute_ecosystem(
     run_id = _make_run_id(config.name)
     run_dir = Path(output_root) / run_id
 
+    # Load creatures here so they are available to _compute_outputs for
+    # signal observables (receptor_alignment, emission_reception_matrix).
+    # When called from the CLI, creatures is None and must be loaded; the
+    # Ray dispatcher pre-loads and passes them explicitly.
+    if creatures is None:
+        creatures = [load_creature(s) for s in config.sources]
+
     started_at = time.time()
     if config.is_heterogeneous:
         sim = _run_heterogeneous(config, creatures=creatures)

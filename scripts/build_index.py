@@ -689,7 +689,7 @@ def _extract_primary_source(summary: dict[str, Any]) -> tuple[str, list[int], in
         if isinstance(first, dict):
             return (
                 str(first.get("run", "")),
-                list(first.get("cell", [])),
+                list(first.get("cell") or []),
                 int(first.get("n", 0)),
             )
     # Legacy v2.0.x shape

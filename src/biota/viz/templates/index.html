@@ -719,9 +719,10 @@
             {% for card in eco_cards %}
             <a class="run-card" href="ecosystem/{{ card.run_id }}/view.html">
                 <div class="card-body" style="padding-top:16px">
-                    <div class="card-id">
-                        {{ card.run_id }}
-                        {% if card.mode == "heterogeneous" %}<span style="margin-left:8px;font-size:9px;letter-spacing:0.05em;text-transform:uppercase;padding:1px 6px;border-radius:8px;background:rgba(192,132,252,0.1);color:#c084fc;border:1px solid rgba(192,132,252,0.25)">het</span>{% endif %}{% if card.has_signal %}<span style="margin-left:6px;font-size:9px;letter-spacing:0.05em;text-transform:uppercase;padding:1px 6px;border-radius:8px;background:rgba(60,220,200,0.1);color:#3cdcc8;border:1px solid rgba(60,220,200,0.25)">signal</span>{% endif %}
+                    <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:6px;">
+                        <div class="card-id" style="margin:0">{{ card.run_id }}</div>
+                        {% if card.mode == "heterogeneous" %}<span style="white-space:nowrap;font-size:9px;letter-spacing:0.05em;text-transform:uppercase;padding:1px 6px;border-radius:8px;background:rgba(192,132,252,0.1);color:#c084fc;border:1px solid rgba(192,132,252,0.25)">het</span>{% endif %}{% if card.has_signal %}<span style="white-space:nowrap;font-size:9px;letter-spacing:0.05em;text-transform:uppercase;padding:1px 6px;border-radius:8px;background:rgba(60,220,200,0.1);color:#3cdcc8;border:1px solid rgba(60,220,200,0.25)">signal</span>{% endif %}
+                        {% if card.outcome_label %}<span style="white-space:nowrap;font-size:9px;letter-spacing:0.05em;text-transform:uppercase;padding:1px 6px;border-radius:8px;background:rgba(255,255,255,0.04);color:#71717a;border:1px solid rgba(255,255,255,0.08)">{{ card.outcome_label }}</span>{% endif %}
                     </div>
                     <div class="card-stats">
                         <span class="card-stat"><span class="card-stat-v">{{ card.n_creatures }}</span> creatures</span>
@@ -733,18 +734,18 @@
                         <span class="card-stat"><span class="card-stat-v">{{ card.grid_h }}x{{ card.grid_w }}</span> grid</span>
                         <span class="card-sep">&middot;</span>
                         <span class="card-stat"><span class="card-stat-v">{{ card.steps }}</span> steps</span>
+                        <span class="card-sep">&middot;</span>
+                        <span class="card-stat">{{ card.elapsed }}</span>
                     </div>
-                    <div class="card-rollouts">{{ card.elapsed }}</div>
-                    <div class="card-config">
+                    <div class="card-config" style="margin-top:4px;">
                         {% if card.n_sources > 1 %}
                         <span class="card-cfg-item">{{ card.n_sources }} archives</span>
                         {% else %}
                         <span class="card-cfg-item">{{ card.source_run_id }}</span>
-                        <span class="card-cfg-item">cell {{ card.source_coords | join(',') }}</span>
                         {% endif %}
                         {% if card.border and card.border != "wall" %}<span class="card-cfg-item" style="color:#fbbf77">{{ card.border }}</span>{% endif %}
+                        <span class="card-cfg-item">mass turnover {{ card.mass_turnover }}%/step</span>
                     </div>
-                    <div class="card-descriptors">mass turnover {{ card.mass_turnover }}%/step{% if card.outcome_label %} &middot; {{ card.outcome_label }}{% endif %}</div>
                 </div>
             </a>
             {% endfor %}
