@@ -1,11 +1,60 @@
 experiments:
 
-  # ── REPULSION: mutual chemorepulsion -- territorial coexistence ─────────────
+  # Density guide:
+  # patch: 32 -> creature ~64px visible radius
+  # min_dist: 0  -> random placement, heavy initial overlap, instant chaos
+  # min_dist: 15 -> slight separation, dense but not overlapping
+  # min_dist: 30 -> moderate separation, ~2 creature widths apart
+  # Grid rule: 512x512 comfortably holds 50+ creatures at min_dist=15
 
-  # Wide landscape on torus -- no walls, territories expand freely in both
-  # directions. Repulsion should produce a clean vertical split.
-  - name: repulsion-340-vs-46-landscape-torus
-    grid: [192, 512]
+  # ── REPULSION: high density territorial ────────────────────────────────────
+
+  # Dense wall -- 15 of each, moderate separation. Do territories form?
+  - name: repulsion-340-vs-46-dense
+    grid: [512, 512]
+    steps: 15000
+    snapshot_every: 35
+    border: wall
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-340
+        n: 15
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 06-wall-signal-accumulation
+        creature_id: 20260419-193848-quiet-zephyr-46
+        n: 15
+    spawn:
+      patch: 32
+      min_dist: 15
+      seed: 42
+
+  # Same pair, immediate overlap start -- does repulsion self-organize
+  # from chaos or collapse entirely?
+  - name: repulsion-340-vs-46-chaos
+    grid: [512, 512]
+    steps: 15000
+    snapshot_every: 35
+    border: wall
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-340
+        n: 20
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 06-wall-signal-accumulation
+        creature_id: 20260419-193848-quiet-zephyr-46
+        n: 20
+    spawn:
+      patch: 32
+      min_dist: 0
+      seed: 42
+
+  # Torus dense -- periodic boundaries, no walls to die against.
+  - name: repulsion-340-vs-46-torus-dense
+    grid: [512, 512]
     steps: 15000
     snapshot_every: 35
     border: torus
@@ -14,66 +63,19 @@ experiments:
       - archive_dir: /mnt/scratch/biota/archive
         run: 05-torus-signal-morpho
         creature_id: 20260419-193323-plush-yew-340
-        n: 3
+        n: 15
       - archive_dir: /mnt/scratch/biota/archive
         run: 06-wall-signal-accumulation
         creature_id: 20260419-193848-quiet-zephyr-46
-        n: 3
+        n: 15
     spawn:
-      patch: 24
-      min_dist: 40
+      patch: 32
+      min_dist: 15
       seed: 42
 
-  # Square wall, large patches -- creatures start with established territory,
-  # repulsion plays out from a position of strength rather than scramble.
-  - name: repulsion-340-vs-46-big-patch
-    grid: [256, 256]
-    steps: 12000
-    snapshot_every: 30
-    border: wall
-    output_format: gif
-    sources:
-      - archive_dir: /mnt/scratch/biota/archive
-        run: 05-torus-signal-morpho
-        creature_id: 20260419-193323-plush-yew-340
-        n: 2
-      - archive_dir: /mnt/scratch/biota/archive
-        run: 06-wall-signal-accumulation
-        creature_id: 20260419-193848-quiet-zephyr-46
-        n: 2
-    spawn:
-      patch: 40
-      min_dist: 60
-      seed: 42
-
-  # Small tight grid -- repulsion in confined space. Do the species find
-  # stable coexistence or does one get pushed into a wall and die?
-  - name: repulsion-340-vs-46-tight
-    grid: [128, 128]
-    steps: 8000
-    snapshot_every: 20
-    border: wall
-    output_format: gif
-    sources:
-      - archive_dir: /mnt/scratch/biota/archive
-        run: 05-torus-signal-morpho
-        creature_id: 20260419-193323-plush-yew-340
-        n: 2
-      - archive_dir: /mnt/scratch/biota/archive
-        run: 08-torus-signal-specialist
-        creature_id: 20260419-194629-plush-lark-46
-        n: 2
-    spawn:
-      patch: 16
-      min_dist: 25
-      seed: 42
-
-  # ── PURSUIT: asymmetric -- one chases, one flees ───────────────────────────
-
-  # Wide landscape wall -- prey has maximum room to run. Does it escape or
-  # get cornered? The strongest asymmetry pair (asym=4.03).
-  - name: pursuit-340-vs-180-landscape
-    grid: [192, 512]
+  # Landscape dense -- long thin habitat, species compete for horizontal bands.
+  - name: repulsion-340-vs-46-landscape-dense
+    grid: [256, 768]
     steps: 15000
     snapshot_every: 35
     border: wall
@@ -82,228 +84,155 @@ experiments:
       - archive_dir: /mnt/scratch/biota/archive
         run: 05-torus-signal-morpho
         creature_id: 20260419-193323-plush-yew-340
-        n: 3
+        n: 12
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 06-wall-signal-accumulation
+        creature_id: 20260419-193848-quiet-zephyr-46
+        n: 12
+    spawn:
+      patch: 32
+      min_dist: 15
+      seed: 42
+
+  # ── PURSUIT: dense chase field ─────────────────────────────────────────────
+
+  # Many pursuers, many prey -- collective chase dynamics.
+  - name: pursuit-340-vs-180-dense
+    grid: [512, 512]
+    steps: 12000
+    snapshot_every: 30
+    border: wall
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-340
+        n: 15
       - archive_dir: /mnt/scratch/biota/archive
         run: 06-wall-signal-accumulation
         creature_id: 20260419-193848-quiet-zephyr-180
-        n: 3
+        n: 15
     spawn:
-      patch: 24
-      min_dist: 40
+      patch: 32
+      min_dist: 15
       seed: 42
 
-  # Torus -- no corners to flee to. Pursuit becomes an infinite loop.
-  # Does the pursuer ever catch the prey on a periodic grid?
-  - name: pursuit-340-vs-155-torus
-    grid: [256, 256]
+  # Overlapping start, pursuit -- pursuers embedded among prey from step 1.
+  - name: pursuit-340-vs-180-chaos
+    grid: [512, 512]
     steps: 12000
     snapshot_every: 30
+    border: wall
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-340
+        n: 20
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 06-wall-signal-accumulation
+        creature_id: 20260419-193848-quiet-zephyr-180
+        n: 20
+    spawn:
+      patch: 32
+      min_dist: 0
+      seed: 42
+
+  # Torus pursuit landscape -- infinite horizontal pursuit corridor.
+  - name: pursuit-340-vs-155-torus-landscape
+    grid: [256, 768]
+    steps: 15000
+    snapshot_every: 35
     border: torus
     output_format: gif
     sources:
       - archive_dir: /mnt/scratch/biota/archive
         run: 05-torus-signal-morpho
         creature_id: 20260419-193323-plush-yew-340
-        n: 3
+        n: 12
       - archive_dir: /mnt/scratch/biota/archive
         run: 06-wall-signal-accumulation
         creature_id: 20260419-193848-quiet-zephyr-155
-        n: 3
+        n: 12
     spawn:
-      patch: 24
-      min_dist: 40
+      patch: 32
+      min_dist: 15
       seed: 7
 
-  # Roles reversed -- B attracts A, A repels B. Small patches, immediate
-  # contact. Which dynamic dominates early on?
-  - name: pursuit-155-vs-340-small
-    grid: [192, 192]
-    steps: 8000
-    snapshot_every: 20
-    border: wall
-    output_format: gif
-    sources:
-      - archive_dir: /mnt/scratch/biota/archive
-        run: 04-wall-signal-specialist
-        creature_id: 20260419-192839-hazy-willow-155
-        n: 2
-      - archive_dir: /mnt/scratch/biota/archive
-        run: 05-torus-signal-morpho
-        creature_id: 20260419-193323-plush-yew-340
-        n: 2
-    spawn:
-      patch: 14
-      min_dist: 20
-      seed: 99
+  # ── COMPETITION: dense mutual attraction ───────────────────────────────────
 
-  # ── COMPETITION: mutual chemotaxis -- both species attract each other ───────
-
-  # Large square -- plenty of room for contact dynamics to develop slowly.
-  # Both species attract each other: does this lead to merger or exclusion?
-  - name: competition-176-vs-180-large
-    grid: [320, 320]
-    steps: 15000
-    snapshot_every: 40
-    border: wall
-    output_format: gif
-    sources:
-      - archive_dir: /mnt/scratch/biota/archive
-        run: 05-torus-signal-morpho
-        creature_id: 20260419-193323-plush-yew-176
-        n: 3
-      - archive_dir: /mnt/scratch/biota/archive
-        run: 06-wall-signal-accumulation
-        creature_id: 20260419-193848-quiet-zephyr-180
-        n: 3
-    spawn:
-      patch: 28
-      min_dist: 50
-      seed: 42
-
-  # Torus landscape -- competition wraps around, species approach from
-  # both sides simultaneously. More chaotic initial contact.
-  - name: competition-176-vs-313-torus-landscape
-    grid: [192, 384]
-    steps: 10000
-    snapshot_every: 25
-    border: torus
-    output_format: gif
-    sources:
-      - archive_dir: /mnt/scratch/biota/archive
-        run: 05-torus-signal-morpho
-        creature_id: 20260419-193323-plush-yew-176
-        n: 3
-      - archive_dir: /mnt/scratch/biota/archive
-        run: 06-wall-signal-accumulation
-        creature_id: 20260419-193848-quiet-zephyr-313
-        n: 3
-    spawn:
-      patch: 24
-      min_dist: 40
-      seed: 42
-
-  # High density competition -- 4 of each, small patches, immediate chaos.
-  - name: competition-171-vs-176-dense
-    grid: [256, 256]
-    steps: 8000
-    snapshot_every: 20
-    border: wall
-    output_format: gif
-    sources:
-      - archive_dir: /mnt/scratch/biota/archive
-        run: 04-wall-signal-specialist
-        creature_id: 20260419-192839-hazy-willow-171
-        n: 4
-      - archive_dir: /mnt/scratch/biota/archive
-        run: 05-torus-signal-morpho
-        creature_id: 20260419-193323-plush-yew-176
-        n: 4
-    spawn:
-      patch: 16
-      min_dist: 30
-      seed: 42
-
-  # ── BLIND: one-sided or near-zero chemical coupling ────────────────────────
-
-  # Landscape wall -- A strongly repels B but B is chemically blind to A.
-  # Pure spatial competition with a one-sided chemical push.
-  - name: blind-349-vs-248-landscape
-    grid: [192, 384]
+  # Both species attract each other -- at density, does the whole grid merge?
+  - name: competition-176-vs-180-dense
+    grid: [512, 512]
     steps: 12000
     snapshot_every: 30
     border: wall
     output_format: gif
     sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-176
+        n: 15
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 06-wall-signal-accumulation
+        creature_id: 20260419-193848-quiet-zephyr-180
+        n: 15
+    spawn:
+      patch: 32
+      min_dist: 15
+      seed: 42
+
+  # Overlapping start -- both species already intermixed. Does exclusion happen?
+  - name: competition-176-vs-180-chaos
+    grid: [512, 512]
+    steps: 12000
+    snapshot_every: 30
+    border: wall
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-176
+        n: 20
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 06-wall-signal-accumulation
+        creature_id: 20260419-193848-quiet-zephyr-180
+        n: 20
+    spawn:
+      patch: 32
+      min_dist: 0
+      seed: 42
+
+  # ── TRIOS: three species dense ─────────────────────────────────────────────
+
+  # Repulsion trio dense -- three-way territorial negotiation at scale.
+  - name: trio-repulsion-dense
+    grid: [512, 512]
+    steps: 15000
+    snapshot_every: 35
+    border: wall
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-340
+        n: 12
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 06-wall-signal-accumulation
+        creature_id: 20260419-193848-quiet-zephyr-46
+        n: 12
       - archive_dir: /mnt/scratch/biota/archive
         run: 04-wall-signal-specialist
         creature_id: 20260419-192839-hazy-willow-349
-        n: 3
-      - archive_dir: /mnt/scratch/biota/archive
-        run: 05-torus-signal-morpho
-        creature_id: 20260419-193323-plush-yew-248
-        n: 3
+        n: 12
     spawn:
-      patch: 24
-      min_dist: 40
+      patch: 32
+      min_dist: 15
       seed: 42
 
-  # Torus -- same one-sided coupling but no walls. Does 348's signal push
-  # 248 around the grid indefinitely?
-  - name: blind-243-vs-248-torus
-    grid: [256, 256]
-    steps: 15000
-    snapshot_every: 40
-    border: torus
-    output_format: gif
-    sources:
-      - archive_dir: /mnt/scratch/biota/archive
-        run: 04-wall-signal-specialist
-        creature_id: 20260419-192839-hazy-willow-243
-        n: 3
-      - archive_dir: /mnt/scratch/biota/archive
-        run: 05-torus-signal-morpho
-        creature_id: 20260419-193323-plush-yew-248
-        n: 3
-    spawn:
-      patch: 24
-      min_dist: 40
-      seed: 42
-
-  # Small tight blind pair -- B barely responds to A's signal.
-  # Outcome should be dominated by flow-field spatial competition.
-  - name: blind-176-vs-155-tight
-    grid: [128, 192]
-    steps: 8000
-    snapshot_every: 20
-    border: wall
-    output_format: gif
-    sources:
-      - archive_dir: /mnt/scratch/biota/archive
-        run: 05-torus-signal-morpho
-        creature_id: 20260419-193323-plush-yew-176
-        n: 2
-      - archive_dir: /mnt/scratch/biota/archive
-        run: 06-wall-signal-accumulation
-        creature_id: 20260419-193848-quiet-zephyr-155
-        n: 2
-    spawn:
-      patch: 16
-      min_dist: 25
-      seed: 42
-
-  # ── BONUS: trios and high-interest combos ─────────────────────────────────
-
-  # Three-way: repulsion + pursuit + competition in the same grid.
-  # 340 repels 46, 340 attracts 180, 176 competes with 180.
-  # Most unpredictable of all runs.
-  - name: trio-340-46-180
-    grid: [256, 256]
-    steps: 15000
-    snapshot_every: 35
-    border: wall
-    output_format: gif
-    sources:
-      - archive_dir: /mnt/scratch/biota/archive
-        run: 05-torus-signal-morpho
-        creature_id: 20260419-193323-plush-yew-340
-        n: 2
-      - archive_dir: /mnt/scratch/biota/archive
-        run: 06-wall-signal-accumulation
-        creature_id: 20260419-193848-quiet-zephyr-46
-        n: 2
-      - archive_dir: /mnt/scratch/biota/archive
-        run: 06-wall-signal-accumulation
-        creature_id: 20260419-193848-quiet-zephyr-180
-        n: 2
-    spawn:
-      patch: 20
-      min_dist: 35
-      seed: 42
-
-  # Three-way torus: all repulsion pairs, see if stable three-territory
-  # partition emerges on a periodic grid.
-  - name: trio-repulsion-torus
-    grid: [320, 320]
+  # Repulsion trio torus dense -- periodic, no walls to sort into.
+  - name: trio-repulsion-torus-dense
+    grid: [512, 512]
     steps: 15000
     snapshot_every: 35
     border: torus
@@ -312,145 +241,24 @@ experiments:
       - archive_dir: /mnt/scratch/biota/archive
         run: 05-torus-signal-morpho
         creature_id: 20260419-193323-plush-yew-340
-        n: 2
+        n: 12
       - archive_dir: /mnt/scratch/biota/archive
         run: 06-wall-signal-accumulation
         creature_id: 20260419-193848-quiet-zephyr-46
-        n: 2
+        n: 12
       - archive_dir: /mnt/scratch/biota/archive
         run: 04-wall-signal-specialist
         creature_id: 20260419-192839-hazy-willow-349
-        n: 2
+        n: 12
     spawn:
-      patch: 20
-      min_dist: 50
+      patch: 32
+      min_dist: 15
       seed: 42
 
-  # Best repulsion pair at high density -- 6 of each on a large landscape.
-  # Can 12 creatures negotiate stable territories?
-  - name: repulsion-340-vs-46-high-density
-    grid: [256, 512]
-    steps: 12000
-    snapshot_every: 30
-    border: wall
-    output_format: gif
-    sources:
-      - archive_dir: /mnt/scratch/biota/archive
-        run: 05-torus-signal-morpho
-        creature_id: 20260419-193323-plush-yew-340
-        n: 6
-      - archive_dir: /mnt/scratch/biota/archive
-        run: 06-wall-signal-accumulation
-        creature_id: 20260419-193848-quiet-zephyr-46
-        n: 6
-    spawn:
-      patch: 18
-      min_dist: 30
-      seed: 42
-
-  # Strongest pursuit at max grid -- pursuer has the entire landscape to
-  # chase across. Run with different seed for varied starting positions.
-  - name: pursuit-340-vs-180-max-landscape
-    grid: [192, 768]
-    steps: 20000
-    snapshot_every: 45
-    border: wall
-    output_format: gif
-    sources:
-      - archive_dir: /mnt/scratch/biota/archive
-        run: 05-torus-signal-morpho
-        creature_id: 20260419-193323-plush-yew-340
-        n: 4
-      - archive_dir: /mnt/scratch/biota/archive
-        run: 06-wall-signal-accumulation
-        creature_id: 20260419-193848-quiet-zephyr-180
-        n: 4
-    spawn:
-      patch: 20
-      min_dist: 35
-      seed: 123
-
-  # ── HOMOGENEOUS: single species, multiple copies ───────────────────────────
-
-  # 340 with itself -- strong signal emitter on a large grid. Does quorum
-  # sensing produce aggregation (copies cluster) or self-repulsion (copies
-  # spread out)? Depends on sign of alpha_coupling when receiving own signal.
-  - name: homo-340-large
-    grid: [256, 256]
-    steps: 12000
-    snapshot_every: 30
-    border: wall
-    output_format: gif
-    sources:
-      - archive_dir: /mnt/scratch/biota/archive
-        run: 05-torus-signal-morpho
-        creature_id: 20260419-193323-plush-yew-340
-        n: 6
-    spawn:
-      patch: 20
-      min_dist: 35
-      seed: 42
-
-  # 340 on torus -- periodic boundary means signal wraps around and hits
-  # the creature from behind. Self-signal saturation effect.
-  - name: homo-340-torus
-    grid: [256, 256]
-    steps: 12000
-    snapshot_every: 30
-    border: torus
-    output_format: gif
-    sources:
-      - archive_dir: /mnt/scratch/biota/archive
-        run: 05-torus-signal-morpho
-        creature_id: 20260419-193323-plush-yew-340
-        n: 6
-    spawn:
-      patch: 20
-      min_dist: 35
-      seed: 42
-
-  # 46 homogeneous -- signal accumulator, see if copies coexist or merge.
-  - name: homo-46-landscape
-    grid: [192, 384]
-    steps: 10000
-    snapshot_every: 25
-    border: wall
-    output_format: gif
-    sources:
-      - archive_dir: /mnt/scratch/biota/archive
-        run: 06-wall-signal-accumulation
-        creature_id: 20260419-193848-quiet-zephyr-46
-        n: 6
-    spawn:
-      patch: 20
-      min_dist: 35
-      seed: 42
-
-  # 180 homogeneous -- high mutual chemotaxis within species.
-  # Many copies in a dense grid -- do they form colonies?
-  - name: homo-180-dense
-    grid: [192, 192]
-    steps: 10000
-    snapshot_every: 25
-    border: wall
-    output_format: gif
-    sources:
-      - archive_dir: /mnt/scratch/biota/archive
-        run: 06-wall-signal-accumulation
-        creature_id: 20260419-193848-quiet-zephyr-180
-        n: 8
-    spawn:
-      patch: 16
-      min_dist: 25
-      seed: 42
-
-  # ── MORE SPECIES: 4-way heterogeneous ─────────────────────────────────────
-
-  # Four species -- repulsion pair + pursuit pair simultaneously.
-  # 340 repels 46, 340 pursues 180, 176 competes with 180.
-  # Most complex chemical environment of all runs.
-  - name: quad-repulsion-pursuit-competition
-    grid: [320, 320]
+  # Mixed dynamics trio, overlapping start -- repulsion + pursuit + competition
+  # all begin from the same chaotic state.
+  - name: trio-mixed-chaos
+    grid: [512, 512]
     steps: 15000
     snapshot_every: 35
     border: wall
@@ -459,28 +267,54 @@ experiments:
       - archive_dir: /mnt/scratch/biota/archive
         run: 05-torus-signal-morpho
         creature_id: 20260419-193323-plush-yew-340
-        n: 2
+        n: 15
       - archive_dir: /mnt/scratch/biota/archive
         run: 06-wall-signal-accumulation
         creature_id: 20260419-193848-quiet-zephyr-46
-        n: 2
+        n: 15
       - archive_dir: /mnt/scratch/biota/archive
         run: 06-wall-signal-accumulation
         creature_id: 20260419-193848-quiet-zephyr-180
-        n: 2
+        n: 15
+    spawn:
+      patch: 32
+      min_dist: 0
+      seed: 42
+
+  # ── QUADS: four species dense ──────────────────────────────────────────────
+
+  # All interaction modes, dense square -- the full chemical soup.
+  - name: quad-all-modes-dense
+    grid: [640, 640]
+    steps: 15000
+    snapshot_every: 35
+    border: wall
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-340
+        n: 10
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 06-wall-signal-accumulation
+        creature_id: 20260419-193848-quiet-zephyr-46
+        n: 10
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 06-wall-signal-accumulation
+        creature_id: 20260419-193848-quiet-zephyr-180
+        n: 10
       - archive_dir: /mnt/scratch/biota/archive
         run: 05-torus-signal-morpho
         creature_id: 20260419-193323-plush-yew-176
-        n: 2
+        n: 10
     spawn:
-      patch: 18
-      min_dist: 40
+      patch: 32
+      min_dist: 15
       seed: 42
 
-  # Four species on torus, large grid -- all repulsion combinations.
-  # 340 repels 46, 349 repels 248, all in the same chemical soup.
-  - name: quad-repulsion-torus-large
-    grid: [384, 384]
+  # Quad repulsion torus landscape -- four species competing for bands.
+  - name: quad-repulsion-torus-landscape
+    grid: [320, 768]
     steps: 15000
     snapshot_every: 35
     border: torus
@@ -489,29 +323,29 @@ experiments:
       - archive_dir: /mnt/scratch/biota/archive
         run: 05-torus-signal-morpho
         creature_id: 20260419-193323-plush-yew-340
-        n: 2
+        n: 10
       - archive_dir: /mnt/scratch/biota/archive
         run: 06-wall-signal-accumulation
         creature_id: 20260419-193848-quiet-zephyr-46
-        n: 2
+        n: 10
       - archive_dir: /mnt/scratch/biota/archive
         run: 04-wall-signal-specialist
         creature_id: 20260419-192839-hazy-willow-349
-        n: 2
+        n: 10
       - archive_dir: /mnt/scratch/biota/archive
         run: 05-torus-signal-morpho
         creature_id: 20260419-193323-plush-yew-248
-        n: 2
+        n: 10
     spawn:
-      patch: 20
-      min_dist: 45
+      patch: 32
+      min_dist: 15
       seed: 42
 
-  # Five species -- maximum diversity. One from each major interaction class.
-  # 340 (repeller), 46 (repelled by 340), 180 (pursuer target), 176 (competitor),
-  # 248 (blind to most). Unpredictable chemical environment.
-  - name: penta-all-modes
-    grid: [384, 384]
+  # ── PENTA: five species dense ──────────────────────────────────────────────
+
+  # Five species, all interaction classes, fully packed grid.
+  - name: penta-all-modes-dense
+    grid: [640, 640]
     steps: 15000
     snapshot_every: 35
     border: wall
@@ -520,34 +354,31 @@ experiments:
       - archive_dir: /mnt/scratch/biota/archive
         run: 05-torus-signal-morpho
         creature_id: 20260419-193323-plush-yew-340
-        n: 2
+        n: 10
       - archive_dir: /mnt/scratch/biota/archive
         run: 06-wall-signal-accumulation
         creature_id: 20260419-193848-quiet-zephyr-46
-        n: 2
+        n: 10
       - archive_dir: /mnt/scratch/biota/archive
         run: 06-wall-signal-accumulation
         creature_id: 20260419-193848-quiet-zephyr-180
-        n: 2
+        n: 10
       - archive_dir: /mnt/scratch/biota/archive
         run: 05-torus-signal-morpho
         creature_id: 20260419-193323-plush-yew-176
-        n: 2
+        n: 10
       - archive_dir: /mnt/scratch/biota/archive
         run: 05-torus-signal-morpho
         creature_id: 20260419-193323-plush-yew-248
-        n: 2
+        n: 10
     spawn:
-      patch: 18
-      min_dist: 40
+      patch: 32
+      min_dist: 15
       seed: 42
 
-  # ── HIGH CREATURE COUNT: same species pairs, many copies ──────────────────
-
-  # Best repulsion pair at very high density -- 8 of each on a huge grid.
-  # Can 16 creatures negotiate stable territories? Mosaic pattern expected.
-  - name: repulsion-340-vs-46-mosaic
-    grid: [384, 512]
+  # Five species chaos -- 50 creatures with zero separation, from total overlap.
+  - name: penta-chaos
+    grid: [640, 640]
     steps: 15000
     snapshot_every: 35
     border: wall
@@ -556,12 +387,646 @@ experiments:
       - archive_dir: /mnt/scratch/biota/archive
         run: 05-torus-signal-morpho
         creature_id: 20260419-193323-plush-yew-340
-        n: 8
+        n: 10
       - archive_dir: /mnt/scratch/biota/archive
         run: 06-wall-signal-accumulation
         creature_id: 20260419-193848-quiet-zephyr-46
+        n: 10
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 06-wall-signal-accumulation
+        creature_id: 20260419-193848-quiet-zephyr-180
+        n: 10
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-176
+        n: 10
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-248
+        n: 10
+    spawn:
+      patch: 32
+      min_dist: 0
+      seed: 42
+
+  # ── HOMOGENEOUS: microscope density ────────────────────────────────────────
+
+  # 340 packed wall -- 25 copies, slight separation. Colony or repulsion?
+  - name: homo-340-packed
+    grid: [512, 512]
+    steps: 12000
+    snapshot_every: 30
+    border: wall
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-340
+        n: 25
+    spawn:
+      patch: 32
+      min_dist: 15
+      seed: 42
+
+  # 340 torus packed -- self-signal soup on periodic grid.
+  - name: homo-340-torus-packed
+    grid: [512, 512]
+    steps: 12000
+    snapshot_every: 30
+    border: torus
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-340
+        n: 25
+    spawn:
+      patch: 32
+      min_dist: 15
+      seed: 42
+
+  # 180 produced CANNIBALISM -- 30 copies from chaos. Full grid consumption.
+  - name: homo-180-cannibalism-dense
+    grid: [512, 512]
+    steps: 15000
+    snapshot_every: 35
+    border: wall
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 06-wall-signal-accumulation
+        creature_id: 20260419-193848-quiet-zephyr-180
+        n: 30
+    spawn:
+      patch: 32
+      min_dist: 0
+      seed: 42
+
+  # 46 packed -- signal accumulator colony. Does shared signal field
+  # make them cluster or push apart?
+  - name: homo-46-packed
+    grid: [512, 640]
+    steps: 12000
+    snapshot_every: 30
+    border: wall
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 06-wall-signal-accumulation
+        creature_id: 20260419-193848-quiet-zephyr-46
+        n: 30
+    spawn:
+      patch: 32
+      min_dist: 15
+      seed: 42
+
+  # Maximum density specimen -- 40 copies of 180 from total overlap.
+  # Most microscope-like run in the set.
+  - name: homo-180-specimen
+    grid: [640, 640]
+    steps: 15000
+    snapshot_every: 35
+    border: wall
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 06-wall-signal-accumulation
+        creature_id: 20260419-193848-quiet-zephyr-180
+        n: 40
+    spawn:
+      patch: 32
+      min_dist: 0
+      seed: 42
+
+  # ── SPATIAL ARCHIVE: non-signal morphological experiments ─────────────────
+
+  # Dot-grid vs labyrinthine -- two totally different spatial textures
+  # competing for the same space. Pure flow-field dynamics, no signal.
+  - name: spatial-dotgrid-vs-labyrinth
+    grid: [512, 512]
+    steps: 15000
+    snapshot_every: 35
+    border: torus
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 07-torus-spatial
+        creature_id: 20260419-194331-brisk-xenon-228
+        n: 12
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 07-torus-spatial
+        creature_id: 20260419-194331-brisk-xenon-98
+        n: 12
+    spawn:
+      patch: 32
+      min_dist: 15
+      seed: 42
+
+  # Lattice network vs concentric rings -- two structured but geometrically
+  # opposite morphologies.
+  - name: spatial-lattice-vs-rings
+    grid: [512, 512]
+    steps: 15000
+    snapshot_every: 35
+    border: torus
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 07-torus-spatial
+        creature_id: 20260419-194331-brisk-xenon-148
+        n: 12
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 07-torus-spatial
+        creature_id: 20260419-194331-brisk-xenon-320
+        n: 12
+    spawn:
+      patch: 32
+      min_dist: 15
+      seed: 42
+
+  # Three-way spatial morphology -- chaos from overlap.
+  - name: spatial-trio-chaos
+    grid: [640, 640]
+    steps: 15000
+    snapshot_every: 35
+    border: torus
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 07-torus-spatial
+        creature_id: 20260419-194331-brisk-xenon-228
+        n: 12
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 07-torus-spatial
+        creature_id: 20260419-194331-brisk-xenon-148
+        n: 12
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 07-torus-spatial
+        creature_id: 20260419-194331-brisk-xenon-98
+        n: 12
+    spawn:
+      patch: 32
+      min_dist: 0
+      seed: 42
+
+  # Homogeneous dot-grid -- 30 copies of the tessellated circle.
+  # Does it form a super-colony or fragment?
+  - name: homo-spatial-dotgrid-packed
+    grid: [640, 640]
+    steps: 12000
+    snapshot_every: 30
+    border: torus
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 07-torus-spatial
+        creature_id: 20260419-194331-brisk-xenon-228
+        n: 30
+    spawn:
+      patch: 32
+      min_dist: 0
+      seed: 42
+
+  # ── SIGNAL SPECIALISTS: exotic morphologies from 08 and 04 ────────────────
+
+  # Smiley face vs spotted texture -- visually the most striking pair.
+  - name: signal-smiley-vs-spotted
+    grid: [512, 512]
+    steps: 15000
+    snapshot_every: 35
+    border: wall
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 08-torus-signal-specialist
+        creature_id: 20260419-194629-plush-lark-34
+        n: 12
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 08-torus-signal-specialist
+        creature_id: 20260419-194629-plush-lark-240
+        n: 12
+    spawn:
+      patch: 32
+      min_dist: 15
+      seed: 42
+
+  # Mandala vs square lattice -- both from signal specialist archive.
+  - name: signal-mandala-vs-lattice
+    grid: [512, 512]
+    steps: 15000
+    snapshot_every: 35
+    border: wall
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 08-torus-signal-specialist
+        creature_id: 20260419-194629-plush-lark-198
+        n: 12
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 08-torus-signal-specialist
+        creature_id: 20260419-194629-plush-lark-286
+        n: 12
+    spawn:
+      patch: 32
+      min_dist: 15
+      seed: 42
+
+  # Smiley face homogeneous -- 25 copies. What do smileys do to each other?
+  - name: homo-smiley-packed
+    grid: [640, 640]
+    steps: 12000
+    snapshot_every: 30
+    border: wall
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 08-torus-signal-specialist
+        creature_id: 20260419-194629-plush-lark-34
+        n: 25
+    spawn:
+      patch: 32
+      min_dist: 15
+      seed: 42
+
+  # ── SIGNAL MORPHO: brain folds, circuit boards, dot arrays ────────────────
+
+  # Brain-fold vs circuit-board -- two complex internal structures.
+  - name: signal-brain-vs-circuit
+    grid: [512, 512]
+    steps: 15000
+    snapshot_every: 35
+    border: torus
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-271
+        n: 12
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-176
+        n: 12
+    spawn:
+      patch: 32
+      min_dist: 15
+      seed: 42
+
+  # Dot-array vs ring-with-satellites -- the two most visually distinct
+  # creatures in the signal-morpho archive.
+  - name: signal-dots-vs-rings
+    grid: [512, 512]
+    steps: 15000
+    snapshot_every: 35
+    border: torus
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-340
+        n: 12
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-253
+        n: 12
+    spawn:
+      patch: 32
+      min_dist: 15
+      seed: 42
+
+  # Five morpho species chaos -- all the exotic signal-morpho forms at once.
+  - name: signal-morpho-penta-chaos
+    grid: [640, 640]
+    steps: 15000
+    snapshot_every: 35
+    border: wall
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-271
+        n: 8
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-176
+        n: 8
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-340
+        n: 8
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-253
+        n: 8
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-248
         n: 8
     spawn:
-      patch: 16
-      min_dist: 30
+      patch: 32
+      min_dist: 0
+      seed: 42
+
+  # ── CROSS-ARCHIVE: exotic morphologies meet signal specialists ─────────────
+
+  # Smiley from signal-specialist meets brain-fold from signal-morpho.
+  - name: cross-smiley-vs-brain
+    grid: [512, 512]
+    steps: 15000
+    snapshot_every: 35
+    border: wall
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 08-torus-signal-specialist
+        creature_id: 20260419-194629-plush-lark-34
+        n: 12
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-271
+        n: 12
+    spawn:
+      patch: 32
+      min_dist: 15
+      seed: 42
+
+  # Mandala meets dot-array -- competing symmetric structures.
+  - name: cross-mandala-vs-dots
+    grid: [512, 512]
+    steps: 15000
+    snapshot_every: 35
+    border: torus
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 08-torus-signal-specialist
+        creature_id: 20260419-194629-plush-lark-198
+        n: 12
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-340
+        n: 12
+    spawn:
+      patch: 32
+      min_dist: 15
+      seed: 42
+
+  # ── VISUALLY INTERESTING MORPHOLOGIES ─────────────────────────────────────
+  # Creatures 177 (perfect concentric ring), 231 (ring with internal bubbles),
+  # 248 (labyrinthine), 176 (maze), 7 (rounded square ring) from archive
+  # 05-torus-signal-morpho. Signal compatibility between these is unknown --
+  # run suggest_signal_pairs.py to find the best het pairings.
+  # These are added primarily for visual quality and morphological diversity.
+
+  # 177: the perfect concentric ring -- most visually striking creature.
+  # 25 copies wall -- does the ring structure survive at density?
+  - name: homo-177-packed
+    grid: [512, 512]
+    steps: 15000
+    snapshot_every: 35
+    border: wall
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-177
+        n: 25
+    spawn:
+      patch: 32
+      min_dist: 15
+      seed: 42
+
+  # 177 on torus -- ring solitons in periodic space, self-signal wraps around.
+  - name: homo-177-torus-packed
+    grid: [512, 512]
+    steps: 15000
+    snapshot_every: 35
+    border: torus
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-177
+        n: 25
+    spawn:
+      patch: 32
+      min_dist: 15
+      seed: 42
+
+  # 177 from total overlap -- 30 rings starting fully intermixed.
+  - name: homo-177-chaos
+    grid: [512, 512]
+    steps: 15000
+    snapshot_every: 35
+    border: wall
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-177
+        n: 30
+    spawn:
+      patch: 32
+      min_dist: 0
+      seed: 42
+
+  # 231: ring with internal bubble structure -- 20 copies packed.
+  - name: homo-231-packed
+    grid: [512, 512]
+    steps: 15000
+    snapshot_every: 35
+    border: wall
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-231
+        n: 20
+    spawn:
+      patch: 32
+      min_dist: 15
+      seed: 42
+
+  # 231 chaos -- bubble-ring structures from total overlap.
+  - name: homo-231-chaos
+    grid: [512, 512]
+    steps: 15000
+    snapshot_every: 35
+    border: wall
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-231
+        n: 30
+    spawn:
+      patch: 32
+      min_dist: 0
+      seed: 42
+
+  # 248: labyrinthine/neural pattern -- 20 copies. Does the maze structure
+  # persist or dissolve at density?
+  - name: homo-248-packed
+    grid: [512, 512]
+    steps: 15000
+    snapshot_every: 35
+    border: wall
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-248
+        n: 20
+    spawn:
+      patch: 32
+      min_dist: 15
+      seed: 42
+
+  # Ring vs labyrinth -- two maximally different morphologies.
+  # Signal compatibility unknown, interaction may be purely spatial.
+  - name: hetero-177-vs-248
+    grid: [512, 512]
+    steps: 15000
+    snapshot_every: 35
+    border: wall
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-177
+        n: 12
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-248
+        n: 12
+    spawn:
+      patch: 32
+      min_dist: 15
+      seed: 42
+
+  # Ring vs bubble-ring -- similar morphological family, different internal
+  # structure. Signal interaction may be strong (both from same archive).
+  - name: hetero-177-vs-231
+    grid: [512, 512]
+    steps: 15000
+    snapshot_every: 35
+    border: wall
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-177
+        n: 12
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-231
+        n: 12
+    spawn:
+      patch: 32
+      min_dist: 15
+      seed: 42
+
+  # Ring vs blob-cluster -- 340 is the established repeller, 177 is the ring.
+  # Does 340 repel 177 the same way it repels 46?
+  - name: hetero-177-vs-340
+    grid: [512, 512]
+    steps: 15000
+    snapshot_every: 35
+    border: wall
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-177
+        n: 12
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-340
+        n: 12
+    spawn:
+      patch: 32
+      min_dist: 15
+      seed: 42
+
+  # Trio: ring + labyrinth + blob -- three maximally distinct morphologies.
+  - name: trio-177-248-340
+    grid: [640, 640]
+    steps: 15000
+    snapshot_every: 35
+    border: wall
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-177
+        n: 10
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-248
+        n: 10
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-340
+        n: 10
+    spawn:
+      patch: 32
+      min_dist: 15
+      seed: 42
+
+  # Quad: ring + bubble-ring + labyrinth + maze -- all complex morphologies.
+  # Most visually rich run in the set.
+  - name: quad-complex-morpho
+    grid: [640, 640]
+    steps: 15000
+    snapshot_every: 35
+    border: wall
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-177
+        n: 8
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-231
+        n: 8
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-248
+        n: 8
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-176
+        n: 8
+    spawn:
+      patch: 32
+      min_dist: 15
+      seed: 42
+
+  # Quad chaos -- all four complex morphologies from total overlap on torus.
+  - name: quad-complex-morpho-chaos-torus
+    grid: [640, 640]
+    steps: 15000
+    snapshot_every: 35
+    border: torus
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-177
+        n: 10
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-231
+        n: 10
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-248
+        n: 10
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-176
+        n: 10
+    spawn:
+      patch: 32
+      min_dist: 0
       seed: 42
