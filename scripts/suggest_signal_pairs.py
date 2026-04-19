@@ -1,19 +1,29 @@
 #!/usr/bin/env python3
-"""suggest_signal_pairs.py -- Find interesting creature pairs from a signal-enabled archive.
+"""suggest_signal_pairs.py -- Find interesting creature pairs from signal-enabled archives.
 
-Loads an archive pickle, computes pairwise emission-reception compatibility
-between all occupied creatures, and ranks pairs by interaction type. Outputs
-a ranked table and copy-ready ecosystem YAML snippets for the top pairs.
+Loads one or more signal archive pickles, computes pairwise emission-reception
+compatibility between all occupied creatures (within and across archives), and
+ranks pairs by interaction type. Outputs a ranked table and a ready-to-paste
+experiments.yaml block.
 
-Only meaningful for signal-enabled archives. Non-signal archives are rejected
-with a clear error.
+Only meaningful for signal-enabled archives. Non-signal archives are skipped
+with a warning.
 
 Usage:
-    python scripts/suggest_signal_pairs.py --archive archive/my-run
-    python scripts/suggest_signal_pairs.py --archive archive/my-run/archive.pkl
-    python scripts/suggest_signal_pairs.py --archive archive/my-run --mode repulsion --top 5
-    python scripts/suggest_signal_pairs.py --archive archive/my-run --mode all --min-quality 0.8
-    python scripts/suggest_signal_pairs.py --archive archive/my-run --yaml-only
+    # Single archive, all modes, top 3 per mode
+    python scripts/suggest_signal_pairs.py \\
+        --archive /mnt/scratch/biota/archive/04-wall-signal-specialist
+
+    # Multiple archives -- cross-archive pairs included
+    python scripts/suggest_signal_pairs.py \\
+        --archive /mnt/scratch/biota/archive/04-wall-signal-specialist \\
+        --archive /mnt/scratch/biota/archive/08-torus-signal-specialist \\
+        --mode repulsion --top 4
+
+    # Save experiments.yaml directly
+    python scripts/suggest_signal_pairs.py \\
+        --archive /mnt/scratch/biota/archive/04-wall-signal-specialist \\
+        --top 3 --yaml-only > experiments.yaml
 
 Interaction modes:
     repulsion    Mutual chemorepulsion: both dots negative. Best for territorial
@@ -29,119 +39,197 @@ Interaction modes:
 import argparse
 import pickle
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 
 
-# ── helpers ──────────────────────────────────────────────────────────────────
+# ── types ─────────────────────────────────────────────────────────────────────
 
 
-def _load_archive(path: Path):
-    """Load archive from a run directory or direct pickle path."""
-    if path.is_dir():
-        pkl = path / "archive.pkl"
-        if not pkl.exists():
-            # Try one level deeper (e.g. archive/run-id/archive.pkl)
-            candidates = sorted(path.glob("*/archive.pkl"))
-            if not candidates:
-                sys.exit(f"error: no archive.pkl found under {path}")
-            if len(candidates) > 1:
-                sys.exit(
-                    f"error: multiple archive.pkl files found under {path}. "
-                    f"Pass a specific run directory.\n" + "\n".join(f"  {c}" for c in candidates)
-                )
-            pkl = candidates[0]
-    elif path.suffix == ".pkl":
-        pkl = path
-    else:
-        sys.exit(f"error: {path} is neither a directory nor a .pkl file")
+@dataclass
+class Creature:
+    creature_id: str
+    run_id: str
+    archive_dir: str
+    emission_vector: list
+    receptor_profile: list
+    quality: float
+    descriptors: tuple | None
 
-    if not pkl.exists():
-        sys.exit(f"error: archive.pkl not found at {pkl}")
+
+# ── archive loading ───────────────────────────────────────────────────────────
+
+
+def _find_pkl(path: Path) -> Path:
+    if path.suffix == ".pkl":
+        if not path.exists():
+            sys.exit(f"error: not found: {path}")
+        return path
+    if not path.exists():
+        sys.exit(f"error: not found: {path}")
+    direct = path / "archive.pkl"
+    if direct.exists():
+        return direct
+    candidates = sorted(path.glob("*/archive.pkl"))
+    if not candidates:
+        sys.exit(f"error: no archive.pkl found under {path}")
+    if len(candidates) > 1:
+        lines = "\n".join(f"  {c.parent}" for c in candidates)
+        sys.exit(
+            f"error: multiple runs found under {path} -- pass a specific run directory:\n{lines}"
+        )
+    return candidates[0]
+
+
+def _load_creatures(archive_path: Path, min_quality: float) -> list[Creature]:
+    pkl = _find_pkl(archive_path)
+    run_id = pkl.parent.name
+    archive_dir = str(pkl.parent.parent)
 
     with open(pkl, "rb") as f:
         archive = pickle.load(f)
 
-    return archive, pkl.parent
+    occupied = list(archive.iter_occupied())
+    if not occupied:
+        print(f"warning: {archive_path} is empty, skipping", file=sys.stderr)
+        return []
+
+    if "emission_vector" not in occupied[0][1].params:
+        print(f"warning: {archive_path} is not signal-enabled, skipping", file=sys.stderr)
+        return []
+
+    creatures = []
+    for _, result in occupied:
+        if result.quality is None or result.quality < min_quality:
+            continue
+        if "emission_vector" not in result.params:
+            continue
+        cid = result.creature_id or f"{run_id}-{result.seed}"
+        creatures.append(
+            Creature(
+                creature_id=cid,
+                run_id=run_id,
+                archive_dir=archive_dir,
+                emission_vector=result.params["emission_vector"],
+                receptor_profile=result.params["receptor_profile"],
+                quality=result.quality,
+                descriptors=tuple(result.descriptors) if result.descriptors else None,
+            )
+        )
+
+    print(f"  {len(creatures)} creatures from {run_id} (q >= {min_quality})", file=sys.stderr)
+    return creatures
 
 
-def _run_id_from_dir(run_dir: Path) -> str:
-    return run_dir.name
+# ── pair scoring ──────────────────────────────────────────────────────────────
 
 
-def _dot(a: list[float], b: list[float]) -> float:
+def _dot(a: list, b: list) -> float:
     return float(np.dot(a, b))
 
 
-def _classify(ab: float, ba: float, threshold: float = 0.1) -> str:
-    """Classify a pair by their mutual compatibility scores."""
-    pos_ab = ab > threshold
-    neg_ab = ab < -threshold
-    pos_ba = ba > threshold
-    neg_ba = ba < -threshold
-
-    if neg_ab and neg_ba:
+def _classify(ab: float, ba: float, t: float = 0.1) -> str:
+    if ab < -t and ba < -t:
         return "repulsion"
-    if pos_ab and pos_ba:
+    if ab > t and ba > t:
         return "competition"
-    if (pos_ab and neg_ba) or (neg_ab and pos_ba):
+    if (ab > t and ba < -t) or (ab < -t and ba > t):
         return "pursuit"
     return "blind"
 
 
-def _asymmetry(ab: float, ba: float) -> float:
-    return abs(ab - ba)
+def _build_pairs(creatures: list[Creature]) -> list[dict]:
+    pairs = []
+    for i in range(len(creatures)):
+        for j in range(i + 1, len(creatures)):
+            a, b = creatures[i], creatures[j]
+            ab = _dot(a.emission_vector, b.receptor_profile)
+            ba = _dot(b.emission_vector, a.receptor_profile)
+            dd = (
+                float(np.linalg.norm(np.array(a.descriptors) - np.array(b.descriptors)))
+                if a.descriptors and b.descriptors
+                else 0.0
+            )
+            avg_q = (a.quality + b.quality) / 2
+            pairs.append(
+                {
+                    "a": a,
+                    "b": b,
+                    "ab": ab,
+                    "ba": ba,
+                    "mode": _classify(ab, ba),
+                    "asym": abs(ab - ba),
+                    "desc_dist": dd,
+                    "avg_quality": avg_q,
+                    "cross": a.archive_dir != b.archive_dir,
+                    # score: signal strength + behavioral diversity + quality
+                    "score": abs(ab) + abs(ba) + dd * 0.3 + avg_q * 0.5,
+                }
+            )
+    return pairs
 
 
-def _descriptor_distance(d1: tuple, d2: tuple) -> float:
-    return float(np.linalg.norm(np.array(d1) - np.array(d2)))
+# ── YAML ──────────────────────────────────────────────────────────────────────
 
+
+def _yaml_snippet(p: dict, n: int, steps: int, grid: int) -> str:
+    a, b = p["a"], p["b"]
+    name = f"{a.creature_id.split('-')[-1]}-vs-{b.creature_id.split('-')[-1]}"
+    cross_tag = " [cross-archive]" if p["cross"] else ""
+    comment = (
+        f"# {p['mode']}{cross_tag}: "
+        f"A\u2192B={p['ab']:+.2f}  B\u2192A={p['ba']:+.2f}  "
+        f"asym={p['asym']:.2f}  dist={p['desc_dist']:.2f}  avg_q={p['avg_quality']:.3f}"
+    )
+    snap = max(1, steps // 100)
+    return "\n".join(
+        [
+            comment,
+            f"- name: {name}",
+            f"  grid: [{grid}, {grid}]",
+            f"  steps: {steps}",
+            f"  snapshot_every: {snap}",
+            f"  border: wall",
+            f"  output_format: gif",
+            f"  sources:",
+            f"    - archive_dir: {a.archive_dir}",
+            f"      run: {a.run_id}",
+            f"      creature_id: {a.creature_id}",
+            f"      n: {n}",
+            f"    - archive_dir: {b.archive_dir}",
+            f"      run: {b.run_id}",
+            f"      creature_id: {b.creature_id}",
+            f"      n: {n}",
+            f"  spawn:",
+            f"    patch: 24",
+            f"    min_dist: 40",
+            f"    seed: 42",
+        ]
+    )
+
+
+# ── display ───────────────────────────────────────────────────────────────────
 
 MODE_LABEL = {
     "repulsion": "mutual chemorepulsion -- territorial coexistence candidates",
     "pursuit": "asymmetric -- one attracts, one repels -- chase dynamics",
     "competition": "mutual chemotaxis -- both attract, compete for same space",
-    "blind": "chemically blind -- pure spatial competition, no signal coupling",
+    "blind": "chemically blind -- pure spatial competition, no signal mediation",
 }
-
-MODE_COLORS = {
-    "repulsion": "\033[36m",  # cyan
-    "pursuit": "\033[33m",  # yellow
-    "competition": "\033[35m",  # magenta
-    "blind": "\033[90m",  # dark gray
+MODE_COLOR = {
+    "repulsion": "\033[36m",
+    "pursuit": "\033[33m",
+    "competition": "\033[35m",
+    "blind": "\033[90m",
 }
 RESET = "\033[0m"
 BOLD = "\033[1m"
 
 
-def _color(text: str, code: str, use_color: bool) -> str:
-    return f"{code}{text}{RESET}" if use_color else text
-
-
-# ── YAML generation ───────────────────────────────────────────────────────────
-
-
-def _yaml_snippet(run_id: str, cid_a: str, cid_b: str, n: int = 3) -> str:
-    return (
-        f"- name: {cid_a.split('-')[-1]}-vs-{cid_b.split('-')[-1]}\n"
-        f"  grid: [192, 192]\n"
-        f"  steps: 1000\n"
-        f"  snapshot_every: 100\n"
-        f"  border: wall\n"
-        f"  output_format: gif\n"
-        f"  sources:\n"
-        f"    - run: {run_id}\n"
-        f"      creature_id: {cid_a}\n"
-        f"      n: {n}\n"
-        f"    - run: {run_id}\n"
-        f"      creature_id: {cid_b}\n"
-        f"      n: {n}\n"
-        f"  spawn:\n"
-        f"    patch: 24\n"
-        f"    min_dist: 40\n"
-        f"    seed: 42"
-    )
+def _c(text: str, code: str, on: bool) -> str:
+    return f"{code}{text}{RESET}" if on else text
 
 
 # ── main ──────────────────────────────────────────────────────────────────────
@@ -156,141 +244,84 @@ def main() -> None:
         "--archive",
         "-a",
         type=Path,
+        action="append",
+        dest="archives",
+        metavar="PATH",
         required=True,
-        help="Path to a run directory (containing archive.pkl) or directly to archive.pkl.",
+        help="Archive run directory or archive.pkl. Repeat for multiple archives.",
     )
     parser.add_argument(
         "--mode",
         "-m",
         choices=["repulsion", "pursuit", "competition", "blind", "all"],
         default="all",
-        help="Interaction type to surface (default: all).",
     )
     parser.add_argument(
         "--top",
         "-n",
         type=int,
-        default=5,
-        help="Number of top pairs to show per mode (default: 5).",
+        default=3,
+        help="Top pairs per mode (default: 3).",
     )
     parser.add_argument(
         "--min-quality",
         "-q",
         type=float,
         default=0.0,
-        help="Minimum quality threshold for both creatures (default: 0.0).",
     )
     parser.add_argument(
         "--n-creatures",
         type=int,
         default=3,
-        help="n per source in generated YAML snippets (default: 3).",
+        help="n per source in YAML (default: 3).",
+    )
+    parser.add_argument(
+        "--steps",
+        type=int,
+        default=2000,
+        help="steps in YAML snippets (default: 2000).",
+    )
+    parser.add_argument(
+        "--grid",
+        type=int,
+        default=192,
+        help="Grid size in YAML snippets (default: 192).",
     )
     parser.add_argument(
         "--yaml-only",
         action="store_true",
-        help="Print only the YAML snippets for top pairs, no table.",
+        help="Print only YAML, no table.",
     )
     parser.add_argument(
         "--no-color",
         action="store_true",
-        help="Disable ANSI color output.",
     )
     args = parser.parse_args()
 
     use_color = not args.no_color and sys.stdout.isatty()
 
-    # ── load archive ──────────────────────────────────────────────────────────
-    archive, run_dir = _load_archive(args.archive)
-    run_id = _run_id_from_dir(run_dir)
+    # load
+    print("loading archives...", file=sys.stderr)
+    all_creatures: list[Creature] = []
+    for path in args.archives:
+        all_creatures.extend(_load_creatures(path, args.min_quality))
 
-    # ── check signal ──────────────────────────────────────────────────────────
-    occupied = list(archive.iter_occupied())
-    if not occupied:
-        sys.exit("error: archive is empty -- no creatures to compare")
+    if len(all_creatures) < 2:
+        sys.exit("error: need at least 2 signal creatures")
 
-    sample_params = occupied[0][1].params
-    if "emission_vector" not in sample_params:
-        sys.exit(
-            "error: this archive is not signal-enabled.\n"
-            "suggest_signal_pairs.py only works with archives produced with --signal-field.\n"
-            "Run biota search --signal-field ... first."
-        )
-
-    # ── filter by quality ─────────────────────────────────────────────────────
-    creatures = [
-        (cid, result)
-        for _, result in occupied
-        for cid in [result.creature_id or str(_)]
-        if result.quality is not None and result.quality >= args.min_quality
-    ]
-
-    # Rebuild with correct creature_id from result
-    creatures = []
-    for _, result in occupied:
-        if result.quality is None or result.quality < args.min_quality:
-            continue
-        if "emission_vector" not in result.params:
-            continue
-        creatures.append(result)
-
-    if len(creatures) < 2:
-        sys.exit(
-            f"error: fewer than 2 creatures pass --min-quality {args.min_quality}. "
-            f"Lower the threshold or use a larger archive."
-        )
-
-    # ── compute all pairs ─────────────────────────────────────────────────────
-    pairs = []
-    for i in range(len(creatures)):
-        for j in range(i + 1, len(creatures)):
-            a = creatures[i]
-            b = creatures[j]
-
-            ev_a = a.params["emission_vector"]
-            rp_a = a.params["receptor_profile"]
-            ev_b = b.params["emission_vector"]
-            rp_b = b.params["receptor_profile"]
-
-            ab = _dot(ev_a, rp_b)  # A's signal effect on B
-            ba = _dot(ev_b, rp_a)  # B's signal effect on A
-
-            mode = _classify(ab, ba)
-            asym = _asymmetry(ab, ba)
-            desc_dist = (
-                _descriptor_distance(a.descriptors, b.descriptors)
-                if a.descriptors and b.descriptors
-                else 0.0
-            )
-            avg_quality = ((a.quality or 0) + (b.quality or 0)) / 2
-
-            pairs.append(
-                {
-                    "a": a,
-                    "b": b,
-                    "ab": ab,
-                    "ba": ba,
-                    "mode": mode,
-                    "asym": asym,
-                    "desc_dist": desc_dist,
-                    "avg_quality": avg_quality,
-                    # Score: strong signal + behavioral diversity + quality
-                    "score": abs(ab) + abs(ba) + desc_dist * 0.5 + avg_quality * 0.3,
-                }
-            )
-
-    if not pairs:
-        sys.exit("error: no pairs to compare")
-
-    # ── select modes to show ──────────────────────────────────────────────────
-    modes_to_show = (
-        ["repulsion", "pursuit", "competition", "blind"] if args.mode == "all" else [args.mode]
+    # build pairs
+    pairs = _build_pairs(all_creatures)
+    n_cross = sum(1 for p in pairs if p["cross"])
+    print(
+        f"  {len(pairs)} pairs ({n_cross} cross-archive, {len(pairs) - n_cross} same-archive)",
+        file=sys.stderr,
     )
 
-    # ── print results ─────────────────────────────────────────────────────────
+    modes = ["repulsion", "pursuit", "competition", "blind"] if args.mode == "all" else [args.mode]
+
     all_yaml: list[str] = []
 
-    for mode in modes_to_show:
+    for mode in modes:
         mode_pairs = sorted(
             [p for p in pairs if p["mode"] == mode],
             key=lambda p: -p["score"],
@@ -300,55 +331,46 @@ def main() -> None:
             continue
 
         if not args.yaml_only:
-            color = MODE_COLORS.get(mode, "")
-            header = f"\n{_color(mode.upper(), BOLD + color, use_color)}"
-            print(header)
-            print(_color(MODE_LABEL[mode], color, use_color))
+            col = MODE_COLOR.get(mode, "")
+            print(f"\n{_c(mode.upper(), BOLD + col, use_color)}")
+            print(_c(MODE_LABEL[mode], col, use_color))
             print()
-
-            col_w = 42
+            w = 44
             print(
-                f"  {'creature A':<{col_w}} {'creature B':<{col_w}} "
-                f"{'A→B':>6} {'B→A':>6} {'asym':>6} {'d_desc':>7} {'avg_q':>6}"
+                f"  {'creature A':<{w}} {'creature B':<{w}} "
+                f"{'A\u2192B':>6} {'B\u2192A':>6} {'asym':>6} {'dist':>6} {'avg_q':>6} {'cross':>5}"
             )
-            print("  " + "-" * (col_w * 2 + 40))
-
+            print("  " + "-" * (w * 2 + 42))
             for p in mode_pairs:
-                cid_a = p["a"].creature_id or "?"
-                cid_b = p["b"].creature_id or "?"
                 print(
-                    f"  {cid_a:<{col_w}} {cid_b:<{col_w}} "
+                    f"  {p['a'].creature_id:<{w}} {p['b'].creature_id:<{w}} "
                     f"{p['ab']:>+6.2f} {p['ba']:>+6.2f} "
-                    f"{p['asym']:>6.2f} {p['desc_dist']:>7.3f} "
-                    f"{p['avg_quality']:>6.3f}"
+                    f"{p['asym']:>6.2f} {p['desc_dist']:>6.2f} "
+                    f"{p['avg_quality']:>6.3f} "
+                    f"{'yes' if p['cross'] else '':>5}"
                 )
 
         for p in mode_pairs:
-            cid_a = p["a"].creature_id or "?"
-            cid_b = p["b"].creature_id or "?"
-            all_yaml.append(
-                f"# {mode}: A→B={p['ab']:+.2f}  B→A={p['ba']:+.2f}  "
-                f"desc_dist={p['desc_dist']:.3f}  avg_q={p['avg_quality']:.3f}\n"
-                + _yaml_snippet(run_id, cid_a, cid_b, n=args.n_creatures)
-            )
+            all_yaml.append(_yaml_snippet(p, n=args.n_creatures, steps=args.steps, grid=args.grid))
 
-    # ── print YAML ────────────────────────────────────────────────────────────
     if not args.yaml_only:
         print(f"\n{'─' * 80}")
-        print(f"{BOLD}experiments.yaml snippets{RESET if use_color else ''}")
+        print(f"{BOLD if use_color else ''}experiments.yaml{RESET if use_color else ''}")
         print(f"{'─' * 80}")
-        print("experiments:")
 
+    print("experiments:")
     for snippet in all_yaml:
         print()
         for line in snippet.splitlines():
-            print("  " + line if not line.startswith("#") else line)
+            if line.startswith("#"):
+                print(line)
+            else:
+                print("  " + line)
 
     if not args.yaml_only:
-        print()
         print(
-            f"  # {len(all_yaml)} pair(s) from archive: {run_id}\n"
-            f"  # run: biota ecosystem --config experiments.yaml --device cuda"
+            f"\n  # {len(all_yaml)} experiment(s) from {len(args.archives)} archive(s)"
+            f"\n  # run: biota ecosystem --config experiments.yaml --device cuda"
         )
 
 
