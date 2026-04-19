@@ -42,7 +42,16 @@ run_search() {
         --calibration "$CALIBRATION" \
         --preset standard \
         && echo "  ✓ $label done" \
-        || echo "  ✗ $label FAILED (continuing)"
+        || { echo "  ✗ $label FAILED (continuing)"; return; }
+
+    # Flatten: biota writes a timestamped subdir inside --output-dir.
+    # Move its contents up one level so the label dir IS the run dir.
+    local out_dir="${@: -1}"  # value after last flag (--output-dir <path>)
+    for inner in "$out_dir"/*/; do
+        [ -d "$inner" ] || continue
+        mv "$inner"* "$out_dir/" 2>/dev/null || true
+        rmdir "$inner" 2>/dev/null || true
+    done
 }
 
 # 1. Classic morphological baseline -- torus, no signal.
