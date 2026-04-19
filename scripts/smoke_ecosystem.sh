@@ -57,13 +57,19 @@ mkdir -p "$SMOKE_DATA/archive/seed-run-b"
 log "seeding archive deterministically..."
 "$SMOKE_VENV/bin/python" - <<'PYEOF'
 import pickle
+from dataclasses import replace as _replace
 import numpy as np
 from biota.search.archive import Archive
 from biota.search.result import RolloutResult
 
 k = 3
+CENTROIDS = np.array(
+    [[0.3, 0.5, 0.6], [5.0, 5.0, 5.0], [8.0, 2.0, 8.0], [2.0, 8.0, 2.0]],
+    dtype=np.float64,
+)
+
 def make_creature(seed):
-    rng = __import__('numpy').random.default_rng(seed)
+    rng = np.random.default_rng(seed)
     return RolloutResult(
         params={
             "R": float(rng.uniform(6.0, 12.0)),
@@ -76,22 +82,25 @@ def make_creature(seed):
             "w": [list(rng.uniform(0.05, 0.3, 3).astype(float)) for _ in range(k)],
         },
         seed=int(seed),
+        creature_id="",
         descriptors=(0.3, 0.5, 0.6),
         quality=0.8,
         rejection_reason=None,
         thumbnail=np.zeros((16, 32, 32), dtype=np.uint8),
-        parent_cell=None,
+        parent_id=None,
         created_at=0.0,
         compute_seconds=1.0,
     )
 
-for run_id, seed, coords in [("seed-run", 1, (5, 8, 3)), ("seed-run-b", 2, (3, 4, 5))]:
-    arc = Archive()
-    arc._cells[coords] = make_creature(seed)
+for run_id, seed in [("seed-run", 1), ("seed-run-b", 2)]:
+    arc = Archive(n_centroids=4, similarity_epsilon=0.0)
+    arc.attach_centroids(CENTROIDS)
+    creature = _replace(make_creature(seed), creature_id=f"{run_id}-{seed}")
+    arc.try_insert(creature)
     path = f"/tmp/biota-smoke-eco/archive/{run_id}/archive.pkl"
     with open(path, "wb") as f:
         pickle.dump(arc, f)
-    print(f"seeded cell {coords} in {run_id}")
+    print(f"seeded {run_id} with creature_id={run_id}-{seed}")
 PYEOF
 
 cat > "$SMOKE_DATA/experiments.yaml" <<'YAMLEOF'
@@ -104,7 +113,7 @@ experiments:
     output_format: gif
     spawn: {min_dist: 20, patch: 8, seed: 0}
     sources:
-      - {run: seed-run, cell: [5, 8, 3], n: 2}
+      - {run: seed-run, creature_id: seed-run-1, n: 2}
   - name: beta
     grid: 64
     steps: 10
@@ -113,7 +122,7 @@ experiments:
     output_format: gif
     spawn: {min_dist: 20, patch: 8, seed: 1}
     sources:
-      - {run: seed-run, cell: [5, 8, 3], n: 2}
+      - {run: seed-run, creature_id: seed-run-1, n: 2}
   - name: hetero
     grid: 64
     steps: 20
@@ -122,8 +131,8 @@ experiments:
     output_format: gif
     spawn: {min_dist: 20, patch: 8, seed: 0}
     sources:
-      - {run: seed-run,   cell: [5, 8, 3], n: 1}
-      - {run: seed-run-b, cell: [3, 4, 5], n: 1}
+      - {run: seed-run,   creature_id: seed-run-1,   n: 1}
+      - {run: seed-run-b, creature_id: seed-run-b-2, n: 1}
 YAMLEOF
 
 # Build the CLI invocation. Transport selects Ray flag (or none); --workers

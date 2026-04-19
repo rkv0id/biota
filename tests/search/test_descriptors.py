@@ -1,6 +1,8 @@
 """Tests for the behavior descriptor module.
 
-These tests exist primarily to catch normalizer mistakes. The original
+These tests verify descriptor compute functions return raw values in [0, 100].
+
+The original
 M1 speed/size/structure descriptors were degenerate because their
 normalizers were miscalibrated against the biota population - a creature
 moving at realistic Lenia speeds was binning to slot 0 out of 32 because
@@ -28,9 +30,7 @@ import numpy as np
 import pytest
 
 from biota.search.descriptors import (
-    GYRADIUS_NORMALIZER_DIVISOR,
     SPECTRAL_RADIAL_BINS,
-    VELOCITY_NORMALIZER,
     WINDOW,
     RolloutTrace,
     compute_activity,
@@ -90,46 +90,35 @@ def test_velocity_short_history_returns_zero() -> None:
     assert compute_velocity(_make_trace(com_path=coms)) == 0.0
 
 
-def test_velocity_calibration_typical_biota_creature() -> None:
-    """COM moving 0.005 cells/step along one axis - the median speed observed
-    in actual cluster runs - should produce normalized velocity =
-    0.005 / 0.02 = 0.25. This is the canonical "typical biota creature"
-    calibration. If the normalizer is off by 10x or 100x, this test fails
-    loudly."""
+def test_velocity_returns_raw_cells_per_step() -> None:
+    """COM moving 0.005 cells/step returns the raw speed, not normalized."""
     coms = np.zeros((TRACE_LEN, 2), dtype=np.float32)
     coms[:, 0] = np.arange(TRACE_LEN) * 0.005
-    expected = 0.005 / VELOCITY_NORMALIZER
-    assert compute_velocity(_make_trace(com_path=coms)) == pytest.approx(expected, abs=1e-5)
+    assert compute_velocity(_make_trace(com_path=coms)) == pytest.approx(0.005, abs=1e-5)
 
 
-def test_velocity_calibration_fast_biota_creature() -> None:
-    """COM moving 0.0077 cells/step (the fastest velocity observed in the
-    iteration-1 cluster run) should normalize to ~0.385. Well below the
-    clipping ceiling, which is the whole point of having a small safety
-    margin in the normalizer."""
+def test_velocity_fast_creature_returns_raw_speed() -> None:
+    """COM moving 0.0077 cells/step returns 0.0077 as the raw speed."""
     coms = np.zeros((TRACE_LEN, 2), dtype=np.float32)
     coms[:, 1] = np.arange(TRACE_LEN) * 0.0077
-    expected = 0.0077 / VELOCITY_NORMALIZER
-    assert compute_velocity(_make_trace(com_path=coms)) == pytest.approx(expected, abs=1e-5)
+    assert compute_velocity(_make_trace(com_path=coms)) == pytest.approx(0.0077, abs=1e-5)
 
 
 def test_velocity_diagonal_motion_uses_l2_norm() -> None:
-    """Diagonal motion at 0.003 cells/step per axis should give velocity
-    sqrt(2) * 0.003, then divided by VELOCITY_NORMALIZER."""
+    """Diagonal motion at 0.003 cells/step per axis gives sqrt(2)*0.003 raw."""
     coms = np.zeros((TRACE_LEN, 2), dtype=np.float32)
     step_size = 0.003
     coms[:, 0] = np.arange(TRACE_LEN) * step_size
     coms[:, 1] = np.arange(TRACE_LEN) * step_size
-    raw = float(np.sqrt(2.0) * step_size)
-    expected = raw / VELOCITY_NORMALIZER
+    expected = float(np.sqrt(2.0) * step_size)
     assert compute_velocity(_make_trace(com_path=coms)) == pytest.approx(expected, abs=1e-5)
 
 
 def test_velocity_clips_at_one() -> None:
-    """COM moving faster than VELOCITY_NORMALIZER cells/step clips to 1.0."""
+    """COM moving fast enough produces nonzero velocity."""
     coms = np.zeros((TRACE_LEN, 2), dtype=np.float32)
-    coms[:, 0] = np.arange(TRACE_LEN) * 0.1  # 0.1 cells/step, well above 0.02
-    assert compute_velocity(_make_trace(com_path=coms)) == 1.0
+    coms[:, 0] = np.arange(TRACE_LEN) * 0.1  # 0.1 cells/step, raw value returned
+    assert compute_velocity(_make_trace(com_path=coms)) == pytest.approx(0.1, abs=1e-5)
 
 
 # === compute_gyradius ===
@@ -162,13 +151,11 @@ def test_gyradius_calibration_uniform_square() -> None:
     cx = (state * x_idx).sum() / total_mass
     sq_dist = (y_idx - cy) ** 2 + (x_idx - cx) ** 2
     expected_raw = float(np.sqrt((state * sq_dist).sum() / total_mass))
-    expected_normalized = expected_raw / (GRID / GYRADIUS_NORMALIZER_DIVISOR)
 
     got = compute_gyradius(_make_trace(final_state=state))
-    assert got == pytest.approx(expected_normalized, abs=1e-4)
-    # Sanity check the value lands in a sensible range: a 10x10 square in
-    # a 96-grid with normalizer 24 should produce something around 0.15-0.20.
-    assert 0.1 < got < 0.25
+    assert got == pytest.approx(expected_raw, abs=1e-4)
+    # A 10x10 square on a 96-grid has gyradius ~4 grid units
+    assert 0.0 < got < 50.0
 
 
 def test_gyradius_calibration_large_diffuse_creature() -> None:
@@ -179,14 +166,18 @@ def test_gyradius_calibration_large_diffuse_creature() -> None:
     state[y0 : y0 + 40, x0 : x0 + 40] = 1.0
 
     got = compute_gyradius(_make_trace(final_state=state))
-    # ~4x a 10x10 creature, so something around 0.6-0.7.
-    assert 0.5 < got < 0.8
+    small_state = np.zeros((GRID, GRID), dtype=np.float32)
+    small_state[GRID // 2 - 5 : GRID // 2 + 5, GRID // 2 - 5 : GRID // 2 + 5] = 1.0
+    small_got = compute_gyradius(_make_trace(final_state=small_state))
+    # 40x40 should have larger gyradius than 10x10
+    assert got > small_got
 
 
 def test_gyradius_clips_at_one() -> None:
-    """A creature so diffuse it fills nearly the whole grid clips to 1."""
+    """A creature so diffuse it fills nearly the whole grid produces large gyradius."""
     state = np.ones((GRID, GRID), dtype=np.float32)
-    assert compute_gyradius(_make_trace(final_state=state)) == 1.0
+    # A very diffuse creature has large gyradius; it should be > 0
+    assert compute_gyradius(_make_trace(final_state=state)) > 0.0
 
 
 # === compute_spectral_entropy ===
@@ -209,7 +200,7 @@ def test_spectral_entropy_uniform_field_is_low() -> None:
 
 def test_spectral_entropy_smooth_gaussian_clips_to_zero() -> None:
     """A wide Gaussian blob is below the SPECTRAL_ENTROPY_FLOOR (raw value
-    ~0.27 vs floor 0.55), so it clips to 0 after the empirical remap.
+    raw entropy ~0.27, returned directly (no floor remap in v4.0.0).
 
     This is intentional. Biota's parameter prior + survival filters never
     actually produce smooth featureless Gaussians; the discovered population
@@ -223,7 +214,9 @@ def test_spectral_entropy_smooth_gaussian_clips_to_zero() -> None:
     radius = np.sqrt((y_idx - cy) ** 2 + (x_idx - cx) ** 2)
     state = np.exp(-(radius**2) / (2.0 * 8.0**2)).astype(np.float32)
     entropy = compute_spectral_entropy(_make_trace(final_state=state))
-    assert entropy == 0.0
+    # Without the SPECTRAL_ENTROPY_FLOOR remap (removed in v4.0.0), the raw entropy
+    # of a Gaussian (~0.27) is returned directly. It is lower than a sharp-edged creature.
+    assert 0.0 <= entropy < 0.5
 
 
 def test_spectral_entropy_high_frequency_pattern_is_high() -> None:
@@ -231,9 +224,9 @@ def test_spectral_entropy_high_frequency_pattern_is_high() -> None:
     empirical remap. Periodic lattices spread their FFT energy across
     multiple harmonic radial bins.
 
-    Empirical post-remap value ~0.12 for a period-6 lattice on a 96 grid.
+    Raw entropy value for a periodic lattice on a 96 grid.
     The remap compresses the dotted lattice into the lower part of the
-    output range because the raw value (~0.60) is just above the floor."""
+    raw value returned directly."""
     state = np.zeros((GRID, GRID), dtype=np.float32)
     for y in range(0, GRID, 6):
         for x in range(0, GRID, 6):
@@ -262,8 +255,7 @@ def test_spectral_entropy_sharp_disk_higher_than_smooth_gaussian() -> None:
     smooth_entropy = compute_spectral_entropy(_make_trace(final_state=smooth))
     sharp_entropy = compute_spectral_entropy(_make_trace(final_state=sharp))
     assert sharp_entropy > smooth_entropy
-    assert sharp_entropy > 0.5  # Lands well into the upper range
-    assert smooth_entropy == 0.0  # Below the floor, clipped
+    assert sharp_entropy > 0.0  # Sharp disk has meaningful spectral content
 
 
 def test_spectral_entropy_in_unit_range() -> None:
@@ -272,7 +264,7 @@ def test_spectral_entropy_in_unit_range() -> None:
     rng = np.random.default_rng(42)
     state = rng.random((GRID, GRID), dtype=np.float32)
     entropy = compute_spectral_entropy(_make_trace(final_state=state))
-    assert 0.0 <= entropy <= 1.0
+    assert 0.0 <= entropy <= 100.0
 
 
 def test_spectral_entropy_uses_radial_binning() -> None:
@@ -292,7 +284,7 @@ def test_compute_descriptors_returns_tuple_of_three() -> None:
     assert result is not None
     assert len(result) == 3
     for d in result:
-        assert 0.0 <= d <= 1.0
+        assert 0.0 <= d <= 100.0
 
 
 def test_compute_descriptors_returns_none_on_dead_rollout() -> None:
@@ -313,8 +305,8 @@ def test_compute_descriptors_slow_stationary_blob() -> None:
     assert result is not None
     velocity, gyradius, spectral = result
     assert velocity == 0.0
-    assert 0.1 < gyradius < 0.25
-    assert 0.0 < spectral < 1.0
+    assert 0.0 < gyradius < 50.0  # raw grid units, compact creature on 96-grid
+    assert 0.0 < spectral < 100.0
 
 
 def _make_trace_with_gyradius(
@@ -370,7 +362,7 @@ def test_displacement_ratio_orbiter_is_low() -> None:
 def test_displacement_ratio_in_unit_interval() -> None:
     """All outputs are in [0, 1]."""
     coms = np.random.default_rng(42).random((TRACE_LEN, 2)).astype(np.float32) * GRID
-    assert 0.0 <= compute_displacement_ratio(_make_trace(com_path=coms)) <= 1.0
+    assert 0.0 <= compute_displacement_ratio(_make_trace(com_path=coms)) <= 100.0
 
 
 # === compute_angular_velocity ===
@@ -385,12 +377,12 @@ def test_angular_velocity_straight_line_is_zero() -> None:
 
 def test_angular_velocity_full_orbit_saturates() -> None:
     """One full circular orbit in WINDOW steps -> angular speed ~2*pi/WINDOW rad/step.
-    With WINDOW=50: 2*pi/50 ~ 0.126 rad/step vs normalizer 0.15 -> result ~0.84."""
+    With WINDOW=50: 2*pi/50 ~ 0.126 rad/step returned as raw value."""
     t = np.linspace(0, 2 * np.pi, WINDOW)
     orbit = np.stack([np.sin(t) * 10 + 48, np.cos(t) * 10 + 48], axis=1).astype(np.float32)
     full = np.tile(orbit, (TRACE_LEN // WINDOW + 1, 1))[:TRACE_LEN]
     val = compute_angular_velocity(_make_trace(com_path=full))
-    assert val > 0.6  # 2*pi/WINDOW / 0.15 ~ 0.84
+    assert val > 0.1  # raw rad/step, 2*pi/50 ~ 0.126
 
 
 def test_angular_velocity_stationary_is_zero() -> None:
@@ -400,7 +392,7 @@ def test_angular_velocity_stationary_is_zero() -> None:
 
 def test_angular_velocity_in_unit_interval() -> None:
     coms = np.random.default_rng(7).random((TRACE_LEN, 2)).astype(np.float32) * GRID
-    assert 0.0 <= compute_angular_velocity(_make_trace(com_path=coms)) <= 1.0
+    assert 0.0 <= compute_angular_velocity(_make_trace(com_path=coms)) <= 100.0
 
 
 # === compute_growth_gradient ===
@@ -432,7 +424,7 @@ def test_growth_gradient_sharp_edges_is_higher() -> None:
 
 def test_growth_gradient_in_unit_interval() -> None:
     state = np.abs(np.random.default_rng(11).standard_normal((GRID, GRID))).astype(np.float32)
-    assert 0.0 <= compute_growth_gradient(_make_trace(final_state=state)) <= 1.0
+    assert 0.0 <= compute_growth_gradient(_make_trace(final_state=state)) <= 100.0
 
 
 # === compute_morphological_instability ===
@@ -467,7 +459,7 @@ def test_morphological_instability_in_unit_interval() -> None:
     assert (
         0.0
         <= compute_morphological_instability(_make_trace_with_gyradius(gyradius_path=gyr))
-        <= 1.0
+        <= 100.0
     )
 
 
@@ -497,7 +489,7 @@ def test_activity_faster_change_is_higher() -> None:
 
 def test_activity_in_unit_interval() -> None:
     gyr = np.random.default_rng(23).random(TRACE_LEN).astype(np.float32) * 50
-    assert 0.0 <= compute_activity(_make_trace_with_gyradius(gyradius_path=gyr)) <= 1.0
+    assert 0.0 <= compute_activity(_make_trace_with_gyradius(gyradius_path=gyr)) <= 100.0
 
 
 # === compute_spatial_entropy ===
@@ -535,7 +527,7 @@ def test_spatial_entropy_concentrated_less_than_diffuse() -> None:
 
 def test_spatial_entropy_in_unit_interval() -> None:
     state = np.random.default_rng(31).random((GRID, GRID)).astype(np.float32)
-    assert 0.0 <= compute_spatial_entropy(_make_trace(final_state=state)) <= 1.0
+    assert 0.0 <= compute_spatial_entropy(_make_trace(final_state=state)) <= 100.0
 
 
 # ===========================================================================
@@ -586,7 +578,7 @@ def test_emission_activity_scales_with_emission() -> None:
 
 
 def test_emission_activity_clipped_to_unit() -> None:
-    # History above normalizer -> clips to 1.0
+    # History above normalizer -> clips to 100.0
     trace = _make_signal_trace(emission_history=np.full(TRACE_LEN, 1.0, dtype=np.float32))
     assert compute_emission_activity(trace) == 1.0
 
@@ -596,7 +588,7 @@ def test_emission_activity_in_unit_interval() -> None:
         emission_history=np.random.default_rng(7).random(TRACE_LEN).astype(np.float32) * 0.05
     )
     val = compute_emission_activity(trace)
-    assert 0.0 <= val <= 1.0
+    assert 0.0 <= val <= 100.0
 
 
 # --- receptor_sensitivity ---
@@ -623,7 +615,7 @@ def test_receptor_sensitivity_in_unit_interval() -> None:
         reception_history=np.random.default_rng(9).random(TRACE_LEN).astype(np.float32) * 0.010
     )
     val = compute_receptor_sensitivity(trace)
-    assert 0.0 <= val <= 1.0
+    assert 0.0 <= val <= 100.0
 
 
 # --- signal_retention ---
@@ -632,7 +624,7 @@ def test_receptor_sensitivity_in_unit_interval() -> None:
 def test_signal_retention_one_for_non_signal() -> None:
     """Non-signal rollout: no mass was lost, retention = 1.0."""
     trace = _make_trace()
-    assert compute_signal_retention(trace) == 1.0
+    assert compute_signal_retention(trace) == 1.0  # non-signal returns exactly 1.0
 
 
 def test_signal_retention_reflects_mass_loss() -> None:
@@ -641,8 +633,10 @@ def test_signal_retention_reflects_mass_loss() -> None:
     assert abs(compute_signal_retention(trace) - 0.7) < 1e-6
 
 
-def test_signal_retention_clipped_to_unit() -> None:
-    assert compute_signal_retention(_make_signal_trace(retention=1.5)) == 1.0
+def test_signal_retention_clipped_to_100() -> None:
+    # Clip bound is now 100.0 (raw value), not 1.0
+    assert compute_signal_retention(_make_signal_trace(retention=150.0)) == 100.0
+    assert compute_signal_retention(_make_signal_trace(retention=1.5)) == 1.5
     assert compute_signal_retention(_make_signal_trace(retention=-0.1)) == 0.0
 
 

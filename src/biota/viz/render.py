@@ -163,39 +163,26 @@ def _serialize_params(result: RolloutResult) -> dict[str, Any]:
 
 
 def _result_to_card_data(
-    coord: tuple[int, int, int],
+    centroid_idx: int,
     result: RolloutResult,
     thumbs_dir: Path | None = None,
 ) -> dict[str, Any]:
-    """Build the per-cell payload embedded as a JSON blob in the page.
-
-    Note: the field names in this JSON (speed/size/structure) are historical
-    from the M1 descriptor design.  The underlying semantics are now
-    (velocity, gyradius, spectral_entropy) but the field names are kept so
-    existing archives continue to render.  The frontend maps positions to
-    display labels via the DESC_LABELS JS constant.
-    """
-    y, x, z = coord
-    key = f"{y}_{x}_{z}"
-    descriptors_obj: dict[str, float] | None = None
+    """Build the per-cell payload embedded as a JSON blob in the page."""
+    key = result.creature_id if result.creature_id else str(centroid_idx)
+    descriptors_obj: list[float] | None = None
     if result.descriptors is not None:
-        descriptors_obj = {
-            "speed": round(float(result.descriptors[0]), 4),
-            "size": round(float(result.descriptors[1]), 4),
-            "structure": round(float(result.descriptors[2]), 4),
-        }
-    parent: list[int] | None
-    if result.parent_cell is not None:
-        py, px, pz = result.parent_cell
-        parent = [py, px, pz]
-    else:
-        parent = None
+        descriptors_obj = [
+            round(float(result.descriptors[0]), 6),
+            round(float(result.descriptors[1]), 6),
+            round(float(result.descriptors[2]), 6),
+        ]
     return {
-        "coord": [y, x, z],
+        "creature_id": result.creature_id,
+        "centroid_idx": centroid_idx,
         "quality": round(float(result.quality), 4) if result.quality is not None else None,
         "descriptors": descriptors_obj,
         "seed": int(result.seed),
-        "parent": parent,
+        "parent_id": result.parent_id,
         "rejection_reason": result.rejection_reason,
         "compute_seconds": round(float(result.compute_seconds), 3),
         "thumbnail": _card_thumbnail_src(result.thumbnail, key, thumbs_dir),
@@ -203,94 +190,25 @@ def _result_to_card_data(
     }
 
 
-def _compute_grid_bbox(
-    occupied: list[tuple[tuple[int, int, int], Any]],
-    n_rows: int,
-    n_cols: int,
-) -> tuple[int, int, int, int]:
-    """Return the bounding box (row_min, row_max, col_min, col_max) inclusive."""
-    if not occupied:
-        return 0, n_rows - 1, 0, n_cols - 1
-    rows = [coord[0] for coord, _ in occupied]
-    cols = [coord[1] for coord, _ in occupied]
-    return min(rows), max(rows), min(cols), max(cols)
+# _compute_grid_bbox removed in v4.0.0 (CVT archive has no grid structure).
+# Replaced by histogram + correlation panel in the archive viewer rebuild (workstream 6).
 
 
-def _build_body_inner(
-    occupied: list[tuple[tuple[int, int, int], Any]],
-    cards: dict[str, dict[str, Any]],
-    archive: Archive,
-    d0_direction: str = "faster",
-    d1_direction: str = "larger",
-) -> str:
-    """Build the HTML fragment that goes inside <main>."""
-    if not occupied:
-        return '<div class="empty">Archive is empty. No occupied cells to display.</div>'
-
-    row_min, row_max, col_min, col_max = _compute_grid_bbox(
-        occupied, archive.bins_speed, archive.bins_size
-    )
-    vis_rows = row_max - row_min + 1
-    vis_cols = col_max - col_min + 1
-
-    vel_tick_interval = max(1, vis_rows // 4)
-    gyr_tick_interval = max(1, vis_cols // 4)
-
-    vel_ticks: list[tuple[int, str]] = []
-    for r in range(vis_rows):
-        abs_row = r + row_min
-        if abs_row % vel_tick_interval == 0 or abs_row == row_max:
-            val = (abs_row + 0.5) / archive.bins_speed
-            vel_ticks.append((r + 1, f"{val:.2f}"))
-
-    gyr_ticks: list[tuple[int, str]] = []
-    for c in range(vis_cols):
-        abs_col = c + col_min
-        if abs_col % gyr_tick_interval == 0 or abs_col == col_max:
-            val = (abs_col + 0.5) / archive.bins_size
-            gyr_ticks.append((c + 1, f"{val:.2f}"))
-
-    cells_html_parts: list[str] = []
-    for coord, _result in occupied:
-        y, x, z = coord
-        key = f"{y}_{x}_{z}"
-        data_url = cards[key]["thumbnail"]
-        grid_col = x - col_min + 1
-        grid_row = y - row_min + 1
-        cells_html_parts.append(
-            f'<div class="cell" data-key="{key}" '
-            f'style="grid-column: {grid_col}; grid-row: {grid_row};">'
-            f'<img src="{data_url}" alt="cell {y},{x},{z}" loading="lazy" />'
+def _build_body_inner_stub(cards: dict[str, Any]) -> str:
+    """Minimal placeholder body used until the archive viewer is rebuilt in workstream 6."""
+    items = []
+    for key, card in sorted(cards.items(), key=lambda kv: -(kv[1]["quality"] or 0)):
+        cid = card.get("creature_id", key)
+        q = card.get("quality")
+        q_str = f"{q:.3f}" if q is not None else "-"
+        thumb = card.get("thumbnail", "")
+        items.append(
+            f'<div class="cell" data-key="{cid}">'
+            f'<img src="{thumb}" alt="{cid}" loading="lazy" />'
+            f'<div class="cell-quality">{q_str}</div>'
             f"</div>"
         )
-
-    grid_style = (
-        f"grid-template-columns: repeat({vis_cols}, {CELL_RENDER_PX}px); "
-        f"grid-template-rows: repeat({vis_rows}, {CELL_RENDER_PX}px);"
-    )
-    vel_label_style = f"grid-template-rows: repeat({vis_rows}, {CELL_RENDER_PX}px); gap: 14px;"
-    gyr_label_style = f"grid-template-columns: repeat({vis_cols}, {CELL_RENDER_PX}px); gap: 14px;"
-    vel_label_items = "".join(
-        f'<div class="axis-tick" style="grid-row:{r};">{v}</div>' for r, v in vel_ticks
-    )
-    gyr_label_items = "".join(
-        f'<div class="axis-tick" style="grid-column:{c};">{v}</div>' for c, v in gyr_ticks
-    )
-    cells_html = "\n".join(cells_html_parts)
-
-    return (
-        f'<div class="grid-with-axes">'
-        f'<div class="axis-vel-label">'
-        f'<div class="axis-arrow">&#8592; {d0_direction}</div>'
-        f'<div class="axis-vel-ticks" style="{vel_label_style}">{vel_label_items}</div>'
-        f"</div>"
-        f'<div class="grid-column-wrap">'
-        f'<div class="grid" style="{grid_style}">{cells_html}</div>'
-        f'<div class="axis-gyr-ticks" style="{gyr_label_style}">{gyr_label_items}</div>'
-        f'<div class="axis-gyr-label">&#8594; {d1_direction}</div>'
-        f"</div>"
-        f"</div>"
-    )
+    return '<div class="grid">' + "\n".join(items) + "</div>"
 
 
 def render_archive_page(
@@ -325,10 +243,10 @@ def render_archive_page(
     occupied.sort(key=lambda pair: pair[0])
 
     cards: dict[str, dict[str, Any]] = {}
-    for coord, result in occupied:
-        y, x, z = coord
-        key = f"{y}_{x}_{z}"
-        cards[key] = _result_to_card_data(coord, result, thumbs_dir=thumbs_dir)
+    for centroid_idx, result in occupied:
+        card = _result_to_card_data(centroid_idx, result, thumbs_dir=thumbs_dir)
+        key = card["creature_id"] if card["creature_id"] else str(centroid_idx)
+        cards[key] = card
 
     swatch_stops = ", ".join(
         f"rgb({r},{g},{b})"
@@ -344,10 +262,8 @@ def render_archive_page(
     )
     desc_labels_json = json.dumps([d0_short, d1_short, d2_short])
 
-    body_inner = _build_body_inner(
-        occupied, cards, archive, d0_direction=d0_dir, d1_direction=d1_dir
-    )
-    grid_desc = f"{archive.bins_speed} x {archive.bins_size} x {archive.bins_structure}"
+    body_inner = _build_body_inner_stub(cards)
+    grid_desc = f"{archive.n_centroids} centroids"
 
     template = _ENV.get_template("archive.html")
     return template.render(

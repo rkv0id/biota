@@ -56,7 +56,8 @@ def _synthetic_creature() -> RolloutResult:
         quality=0.8,
         rejection_reason=None,
         thumbnail=np.zeros((16, 32, 32), dtype=np.uint8),
-        parent_cell=None,
+        creature_id="",
+        parent_id=None,
         created_at=0.0,
         compute_seconds=1.0,
     )
@@ -65,21 +66,34 @@ def _synthetic_creature() -> RolloutResult:
 def _write_archive_with_creature(
     root: Path,
     run_id: str,
-    coords: tuple[int, int, int],
+    coords: tuple[int, int, int],  # kept for call-site compat; ignored in CVT
     creature: RolloutResult,
 ) -> Path:
-    """Write a pickled Archive containing exactly one creature at coords.
+    """Write a pickled CVT Archive containing exactly one creature.
 
-    The bin counts are chosen so that the creature's descriptors bin cleanly
-    into the requested coords. For the synthetic creature descriptors
-    (0.3, 0.5, 0.6) this just means the default (32, 32, 16) bins at
-    (9, 16, 9). Tests that need other coords should pass descriptors that
-    bin into those coords or use a different archive setup.
+    coords is accepted but ignored -- CVT archives use centroid indices, not
+    3D grid coordinates. The archive is calibrated with a single centroid at
+    the creature's descriptor position so try_insert places it at index 0.
     """
-    archive = Archive()
-    # Force the bin math by going directly at the dict; Archive's try_insert
-    # would bin on descriptors and we'd be tied to the default descriptors.
-    archive._cells[coords] = creature  # pyright: ignore[reportPrivateUsage]
+    import numpy as np
+
+    archive = Archive(n_centroids=4, similarity_epsilon=0.0)
+    # Build centroids spread around the descriptor space so centroid 0 is
+    # nearest to the creature's descriptors (0.3, 0.5, 0.6).
+    centroids = np.array(
+        [
+            [0.3, 0.5, 0.6],
+            [5.0, 5.0, 5.0],
+            [8.0, 2.0, 8.0],
+            [2.0, 8.0, 2.0],
+        ],
+        dtype=np.float64,
+    )
+    archive.attach_centroids(centroids)
+    from dataclasses import replace as _replace
+
+    creature_with_id = _replace(creature, creature_id=f"{run_id}-{creature.seed}")
+    archive.try_insert(creature_with_id)
     run_dir = root / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
     with open(run_dir / "archive.pkl", "wb") as f:
@@ -90,17 +104,29 @@ def _write_archive_with_creature(
 def _single_source_config(
     archive_dir: Path,
     run_id: str = "test-run",
-    coords: tuple[int, int, int] = (5, 8, 3),
+    coords: tuple[int, int, int] | None = None,  # ignored; kept for call-site compat
     n: int = 2,
     grid_h: int = 64,
     grid_w: int = 64,
     steps: int = 5,
     snapshot_every: int = 5,
     output_format: str = "gif",
+    creature_id: str | None = None,
 ) -> EcosystemConfig:
+    # default creature_id is "{run_id}-0" because _synthetic_creature() uses seed=0
+    if creature_id is None:
+        creature_id = f"{run_id}-0"
     return EcosystemConfig(
         name="test-experiment",
-        sources=(CreatureSource(archive_dir=str(archive_dir), run_id=run_id, coords=coords, n=n),),
+        sources=(
+            CreatureSource(
+                archive_dir=str(archive_dir),
+                run_id=run_id,
+                coords=None,
+                n=n,
+                creature_id=creature_id,
+            ),
+        ),
         grid_h=grid_h,
         grid_w=grid_w,
         steps=steps,
@@ -345,9 +371,7 @@ def test_run_ecosystem_homogeneous_respects_source_patch() -> None:
         _write_archive_with_creature(archive_dir, "test-run", (5, 8, 3), _synthetic_creature())
 
         # Baseline: no per-source patch
-        baseline_cfg = _single_source_config(
-            archive_dir, run_id="test-run", coords=(5, 8, 3), grid_h=128, grid_w=128
-        )
+        baseline_cfg = _single_source_config(archive_dir, run_id="test-run", grid_h=128, grid_w=128)
         baseline_result = run_ecosystem(baseline_cfg, output_root=tmp / "eco-baseline")
         baseline_mass = baseline_result.measures.initial_mass
 
@@ -361,6 +385,7 @@ def test_run_ecosystem_homogeneous_respects_source_patch() -> None:
                     coords=baseline_cfg.sources[0].coords,
                     n=baseline_cfg.sources[0].n,
                     patch=baseline_cfg.spawn.patch * 2,
+                    creature_id=baseline_cfg.sources[0].creature_id,
                 ),
             ),
             grid_h=baseline_cfg.grid_h,
@@ -406,9 +431,7 @@ def test_run_ecosystem_accepts_preloaded_creatures() -> None:
         archive_dir = tmp / "archive"
         _write_archive_with_creature(archive_dir, "test-run", (5, 8, 3), _synthetic_creature())
 
-        cfg = _single_source_config(
-            archive_dir, run_id="test-run", coords=(5, 8, 3), grid_h=64, grid_w=64
-        )
+        cfg = _single_source_config(archive_dir, run_id="test-run", grid_h=64, grid_w=64)
 
         # Load via disk (standard sequential path)
         disk_result = run_ecosystem(cfg, output_root=tmp / "disk")
@@ -435,9 +458,7 @@ def test_run_ecosystem_rejects_creatures_length_mismatch() -> None:
         archive_dir = tmp / "archive"
         _write_archive_with_creature(archive_dir, "test-run", (5, 8, 3), _synthetic_creature())
 
-        cfg = _single_source_config(
-            archive_dir, run_id="test-run", coords=(5, 8, 3), grid_h=64, grid_w=64
-        )
+        cfg = _single_source_config(archive_dir, run_id="test-run", grid_h=64, grid_w=64)
 
         creature = load_creature(cfg.sources[0])
         # Two creatures for one source: mismatch.
@@ -463,9 +484,7 @@ def test_compute_ecosystem_returns_artifacts_without_io() -> None:
         archive_dir = tmp / "archive"
         _write_archive_with_creature(archive_dir, "test-run", (5, 8, 3), _synthetic_creature())
 
-        cfg = _single_source_config(
-            archive_dir, run_id="test-run", coords=(5, 8, 3), grid_h=64, grid_w=64
-        )
+        cfg = _single_source_config(archive_dir, run_id="test-run", grid_h=64, grid_w=64)
 
         # Use an output_root that does not exist; if compute_ecosystem writes
         # anything the directory creation would itself be I/O we don't want.
@@ -504,9 +523,7 @@ def test_compute_ecosystem_then_materialize_matches_run_ecosystem() -> None:
         archive_dir = tmp / "archive"
         _write_archive_with_creature(archive_dir, "test-run", (5, 8, 3), _synthetic_creature())
 
-        cfg = _single_source_config(
-            archive_dir, run_id="test-run", coords=(5, 8, 3), grid_h=64, grid_w=64
-        )
+        cfg = _single_source_config(archive_dir, run_id="test-run", grid_h=64, grid_w=64)
 
         # Path A: compute then materialize (the cluster dispatcher path)
         result_a, artifacts = compute_ecosystem(cfg, output_root=tmp / "compute-then-materialize")
@@ -535,7 +552,15 @@ def test_compute_ecosystem_then_materialize_matches_run_ecosystem() -> None:
 def test_to_summary_dict_is_json_serializable() -> None:
     config = EcosystemConfig(
         name="smoke",
-        sources=(CreatureSource(archive_dir="archive", run_id="test-run", coords=(5, 8, 3), n=2),),
+        sources=(
+            CreatureSource(
+                archive_dir="archive",
+                run_id="test-run",
+                coords=None,
+                n=2,
+                creature_id="test-run-42",
+            ),
+        ),
         grid_h=128,
         grid_w=128,
         steps=10,
@@ -572,23 +597,19 @@ def test_to_summary_dict_is_json_serializable() -> None:
     assert roundtrip["run_id"] == "eco-test"
     assert roundtrip["name"] == "smoke"
     assert roundtrip["mode"] == "homogeneous"
-    assert roundtrip["sources"] == [
-        {
-            "archive_dir": "archive",
-            "run": "test-run",
-            "cell": [5, 8, 3],
-            "n": 2,
-            "patch": 16,  # falls back to spawn.patch since CreatureSource.patch=None
-        }
-    ]
+    assert roundtrip["sources"][0]["archive_dir"] == "archive"
+    assert roundtrip["sources"][0]["run"] == "test-run"
+    assert roundtrip["sources"][0]["creature_id"] == "test-run-42"
+    assert roundtrip["sources"][0]["cell"] is None
+    assert roundtrip["sources"][0]["n"] == 2
 
 
 def test_to_summary_dict_marks_heterogeneous_mode() -> None:
     config = EcosystemConfig(
         name="het",
         sources=(
-            CreatureSource(archive_dir="archive", run_id="run-a", coords=(1, 2, 3), n=4),
-            CreatureSource(archive_dir="archive", run_id="run-b", coords=(4, 5, 6), n=4),
+            CreatureSource(archive_dir="archive", run_id="run-a", coords=None, n=4),
+            CreatureSource(archive_dir="archive", run_id="run-b", coords=None, n=4),
         ),
         grid_h=128,
         grid_w=128,
@@ -670,7 +691,7 @@ def test_run_ecosystem_trajectory_shape() -> None:
         output_dir = tmp / "eco"
         _write_archive_with_creature(archive_dir, "test-run", (1, 2, 3), _synthetic_creature())
 
-        config = _single_source_config(archive_dir, coords=(1, 2, 3), steps=10, snapshot_every=5)
+        config = _single_source_config(archive_dir, steps=10, snapshot_every=5)
         result = run_ecosystem(config, output_root=output_dir)
 
         traj = np.load(Path(result.run_dir) / "trajectory.npy")
@@ -687,16 +708,14 @@ def test_run_ecosystem_summary_json_valid() -> None:
         output_dir = tmp / "eco"
         _write_archive_with_creature(archive_dir, "my-run", (0, 1, 2), _synthetic_creature())
 
-        config = _single_source_config(
-            archive_dir, run_id="my-run", coords=(0, 1, 2), steps=5, snapshot_every=5
-        )
+        config = _single_source_config(archive_dir, run_id="my-run", steps=5, snapshot_every=5)
         result = run_ecosystem(config, output_root=output_dir)
 
         summary = json.loads((Path(result.run_dir) / "summary.json").read_text())
         assert summary["name"] == "test-experiment"
         assert summary["mode"] == "homogeneous"
         assert summary["sources"][0]["run"] == "my-run"
-        assert summary["sources"][0]["cell"] == [0, 1, 2]
+        assert summary["sources"][0]["cell"] is None or "creature_id" in summary["sources"][0]
         assert summary["measures"]["initial_mass"] >= 0.0
         assert len(summary["measures"]["snapshot_steps"]) == 1
         # Homogeneous runs: interaction fields are present but empty.
@@ -721,7 +740,6 @@ def test_run_ecosystem_measures_plausible() -> None:
 
         config = _single_source_config(
             archive_dir,
-            coords=(3, 3, 3),
             steps=10,
             snapshot_every=10,
             n=2,
@@ -750,8 +768,20 @@ def test_run_ecosystem_heterogeneous_succeeds_end_to_end() -> None:
         config = EcosystemConfig(
             name="hetero-smoke",
             sources=(
-                CreatureSource(archive_dir=str(archive_dir), run_id="run-a", coords=(1, 1, 1), n=2),
-                CreatureSource(archive_dir=str(archive_dir), run_id="run-b", coords=(2, 2, 2), n=2),
+                CreatureSource(
+                    archive_dir=str(archive_dir),
+                    run_id="run-a",
+                    coords=None,
+                    creature_id="run-a-0",
+                    n=2,
+                ),
+                CreatureSource(
+                    archive_dir=str(archive_dir),
+                    run_id="run-b",
+                    coords=None,
+                    creature_id="run-b-0",
+                    n=2,
+                ),
             ),
             grid_h=64,
             grid_w=64,
@@ -800,8 +830,20 @@ def test_run_ecosystem_heterogeneous_interaction_fields() -> None:
         config = EcosystemConfig(
             name="interaction-test",
             sources=(
-                CreatureSource(archive_dir=str(archive_dir), run_id="run-a", coords=(0, 0, 0), n=1),
-                CreatureSource(archive_dir=str(archive_dir), run_id="run-b", coords=(1, 1, 1), n=1),
+                CreatureSource(
+                    archive_dir=str(archive_dir),
+                    run_id="run-a",
+                    coords=None,
+                    creature_id="run-a-0",
+                    n=1,
+                ),
+                CreatureSource(
+                    archive_dir=str(archive_dir),
+                    run_id="run-b",
+                    coords=None,
+                    creature_id="run-b-0",
+                    n=1,
+                ),
             ),
             grid_h=64,
             grid_w=64,
@@ -860,7 +902,8 @@ def test_run_ecosystem_heterogeneous_kernel_count_mismatch_raises() -> None:
             quality=0.7,
             rejection_reason=None,
             thumbnail=np.zeros((16, 32, 32), dtype=np.uint8),
-            parent_cell=None,
+            creature_id="",
+            parent_id=None,
             created_at=0.0,
             compute_seconds=1.0,
         )
@@ -870,8 +913,20 @@ def test_run_ecosystem_heterogeneous_kernel_count_mismatch_raises() -> None:
         config = EcosystemConfig(
             name="kernel-mismatch",
             sources=(
-                CreatureSource(archive_dir=str(archive_dir), run_id="run-a", coords=(1, 1, 1), n=2),
-                CreatureSource(archive_dir=str(archive_dir), run_id="run-b", coords=(2, 2, 2), n=2),
+                CreatureSource(
+                    archive_dir=str(archive_dir),
+                    run_id="run-a",
+                    coords=None,
+                    creature_id="run-a-0",
+                    n=2,
+                ),
+                CreatureSource(
+                    archive_dir=str(archive_dir),
+                    run_id="run-b",
+                    coords=None,
+                    creature_id="run-b-1",
+                    n=2,
+                ),
             ),
             grid_h=64,
             grid_w=64,
@@ -896,7 +951,10 @@ def test_run_ecosystem_missing_archive_raises() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         config = _single_source_config(
-            archive_dir=tmp / "does-not-exist", run_id="missing", coords=(1, 1, 1)
+            archive_dir=tmp / "does-not-exist",
+            run_id="missing",
+            coords=None,
+            creature_id="missing-0",
         )
         try:
             run_ecosystem(config, output_root=tmp / "eco")
@@ -914,7 +972,9 @@ def test_run_ecosystem_missing_cell_raises() -> None:
         archive_dir = tmp / "archive"
         _write_archive_with_creature(archive_dir, "has-one-cell", (0, 0, 0), _synthetic_creature())
 
-        config = _single_source_config(archive_dir, run_id="has-one-cell", coords=(99, 99, 99))
+        config = _single_source_config(
+            archive_dir, run_id="has-one-cell", creature_id="has-one-cell-99"
+        )
         try:
             run_ecosystem(config, output_root=tmp / "eco")
         except KeyError as exc:

@@ -18,7 +18,7 @@ local_ray and ray_address are mutually exclusive.
 The search loop calls the same five functions in all three modes:
 
     init(num_workers, local_ray=..., ray_address=...)
-    handle = submit_rollout(params, seed, config, device, parent_cell)
+    handle = submit_rollout(params, seed, config, device, parent_id)
     completed, still_pending = wait_for_completed(handles, min_completed=1)
     is_ray_active()
     shutdown()
@@ -31,7 +31,7 @@ that escapes type checking.
 from dataclasses import dataclass
 from typing import Any
 
-from biota.search.result import CellCoord, ParamDict, RolloutResult
+from biota.search.result import ParamDict, RolloutResult
 from biota.search.rollout import RolloutConfig, rollout_batch
 
 # === module-level state (singleton because Ray itself is a singleton) ===
@@ -159,7 +159,7 @@ def submit_batch(
     seeds: list[int],
     config: RolloutConfig,
     device: str = "cpu",
-    parent_cells: list[CellCoord | None] | None = None,
+    parent_ids: list[str | None] | None = None,
 ) -> RolloutHandle:
     """Submit a batch of rollouts for execution and return an opaque handle.
 
@@ -174,13 +174,11 @@ def submit_batch(
     _require_initialized()
 
     if _state["mode"] == "no_ray":
-        results = rollout_batch(
-            params_list, seeds, config, device=device, parent_cells=parent_cells
-        )
+        results = rollout_batch(params_list, seeds, config, device=device, parent_ids=parent_ids)
         return RolloutHandle(_result=results, _ray_ref=None)
 
     # Ray mode
-    ref = _get_batch_remote(device).remote(params_list, seeds, config, device, parent_cells)
+    ref = _get_batch_remote(device).remote(params_list, seeds, config, device, parent_ids)
     return RolloutHandle(_result=None, _ray_ref=ref)
 
 
@@ -232,14 +230,14 @@ def _batch_remote_impl(
     seeds: list[int],
     config: RolloutConfig,
     device: str,
-    parent_cells: list[CellCoord | None] | None,
+    parent_ids: list[str | None] | None,
 ) -> list[RolloutResult]:
     """The function body that becomes a Ray batch task.
 
     Lives outside the decorator so it's importable for testing without Ray.
     Returns list[RolloutResult], one per element of params_list.
     """
-    return rollout_batch(params_list, seeds, config, device=device, parent_cells=parent_cells)
+    return rollout_batch(params_list, seeds, config, device=device, parent_ids=parent_ids)
 
 
 def _num_gpus_for_device(device: str) -> float:

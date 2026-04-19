@@ -155,7 +155,8 @@ class EcosystemResult:
                 {
                     "archive_dir": s.archive_dir,
                     "run": s.run_id,
-                    "cell": list(s.coords),
+                    "creature_id": s.creature_id,
+                    "cell": list(s.coords) if s.coords is not None else None,
                     "n": s.n,
                     "patch": s.patch if s.patch is not None else sp.patch,
                 }

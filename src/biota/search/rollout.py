@@ -32,7 +32,7 @@ from biota.search.descriptors import (
 )
 from biota.search.params import sample_random
 from biota.search.quality import RolloutEvaluation, evaluate
-from biota.search.result import CellCoord, ParamDict, RolloutResult
+from biota.search.result import ParamDict, RolloutResult
 from biota.sim.flowlenia import Config as SimConfig
 from biota.sim.flowlenia import FlowLenia, Params
 
@@ -71,6 +71,34 @@ class RolloutConfig:
     Defaults to (velocity, gyradius, spectral_entropy) when not supplied."""
 
 
+SIGNAL_STEPS: dict[str, int] = {
+    "dev": 300,
+    "standard": 800,
+    "pretty": 800,
+}
+"""Step counts used when --signal-field is active, keyed by preset name.
+
+Signal dynamics need more steps to build up spatial gradients and for the
+alive/retention filters to discriminate emitters. The CLI applies these
+overrides automatically unless --steps was passed explicitly.
+"""
+
+PRESET_CALIBRATION: dict[str, int] = {
+    "dev": 50,
+    "standard": 150,
+    "pretty": 200,
+}
+"""Base calibration rollout counts per preset.
+
+The CLI adds 50 when --signal-field is active (tighter quality filter means
+fewer calibration survivors, so more rollouts compensate). Overridable via
+--calibration N.
+"""
+
+SIGNAL_CALIBRATION_BONUS = 50
+"""Extra calibration rollouts added when --signal-field is active."""
+
+
 def dev_preset() -> RolloutConfig:
     """Small and fast: 96x96 grid, 200 steps. For iteration and smoke tests."""
     return RolloutConfig(sim=SimConfig(grid_h=96, grid_w=96), steps=200)
@@ -79,16 +107,6 @@ def dev_preset() -> RolloutConfig:
 def standard_preset() -> RolloutConfig:
     """Standard: 192x192 grid, 500 steps. Balanced speed vs behavioral resolution."""
     return RolloutConfig(sim=SimConfig(grid_h=192, grid_w=192), steps=500)
-
-
-def signal_preset() -> RolloutConfig:
-    """Signal-field search: 192x192 grid, 800 steps.
-
-    Signal dynamics require more steps to build up spatial gradients and for
-    the alive/retention filters to discriminate emitters with different rates.
-    Auto-selected by the CLI when --signal-field is passed without --steps.
-    """
-    return RolloutConfig(sim=SimConfig(grid_h=192, grid_w=192), steps=800)
 
 
 def pretty_preset() -> RolloutConfig:
@@ -240,7 +258,7 @@ def rollout(
     seed: int,
     config: RolloutConfig,
     device: str = "cpu",
-    parent_cell: CellCoord | None = None,
+    parent_id: str | None = None,
 ) -> RolloutResult:
     """Run one Flow-Lenia rollout end-to-end and return a RolloutResult.
 
@@ -343,7 +361,8 @@ def rollout(
             quality=None,
             rejection_reason="nan_state",
             thumbnail=thumbnail,
-            parent_cell=parent_cell,
+            creature_id="",
+            parent_id=parent_id,
             created_at=created_at,
             compute_seconds=compute_seconds,
         )
@@ -396,7 +415,8 @@ def rollout(
         quality=eval_result.quality,
         rejection_reason=eval_result.rejection_reason,
         thumbnail=thumbnail,
-        parent_cell=parent_cell,
+        creature_id="",
+        parent_id=parent_id,
         created_at=created_at,
         compute_seconds=compute_seconds,
     )
@@ -596,7 +616,7 @@ def rollout_batch(
     seeds: list[int],
     config: RolloutConfig,
     device: str = "cpu",
-    parent_cells: list[CellCoord | None] | None = None,
+    parent_ids: list[str | None] | None = None,
 ) -> list[RolloutResult]:
     """Run B Flow-Lenia rollouts simultaneously as a single batched forward pass.
 
@@ -617,9 +637,7 @@ def rollout_batch(
     assert len(seeds) == B, (
         f"params_list and seeds must be the same length, got {B} and {len(seeds)}"
     )
-    if parent_cells is None:
-        parent_cells_nn: list[CellCoord | None] = [None] * B
-        parent_cells = parent_cells_nn
+    parent_ids_nn: list[str | None] = [None] * B if parent_ids is None else list(parent_ids)
 
     started_at = time.perf_counter()
     created_at = time.time()
@@ -722,7 +740,8 @@ def rollout_batch(
                     quality=None,
                     rejection_reason="nan_state",
                     thumbnail=thumbnail,
-                    parent_cell=parent_cells[i],
+                    creature_id="",
+                    parent_id=parent_ids_nn[i],
                     created_at=created_at,
                     compute_seconds=compute_seconds,
                 )
@@ -756,7 +775,8 @@ def rollout_batch(
                 quality=eval_result.quality,
                 rejection_reason=eval_result.rejection_reason,
                 thumbnail=thumbnail,
-                parent_cell=parent_cells[i],
+                creature_id="",
+                parent_id=parent_ids_nn[i],
                 created_at=created_at,
                 compute_seconds=compute_seconds,
             )

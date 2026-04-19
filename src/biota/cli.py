@@ -34,10 +34,12 @@ from biota.search.loop import (
     search,
 )
 from biota.search.rollout import (
+    PRESET_CALIBRATION,
+    SIGNAL_CALIBRATION_BONUS,
+    SIGNAL_STEPS,
     RolloutConfig,
     dev_preset,
     pretty_preset,
-    signal_preset,
     standard_preset,
 )
 from biota.sim.flowlenia import Config as SimConfig
@@ -260,6 +262,18 @@ def search_cmd(
     checkpoint_every: int = typer.Option(
         100, "--checkpoint-every", help="Checkpoint cadence in completed rollouts."
     ),
+    calibration: int | None = typer.Option(
+        None,
+        "--calibration",
+        help=(
+            "Calibration rollouts before search begins (not counted in budget). "
+            "Defaults to the preset value (dev=50, standard=150, pretty=200) "
+            "plus 50 when --signal-field is active. Override with an explicit N."
+        ),
+    ),
+    centroids: int = typer.Option(
+        1024, "--centroids", help="CVT archive capacity (number of Voronoi cells)."
+    ),
     output_dir: Path = typer.Option(
         Path("archive"), "--output-dir", help="Root directory for run subdirectories."
     ),
@@ -319,13 +333,22 @@ def search_cmd(
         raise typer.BadParameter(
             f"border must be 'wall' or 'torus', got {border!r}", param_hint="--border"
         )
-    # When --signal-field is active and no explicit --steps override was given,
-    # automatically use signal_preset (800 steps) instead of standard (500).
-    # This gives signal dynamics enough time to build up meaningful gradients.
     base_preset = _resolve_preset(preset)
-    if signal_field and steps is None and preset == "standard":
-        base_preset = signal_preset()
-    rollout_cfg = _override_sim(base_preset, grid=grid, steps=steps, border=border)
+    # When --signal-field is active and no explicit --steps override was given,
+    # apply the per-preset signal step count (more steps for signal dynamics).
+    effective_steps = steps
+    if signal_field and steps is None and preset in SIGNAL_STEPS:
+        effective_steps = SIGNAL_STEPS[preset]
+    rollout_cfg = _override_sim(base_preset, grid=grid, steps=effective_steps, border=border)
+
+    # Calibration: use explicit --calibration if given, otherwise derive from preset
+    # and add the signal bonus when --signal-field is active.
+    effective_calibration = calibration
+    if effective_calibration is None:
+        effective_calibration = PRESET_CALIBRATION.get(preset, 150)
+        if signal_field:
+            effective_calibration += SIGNAL_CALIBRATION_BONUS
+
     config = SearchConfig(
         rollout=rollout_cfg,
         budget=budget,
@@ -339,6 +362,8 @@ def search_cmd(
         checkpoint_every=checkpoint_every,
         descriptor_names=descriptor_names,
         signal_field=signal_field,
+        calibration=effective_calibration,
+        centroids=centroids,
     )
 
     def on_event(event: SearchEvent) -> None:

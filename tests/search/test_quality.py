@@ -152,7 +152,7 @@ def test_clean_creature_passes_all_filters() -> None:
     assert result.rejection_reason is None
     assert 0.0 <= result.quality <= 1.0
     for d in result.descriptors:
-        assert 0.0 <= d <= 1.0
+        assert 0.0 <= d <= 100.0
 
 
 def test_short_trace_persistence_rejects() -> None:

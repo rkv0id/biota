@@ -437,7 +437,8 @@ def _make_rollout_result(signal: bool) -> RolloutResult:
         quality=0.8,
         rejection_reason=None,
         thumbnail=np.zeros((16, 32, 32), dtype=np.uint8),
-        parent_cell=None,
+        creature_id="",
+        parent_id=None,
         created_at=0.0,
         compute_seconds=1.0,
     )

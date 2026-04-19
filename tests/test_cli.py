@@ -396,11 +396,28 @@ def test_ecosystem_end_to_end(tmp_path: Path) -> None:
         quality=0.8,
         rejection_reason=None,
         thumbnail=np.zeros((16, 32, 32), dtype=np.uint8),
-        parent_cell=None,
+        creature_id="",
+        parent_id=None,
         created_at=0.0,
         compute_seconds=1.0,
     )
-    archive._cells[(5, 8, 3)] = creature  # type: ignore[reportPrivateUsage]
+    # Build a calibrated CVT archive and insert the creature properly
+    import numpy as np
+
+    centroids = np.array(
+        [
+            [0.3, 0.5, 0.6],
+            [5.0, 5.0, 5.0],
+            [8.0, 2.0, 8.0],
+            [2.0, 8.0, 2.0],
+        ],
+        dtype=np.float64,
+    )
+    archive.attach_centroids(centroids)
+    from dataclasses import replace as _dc_replace
+
+    creature = _dc_replace(creature, creature_id="test-run-0")
+    archive.try_insert(creature)
     with open(archive_dir / "archive.pkl", "wb") as f:
         pickle.dump(archive, f)
 
@@ -421,7 +438,7 @@ def test_ecosystem_end_to_end(tmp_path: Path) -> None:
         "      seed: 0\n"
         "    sources:\n"
         "      - run: test-run\n"
-        "        cell: [5, 8, 3]\n"
+        "        creature_id: test-run-0\n"
         "        n: 2\n"
     )
 

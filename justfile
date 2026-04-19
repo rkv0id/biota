@@ -192,6 +192,17 @@ smoke-ray: smoke-noray-cpu smoke-local-cpu
 # Requires GPUs on and an already-running Ray cluster.
 #
 #   just benchmark 10.10.12.1:6379
+# Convenience wrapper for the standard cluster search from the SUMMARY.md bringup reference.
+# Usage: just cluster-search 10.10.12.1:6379
+#        just cluster-search 10.10.12.1:6379 --signal-field
+cluster-search HEAD_ADDR *EXTRA_ARGS:
+    biota search \
+        --ray-address {{HEAD_ADDR}} \
+        --preset standard --budget 3000 \
+        --device cuda --batch-size 64 --workers 3 \
+        {{EXTRA_ARGS}}
+
+
 benchmark HEAD_ADDR:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -203,6 +214,7 @@ benchmark HEAD_ADDR:
     biota search \
         --ray-address {{HEAD_ADDR}} \
         --preset standard --budget 500 \
+        --calibration 20 \
         --device cuda --batch-size 64 --workers 3
     END=$(date +%s)
     ELAPSED=$((END - START))
