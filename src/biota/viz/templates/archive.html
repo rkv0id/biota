@@ -219,6 +219,9 @@
         .lineage-id.is-child { color: #93c0ff; }
         .lineage-id.is-child:hover { color: #bdd4ff; }
         .lineage-none { color: #3f3f46; font-style: italic; }
+        .lineage-id.replaced { color: #52525b; cursor: default; text-decoration: line-through; }
+        .lineage-id.replaced::after { content: " (replaced)"; font-size: 9px; color: #3f3f46; text-decoration: none; display: inline-block; }
+        .lineage-id.replaced:hover { color: #52525b; text-decoration: line-through; }
         .lineage-children-wrap { display: flex; flex-wrap: wrap; gap: 6px; }
 
 
@@ -762,14 +765,25 @@ function openModal(cid) {
     }).join('');
     document.getElementById('modal-params').innerHTML = buildParamsTable(card.params);
     const children = CHILDREN[cid] || [];
-    let linHtml = card.parent_id
-        ? '<div class="lineage-row"><span class="lineage-label">parent</span><span class="lineage-id" data-goto="' + card.parent_id + '">' + card.parent_id + '</span></div>'
-        : '<div class="lineage-row"><span class="lineage-label">parent</span><span class="lineage-none">random phase</span></div>';
-    linHtml += children.length > 0
-        ? '<div class="lineage-row"><span class="lineage-label">children</span><span class="lineage-children-wrap">'
-            + children.map(function(ck) { return '<span class="lineage-id is-child" data-goto="' + ck + '">' + ck + '</span>'; }).join('')
-            + '</span></div>'
-        : '<div class="lineage-row"><span class="lineage-label">children</span><span class="lineage-none">none in archive</span></div>';
+    let linHtml;
+    if (!card.parent_id) {
+        linHtml = '<div class="lineage-row"><span class="lineage-label">parent</span><span class="lineage-none">random phase</span></div>';
+    } else if (CARDS[card.parent_id]) {
+        linHtml = '<div class="lineage-row"><span class="lineage-label">parent</span><span class="lineage-id" data-goto="' + card.parent_id + '">' + card.parent_id + '</span></div>';
+    } else {
+        linHtml = '<div class="lineage-row"><span class="lineage-label">parent</span><span class="lineage-id replaced">' + card.parent_id + '</span></div>';
+    }
+    if (children.length > 0) {
+        linHtml += '<div class="lineage-row"><span class="lineage-label">children</span><span class="lineage-children-wrap">'
+            + children.map(function(ck) {
+                return CARDS[ck]
+                    ? '<span class="lineage-id is-child" data-goto="' + ck + '">' + ck + '</span>'
+                    : '<span class="lineage-id is-child replaced">' + ck + '</span>';
+            }).join('')
+            + '</span></div>';
+    } else {
+        linHtml += '<div class="lineage-row"><span class="lineage-label">children</span><span class="lineage-none">none in archive</span></div>';
+    }
     document.getElementById('modal-lineage').innerHTML = linHtml;
     const yamlBtn = document.getElementById('modal-yaml-btn');
     yamlBtn.textContent = 'copy YAML snippet'; yamlBtn.className = 'modal-yaml-btn';
@@ -806,6 +820,7 @@ document.addEventListener('keydown', function(evt) {
 document.getElementById('modal-lineage').addEventListener('click', function(evt) {
     const t = evt.target.closest('[data-goto]');
     if (!t) return;
+    if (t.classList.contains('replaced')) return;
     closeModal();
     setTimeout(function() { openModal(t.dataset.goto); }, 180);
 });
