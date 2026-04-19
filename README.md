@@ -168,7 +168,7 @@ This adds six signal parameters to each creature's searchable parameter space:
 | `signal_kernel_r` | scalar | `[0.2, 1.0]` | Signal kernel radius scale |
 | `signal_kernel_a/b/w` | `(3,)` each | same as mass kernels | Ring function parameters for signal diffusion |
 
-![signal field mechanics](docs/signal-field.svg)
+<p align="center"><img src="docs/signal-field.svg" alt="Signal field mechanics: per-step mass and signal field update cycle" width="95%"/></p>
 
 <p align="center"><img src="docs/signal-coupling.svg" alt="Inter-species signal coupling: dot products between emission vectors and receptor profiles determine chemotaxis, chemorepulsion, pursuit, or blind interaction" width="95%"/></p>
 

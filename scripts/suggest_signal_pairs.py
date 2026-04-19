@@ -44,7 +44,6 @@ from pathlib import Path
 
 import numpy as np
 
-
 # ── types ─────────────────────────────────────────────────────────────────────
 
 
@@ -191,9 +190,9 @@ def _yaml_snippet(p: dict, n: int, steps: int, grid: int) -> str:
             f"  grid: [{grid}, {grid}]",
             f"  steps: {steps}",
             f"  snapshot_every: {snap}",
-            f"  border: wall",
-            f"  output_format: gif",
-            f"  sources:",
+            "  border: wall",
+            "  output_format: gif",
+            "  sources:",
             f"    - archive_dir: {a.archive_dir}",
             f"      run: {a.run_id}",
             f"      creature_id: {a.creature_id}",
@@ -202,10 +201,10 @@ def _yaml_snippet(p: dict, n: int, steps: int, grid: int) -> str:
             f"      run: {b.run_id}",
             f"      creature_id: {b.creature_id}",
             f"      n: {n}",
-            f"  spawn:",
-            f"    patch: 24",
-            f"    min_dist: 40",
-            f"    seed: 42",
+            "  spawn:",
+            "    patch: 24",
+            "    min_dist: 40",
+            "    seed: 42",
         ]
     )
 

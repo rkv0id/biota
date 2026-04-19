@@ -1,6 +1,6 @@
-<svg width="100%" viewBox="0 0 680 440" role="img" xmlns="http://www.w3.org/2000/svg">
+<svg width="100%" viewBox="0 0 680 470" role="img" xmlns="http://www.w3.org/2000/svg">
   <title>biota ecosystem outcome taxonomy</title>
-  <desc>Six outcome labels produced by the temporal classifier. Heterogeneous runs (multiple species): coexistence (both species maintain stable mass and territory), exclusion (one species eliminates the other), merger (species boundaries dissolve into a blended mass), fragmentation (spatial patches form and break under competitive pressure). Homogeneous runs (one species, multiple copies): stable isolation (copies remain separate and stable), cannibalism (copies absorb each other, some grow at others' expense).</desc>
+  <desc>Six outcome labels produced by the temporal classifier. Heterogeneous runs: coexistence, exclusion, merger, fragmentation. Homogeneous runs: stable isolation, cannibalism.</desc>
   <defs>
     <style>
       text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
@@ -11,116 +11,95 @@
     </style>
   </defs>
 
-  <!-- Column headers -->
+  <!-- Section headers -->
   <text class="tlabel" x="28"  y="16">HETEROGENEOUS RUNS</text>
   <text class="tlabel" x="516" y="16">HOMOGENEOUS RUNS</text>
 
-  <!-- ═══ ROW 1: COEXISTENCE | EXCLUSION | STABLE ISOLATION ═══ -->
+  <!-- ══ ROW 1 ══ -->
 
-  <!-- COEXISTENCE -->
-  <rect x="28" y="28" width="148" height="180" rx="6" fill="#16181f" stroke="#3cdcc8" stroke-width="1"/>
-  <text class="th" x="102" y="48" text-anchor="middle" fill="#3cdcc8">coexistence</text>
-  <text class="ts" x="102" y="64" text-anchor="middle">both stable</text>
-  <!-- chart area -->
-  <rect x="40" y="76" width="124" height="72" rx="3" fill="#0d0f14"/>
-  <!-- s1 line: stable around 0.55 height -->
-  <polyline points="44,128 60,126 76,127 92,126 108,127 92,126 108,127 124,126 140,127 156,126" fill="none" stroke="#ff8c32" stroke-width="1.5"/>
-  <!-- s2 line: stable around 0.4 height -->
+  <!-- COEXISTENCE: x=28, y=28, w=148, h=196 -->
+  <rect x="28" y="28" width="148" height="196" rx="6" fill="#16181f" stroke="#3cdcc8" stroke-width="1"/>
+  <text class="th"  x="102" y="52"  text-anchor="middle" fill="#3cdcc8">coexistence</text>
+  <text class="ts"  x="102" y="68"  text-anchor="middle">both stable</text>
+  <rect x="40"  y="80"  width="124" height="68" rx="3" fill="#0d0f14"/>
+  <polyline points="44,130 60,128 76,130 92,128 108,130 124,128 140,130 156,128" fill="none" stroke="#ff8c32" stroke-width="1.5"/>
   <polyline points="44,140 60,139 76,140 92,139 108,140 124,139 140,140 156,139" fill="none" stroke="#50b4ff" stroke-width="1.5"/>
-  <text class="tsa" x="44"  y="160" fill="#ff8c32">s1</text>
-  <text class="tsa" x="55"  y="160" fill="#a1a1aa">stable</text>
-  <text class="tsa" x="100" y="160" fill="#50b4ff">s2</text>
-  <text class="tsa" x="111" y="160" fill="#a1a1aa">stable</text>
-  <!-- description -->
+  <text class="tsa" x="44"  y="160" fill="#ff8c32">s1 stable</text>
+  <text class="tsa" x="108" y="160" fill="#50b4ff">s2 stable</text>
   <text class="tsa" x="102" y="178" text-anchor="middle">both species maintain</text>
-  <text class="tsa" x="102" y="190" text-anchor="middle">mass and territory</text>
-  <text class="tsa" x="102" y="202" text-anchor="middle">signal mediates spacing</text>
+  <text class="tsa" x="102" y="192" text-anchor="middle">mass and territory</text>
+  <text class="tsa" x="102" y="207" text-anchor="middle">signal mediates spacing</text>
 
-  <!-- EXCLUSION -->
-  <rect x="192" y="28" width="148" height="180" rx="6" fill="#16181f" stroke="#ff6464" stroke-width="1"/>
-  <text class="th" x="266" y="48" text-anchor="middle" fill="#ff6464">exclusion</text>
-  <text class="ts" x="266" y="64" text-anchor="middle">one wins</text>
-  <!-- chart area -->
-  <rect x="204" y="76" width="124" height="72" rx="3" fill="#0d0f14"/>
-  <!-- s1 line: grows to take all -->
-  <polyline points="208,140 224,136 240,130 256,124 272,118 288,112 304,108 316,104 320,102" fill="none" stroke="#ff8c32" stroke-width="1.5"/>
-  <!-- s2 line: declines to zero -->
-  <polyline points="208,124 224,128 240,132 256,136 272,140 288,144 304,146 316,147 320,148" fill="none" stroke="#50b4ff" stroke-width="1.5"/>
+  <!-- EXCLUSION: x=192, y=28, w=148, h=196 -->
+  <rect x="192" y="28" width="148" height="196" rx="6" fill="#16181f" stroke="#ff6464" stroke-width="1"/>
+  <text class="th"  x="266" y="52"  text-anchor="middle" fill="#ff6464">exclusion</text>
+  <text class="ts"  x="266" y="68"  text-anchor="middle">one wins</text>
+  <rect x="204" y="80"  width="124" height="68" rx="3" fill="#0d0f14"/>
+  <polyline points="208,138 224,134 240,128 256,122 272,116 288,112 304,108 316,104 320,102" fill="none" stroke="#ff8c32" stroke-width="1.5"/>
+  <polyline points="208,122 224,126 240,130 256,134 272,138 288,142 304,145 316,147 320,148" fill="none" stroke="#50b4ff" stroke-width="1.5"/>
   <text class="tsa" x="208" y="160" fill="#ff8c32">s1 ↑</text>
-  <text class="tsa" x="270" y="160" fill="#50b4ff">s2 ↓</text>
+  <text class="tsa" x="274" y="160" fill="#50b4ff">s2 ↓</text>
   <text class="tsa" x="266" y="178" text-anchor="middle">one species steadily</text>
-  <text class="tsa" x="266" y="190" text-anchor="middle">outcompetes and</text>
-  <text class="tsa" x="266" y="202" text-anchor="middle">eliminates the other</text>
+  <text class="tsa" x="266" y="192" text-anchor="middle">outcompetes and</text>
+  <text class="tsa" x="266" y="207" text-anchor="middle">eliminates the other</text>
 
-  <!-- FRAGMENTATION -->
-  <rect x="356" y="28" width="148" height="180" rx="6" fill="#16181f" stroke="#fbbf24" stroke-width="1"/>
-  <text class="th" x="430" y="48" text-anchor="middle" fill="#fbbf24">fragmentation</text>
-  <text class="ts" x="430" y="64" text-anchor="middle">patches form</text>
-  <!-- chart area -->
-  <rect x="368" y="76" width="124" height="72" rx="3" fill="#0d0f14"/>
-  <!-- s1: noisy territory -->
-  <polyline points="372,128 384,122 396,132 408,120 420,130 432,118 444,128 456,120 468,126 480,118 484,122" fill="none" stroke="#ff8c32" stroke-width="1.5"/>
-  <!-- s2: similarly noisy -->
-  <polyline points="372,140 384,144 396,136 408,142 420,138 432,144 444,136 456,142 468,138 480,144 484,140" fill="none" stroke="#50b4ff" stroke-width="1.5"/>
+  <!-- FRAGMENTATION: x=356, y=28, w=148, h=196 -->
+  <rect x="356" y="28" width="148" height="196" rx="6" fill="#16181f" stroke="#fbbf24" stroke-width="1"/>
+  <text class="th"  x="430" y="52"  text-anchor="middle" fill="#fbbf24">fragmentation</text>
+  <text class="ts"  x="430" y="68"  text-anchor="middle">patches form</text>
+  <rect x="368" y="80"  width="124" height="68" rx="3" fill="#0d0f14"/>
+  <polyline points="372,126 384,120 396,130 408,118 420,128 432,116 444,126 456,118 468,124 480,116 484,120" fill="none" stroke="#ff8c32" stroke-width="1.5"/>
+  <polyline points="372,138 384,142 396,134 408,140 420,136 432,142 444,134 456,140 468,136 480,142 484,138" fill="none" stroke="#50b4ff" stroke-width="1.5"/>
   <text class="tsa" x="368" y="160" fill="#ff8c32">s1 ~</text>
-  <text class="tsa" x="430" y="160" fill="#50b4ff">s2 ~</text>
+  <text class="tsa" x="432" y="160" fill="#50b4ff">s2 ~</text>
   <text class="tsa" x="430" y="178" text-anchor="middle">patches form and break</text>
-  <text class="tsa" x="430" y="190" text-anchor="middle">under competitive or</text>
-  <text class="tsa" x="430" y="202" text-anchor="middle">signal-mediated pressure</text>
+  <text class="tsa" x="430" y="192" text-anchor="middle">under competitive or</text>
+  <text class="tsa" x="430" y="207" text-anchor="middle">signal-mediated pressure</text>
 
-  <!-- STABLE ISOLATION (homogeneous) -->
-  <rect x="520" y="28" width="148" height="180" rx="6" fill="#16181f" stroke="#a78bfa" stroke-width="1"/>
-  <text class="th" x="594" y="48" text-anchor="middle" fill="#a78bfa">stable isolation</text>
-  <text class="ts" x="594" y="64" text-anchor="middle">copies separate</text>
-  <!-- chart area -->
-  <rect x="532" y="76" width="124" height="72" rx="3" fill="#0d0f14"/>
-  <!-- total mass: stable -->
-  <polyline points="536,128 552,127 568,128 584,127 600,128 616,127 632,128 648,127 652,128" fill="none" stroke="#a78bfa" stroke-width="1.5"/>
-  <!-- patch count: step down then stable -->
-  <polyline points="536,120 545,120 546,128 568,128 584,128 616,128 648,128 652,128" fill="none" stroke="#52525b" stroke-width="1" stroke-dasharray="3 2"/>
-  <text class="tsa" x="532" y="162" fill="#a78bfa">mass stable</text>
+  <!-- STABLE ISOLATION: x=520, y=28, w=148, h=196 -->
+  <rect x="520" y="28" width="148" height="196" rx="6" fill="#16181f" stroke="#a78bfa" stroke-width="1"/>
+  <text class="th"  x="594" y="52"  text-anchor="middle" fill="#a78bfa">stable isolation</text>
+  <text class="ts"  x="594" y="68"  text-anchor="middle">copies separate</text>
+  <rect x="532" y="80"  width="124" height="68" rx="3" fill="#0d0f14"/>
+  <polyline points="536,126 552,125 568,126 584,125 600,126 616,125 632,126 648,125 652,126" fill="none" stroke="#a78bfa" stroke-width="1.5"/>
+  <polyline points="536,120 545,120 546,128 568,128 600,128 648,128 652,128" fill="none" stroke="#52525b" stroke-width="1" stroke-dasharray="3 2"/>
+  <text class="tsa" x="532" y="160" fill="#a78bfa">mass stable</text>
   <text class="tsa" x="594" y="178" text-anchor="middle">copies remain spatially</text>
-  <text class="tsa" x="594" y="190" text-anchor="middle">separate and stable</text>
-  <text class="tsa" x="594" y="202" text-anchor="middle">throughout the run</text>
+  <text class="tsa" x="594" y="192" text-anchor="middle">separate and stable</text>
+  <text class="tsa" x="594" y="207" text-anchor="middle">throughout the run</text>
 
-  <!-- ═══ ROW 2: MERGER | CANNIBALISM ═══ -->
+  <!-- Time axis row 1 -->
+  <text class="tsa" x="340" y="238" text-anchor="middle">← time →</text>
 
-  <!-- MERGER (heterogeneous) -->
-  <rect x="28" y="224" width="148" height="180" rx="6" fill="#16181f" stroke="#3cdcc8" stroke-width="0.8"/>
-  <text class="th" x="102" y="244" text-anchor="middle" fill="#3cdcc8">merger</text>
-  <text class="ts" x="102" y="260" text-anchor="middle">boundaries dissolve</text>
-  <!-- chart area -->
-  <rect x="40" y="272" width="124" height="72" rx="3" fill="#0d0f14"/>
-  <!-- s1 and s2 converge to equal -->
-  <polyline points="44,316 60,312 76,308 92,304 108,300 124,298 140,296 156,296" fill="none" stroke="#ff8c32" stroke-width="1.5"/>
-  <polyline points="44,284 60,288 76,292 92,296 108,298 124,298 140,298 156,298" fill="none" stroke="#50b4ff" stroke-width="1.5"/>
-  <text class="tsa" x="44" y="356" fill="#ff8c32">s1</text>
-  <text class="tsa" x="100" y="356" fill="#50b4ff">s2</text>
-  <text class="tsa" x="130" y="356" fill="#3cdcc8">→ blended</text>
-  <text class="tsa" x="102" y="374" text-anchor="middle">species boundaries</text>
-  <text class="tsa" x="102" y="386" text-anchor="middle">dissolve — mass</text>
-  <text class="tsa" x="102" y="398" text-anchor="middle">intermixes into one</text>
+  <!-- ══ ROW 2 ══ -->
 
-  <!-- CANNIBALISM (homogeneous) -->
-  <rect x="520" y="224" width="148" height="180" rx="6" fill="#16181f" stroke="#a78bfa" stroke-width="0.8"/>
-  <text class="th" x="594" y="244" text-anchor="middle" fill="#a78bfa">cannibalism</text>
-  <text class="ts" x="594" y="260" text-anchor="middle">copies absorb copies</text>
-  <!-- chart area -->
-  <rect x="532" y="272" width="124" height="72" rx="3" fill="#0d0f14"/>
-  <!-- total mass declines (some copies die) -->
-  <polyline points="536,290 552,290 568,292 584,298 600,306 616,314 632,316 648,316 652,316" fill="none" stroke="#a78bfa" stroke-width="1.5"/>
-  <!-- patch count drops sharply -->
-  <polyline points="536,296 545,296 546,304 558,308 570,312 582,320 594,334 600,338 652,340" fill="none" stroke="#52525b" stroke-width="1" stroke-dasharray="3 2"/>
-  <text class="tsa" x="532" y="356" fill="#a78bfa">mass ↓</text>
-  <text class="tsa" x="594" y="374" text-anchor="middle">copies absorb each</text>
-  <text class="tsa" x="594" y="386" text-anchor="middle">other — some grow</text>
-  <text class="tsa" x="594" y="398" text-anchor="middle">at others' expense</text>
+  <!-- MERGER: x=28, y=248, w=148, h=196 -->
+  <rect x="28" y="248" width="148" height="196" rx="6" fill="#16181f" stroke="#3cdcc8" stroke-width="0.8"/>
+  <text class="th"  x="102" y="272" text-anchor="middle" fill="#3cdcc8">merger</text>
+  <text class="ts"  x="102" y="288" text-anchor="middle">boundaries dissolve</text>
+  <rect x="40"  y="300" width="124" height="68" rx="3" fill="#0d0f14"/>
+  <polyline points="44,340 60,336 76,332 92,328 108,325 124,322 140,320 156,320" fill="none" stroke="#ff8c32" stroke-width="1.5"/>
+  <polyline points="44,310 60,314 76,318 92,322 108,324 124,322 140,322 156,322" fill="none" stroke="#50b4ff" stroke-width="1.5"/>
+  <text class="tsa" x="44"  y="380" fill="#ff8c32">s1</text>
+  <text class="tsa" x="80"  y="380" fill="#50b4ff">s2</text>
+  <text class="tsa" x="124" y="380" fill="#3cdcc8">→ blended</text>
+  <text class="tsa" x="102" y="398" text-anchor="middle">species boundaries</text>
+  <text class="tsa" x="102" y="412" text-anchor="middle">dissolve — mass</text>
+  <text class="tsa" x="102" y="427" text-anchor="middle">intermixes into one</text>
 
-  <!-- Y-axis label shared -->
-  <text class="tsa" x="28" y="320" text-anchor="middle" transform="rotate(-90 28 320)">species mass / territory</text>
-  <text class="tsa" x="28" y="130" text-anchor="middle" transform="rotate(-90 28 130)">species mass / territory</text>
+  <!-- CANNIBALISM: x=520, y=248, w=148, h=196 -->
+  <rect x="520" y="248" width="148" height="196" rx="6" fill="#16181f" stroke="#a78bfa" stroke-width="0.8"/>
+  <text class="th"  x="594" y="272" text-anchor="middle" fill="#a78bfa">cannibalism</text>
+  <text class="ts"  x="594" y="288" text-anchor="middle">copies absorb copies</text>
+  <rect x="532" y="300" width="124" height="68" rx="3" fill="#0d0f14"/>
+  <polyline points="536,310 552,310 568,312 584,318 600,326 616,334 632,336 648,336 652,336" fill="none" stroke="#a78bfa" stroke-width="1.5"/>
+  <polyline points="536,316 545,316 546,324 558,328 570,332 582,340 594,352 606,356 648,358 652,358" fill="none" stroke="#52525b" stroke-width="1" stroke-dasharray="3 2"/>
+  <text class="tsa" x="532" y="380" fill="#a78bfa">mass ↓</text>
+  <text class="tsa" x="594" y="398" text-anchor="middle">copies absorb each</text>
+  <text class="tsa" x="594" y="412" text-anchor="middle">other — some grow</text>
+  <text class="tsa" x="594" y="427" text-anchor="middle">at others' expense</text>
 
-  <!-- X-axis label -->
-  <text class="tsa" x="340" y="216" text-anchor="middle">← time →</text>
-  <text class="tsa" x="340" y="412" text-anchor="middle">← time →</text>
+  <!-- Time axis row 2 -->
+  <text class="tsa" x="340" y="458" text-anchor="middle">← time →</text>
+
 </svg>
