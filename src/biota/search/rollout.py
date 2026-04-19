@@ -137,6 +137,8 @@ def _params_dict_to_tensors(params: ParamDict, device: str) -> Params:
             dtype=torch.float32,
             device=device,
         ),
+        alpha_coupling=float(params["alpha_coupling"]),  # type: ignore[typeddict-item]
+        beta_modulation=float(params["beta_modulation"]),  # type: ignore[typeddict-item]
         signal_kernel_r=float(params["signal_kernel_r"]),  # type: ignore[typeddict-item]
         signal_kernel_a=torch.tensor(
             params["signal_kernel_a"],  # type: ignore[typeddict-item]
@@ -291,6 +293,10 @@ def rollout(
     com_x_np = np.zeros(history_len, dtype=np.float32)
     bbox_np = np.zeros(history_len, dtype=np.float32)
     gyradius_np = np.zeros(history_len, dtype=np.float32)
+    # Signal history buffers -- only allocated for signal rollouts.
+    is_signal_rollout = signal is not None and sim_params.has_signal
+    emission_np = np.zeros(history_len, dtype=np.float32) if is_signal_rollout else None
+    reception_np = np.zeros(history_len, dtype=np.float32) if is_signal_rollout else None
     thumb_buf: list[torch.Tensor] = []
 
     # 5. Run the loop, capturing stats and frames as we go
@@ -307,7 +313,14 @@ def rollout(
         if step == midpoint_step:
             midpoint_state_np = state[:, :, 0].detach().cpu().numpy().astype(np.float32)
         if step < config.steps:
-            state, signal = fl.step(state, signal)
+            if is_signal_rollout and emission_np is not None and reception_np is not None:
+                # Use diagnostics variant to get accurate G_pos and receptor_response
+                # scalars from inside step() -- the only place where both are computed.
+                state, signal, emit_act, recep_sens = fl.step_with_signal_diagnostics(state, signal)
+                emission_np[step] = emit_act
+                reception_np[step] = recep_sens
+            else:
+                state, signal = fl.step(state, signal)
 
     final_mass = float(state.sum().item())
     final_signal_mass = float(signal.sum().item()) if signal is not None else 0.0
@@ -339,6 +352,11 @@ def rollout(
 
     # 7. Build the trace covering the last TRACE_TAIL_STEPS steps
     tail = min(TRACE_TAIL_STEPS, history_len)
+    # Signal retention scalar for the signal_retention descriptor.
+    signal_retention_val: float | None = None
+    if is_signal_rollout and initial_mass > 0:
+        signal_retention_val = float(np.clip(final_mass / initial_mass, 0.0, 1.0))
+
     trace = RolloutTrace(
         com_history=com_history[-tail:].astype(np.float32),
         bbox_fraction_history=bbox_np[-tail:].astype(np.float32),
@@ -347,6 +365,9 @@ def rollout(
         grid_size=config.sim.grid_h,
         total_steps=config.steps,
         midpoint_state=midpoint_state_np,
+        signal_emission_history=emission_np[-tail:] if emission_np is not None else None,
+        signal_reception_history=reception_np[-tail:] if reception_np is not None else None,
+        signal_retention=signal_retention_val,
     )
 
     # 8. Evaluate quality

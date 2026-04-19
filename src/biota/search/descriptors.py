@@ -112,6 +112,10 @@ class Descriptor:
     short_name: str
     direction_label: str
     compute: Callable[["RolloutTrace"], float]
+    signal_only: bool = False
+    """When True, this descriptor requires a signal-enabled rollout.
+    Passing a signal-only descriptor to a non-signal search raises a
+    ValueError at startup (enforced in loop.py)."""
 
 
 # === RolloutTrace ===
@@ -155,6 +159,19 @@ class RolloutTrace:
     point compactness term in the quality metric to penalise creatures that
     peak early and degrade. None when not captured (older code paths and
     rollout_batch, which does not support per-element midpoint capture)."""
+    signal_emission_history: np.ndarray | None = None
+    """Mean positive-growth emission activity per step in the trace tail.
+    Shape (T,) float32. Proportional to how much signal the creature
+    actually emitted at each step. None for non-signal rollouts."""
+    signal_reception_history: np.ndarray | None = None
+    """Mean absolute reception response |dot(convolved_signal, receptor)|
+    per step in the trace tail. Shape (T,) float32. Measures how strongly
+    the creature actually responded to the chemical environment.
+    None for non-signal rollouts."""
+    signal_retention: float | None = None
+    """final_mass / initial_mass for signal rollouts. Measures how much
+    mass the creature retained vs bled into the signal field.
+    None for non-signal rollouts."""
 
     def slice(self, start: int, end: int) -> "RolloutTrace":
         """Return a trace covering steps [start, end) within the original window.
@@ -171,6 +188,17 @@ class RolloutTrace:
             final_state=self.final_state,
             grid_size=self.grid_size,
             total_steps=self.total_steps,
+            signal_emission_history=(
+                self.signal_emission_history[start:end]
+                if self.signal_emission_history is not None
+                else None
+            ),
+            signal_reception_history=(
+                self.signal_reception_history[start:end]
+                if self.signal_reception_history is not None
+                else None
+            ),
+            signal_retention=self.signal_retention,
         )
 
 
@@ -653,6 +681,67 @@ def compute_spatial_entropy(trace: "RolloutTrace") -> float:
 # === registry ===
 
 
+# === signal descriptors ===
+
+
+def compute_emission_activity(trace: RolloutTrace) -> float:
+    """Mean emission activity over the trace tail, normalized to [0, 1].
+
+    Measures how much signal the creature actually emitted during its rollout,
+    not just what its emission_rate parameter is. A creature with high
+    emission_rate but low positive growth activity barely emits.
+
+    Returns 0.0 for non-signal rollouts (signal_emission_history is None).
+    Normalized against a typical peak of 0.02 (2x the max emission_rate).
+    """
+    if trace.signal_emission_history is None or len(trace.signal_emission_history) == 0:
+        return 0.0
+    mean_activity = float(trace.signal_emission_history.mean())
+    # Normalizer calibrated against observed rollout distributions:
+    # emit values span ~0.000-0.010 in practice. 0.012 maps the typical
+    # max (~0.010) to ~0.83, giving good bin spread across the 32-bin axis.
+    return float(np.clip(mean_activity / 0.012, 0.0, 1.0))
+
+
+def compute_receptor_sensitivity(trace: RolloutTrace) -> float:
+    """Mean absolute reception response over the trace tail, normalized to [0, 1].
+
+    Measures how strongly the creature actually responded to the chemical
+    environment it encountered during its solo rollout. High = the creature's
+    receptor profile was well-aligned with the signal it encountered and
+    produced strong growth modulation. Low = chemical mismatch or inert.
+
+    Returns 0.0 for non-signal rollouts.
+    # Normalizer calibrated against observed rollout distributions:
+    # reception values span ~0.000-0.014 in practice. 0.016 maps the
+    # typical max (~0.014) to ~0.875, giving good bin spread.
+    """
+    if trace.signal_reception_history is None or len(trace.signal_reception_history) == 0:
+        return 0.0
+    mean_response = float(np.abs(trace.signal_reception_history).mean())
+    return float(np.clip(mean_response / 0.016, 0.0, 1.0))
+
+
+def compute_signal_retention(trace: RolloutTrace) -> float:
+    """Mass retained vs bled into the signal field: final_mass / initial_mass.
+
+    High retention (near 1.0) = chemically conservative creature; keeps most
+    of its mass and emits sparingly. Low retention (near 0.0) = aggressive
+    emitter; broadcasts heavily at the cost of mass.
+
+    Together with emission_activity and receptor_sensitivity this creates a
+    three-axis chemical behavior space:
+      high emission + low retention = broadcaster
+      low emission + high sensitivity = listener
+      high emission + high sensitivity + high alpha = predator candidate
+
+    Returns 1.0 for non-signal rollouts (no mass was lost to signal field).
+    """
+    if trace.signal_retention is None:
+        return 1.0
+    return float(np.clip(trace.signal_retention, 0.0, 1.0))
+
+
 REGISTRY: dict[str, Descriptor] = {
     "velocity": Descriptor(
         name="velocity",
@@ -743,6 +832,28 @@ REGISTRY: dict[str, Descriptor] = {
         short_name="spat.ent.",
         direction_label="more diffuse",
         compute=compute_spatial_entropy,
+    ),
+    # --- signal-only descriptors ---
+    "emission_activity": Descriptor(
+        name="emission activity",
+        short_name="emit.act.",
+        direction_label="more active emission",
+        compute=compute_emission_activity,
+        signal_only=True,
+    ),
+    "receptor_sensitivity": Descriptor(
+        name="receptor sensitivity",
+        short_name="recep.sens.",
+        direction_label="more sensitive",
+        compute=compute_receptor_sensitivity,
+        signal_only=True,
+    ),
+    "signal_retention": Descriptor(
+        name="signal retention",
+        short_name="sig.ret.",
+        direction_label="more conservative",
+        compute=compute_signal_retention,
+        signal_only=True,
     ),
 }
 

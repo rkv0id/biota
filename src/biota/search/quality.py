@@ -30,7 +30,7 @@ where:
 
 Weights:
     Non-signal:  w_c = 0.6,  w_s = 0.4,  w_r = 0.0
-    Signal:      w_c = 0.5,  w_s = 0.3,  w_r = 0.2
+    Signal:      w_c = 0.5,  w_s = 0.2,  w_r = 0.3
 
 The midpoint compactness term is the key addition over the old single-point
 metric. Most Flow-Lenia solitons score >0.95 compactness at the final step,
@@ -57,15 +57,17 @@ ALIVE_UPPER = 2.0
 LOCALIZED_THRESHOLD = 0.6
 PERSISTENT_DESCRIPTOR_DRIFT = 0.2
 # Signal creatures: mass field must not drop below this fraction of initial_mass
-# even when total (mass + signal) is conserved.
-CREATURE_MASS_FLOOR = 0.2
+# even when total (mass + signal) is conserved. Set low (0.05) so that
+# signal_retention in the quality metric does the selection work rather
+# than this hard floor killing viable emitters.
+CREATURE_MASS_FLOOR = 0.05
 
 # Quality component weights
 _W_COMPACT_BASE = 0.6
 _W_STABLE_BASE = 0.4
 _W_COMPACT_SIG = 0.5
-_W_STABLE_SIG = 0.3
-_W_RETAIN_SIG = 0.2
+_W_STABLE_SIG = 0.2
+_W_RETAIN_SIG = 0.3
 
 
 @dataclass(frozen=True)
@@ -194,7 +196,7 @@ def evaluate(
         retention    final_mass / initial_mass, clipped [0,1] (signal only)
 
     Weights (non-signal): compactness=0.6, stability=0.4
-    Weights (signal):     compactness=0.5, stability=0.3, retention=0.2
+    Weights (signal):     compactness=0.5, stability=0.2, retention=0.3
     """
     if not _alive(eval_input):
         return EvaluationResult(descriptors=None, quality=None, rejection_reason="dead")

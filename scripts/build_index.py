@@ -772,6 +772,11 @@ def _render_ecosystem_run(run_dir: Path, publish: bool = False) -> str:
     min_dist = spawn.get("min_dist", "")
     measures = summary.get("measures", {})
     mass_history: list[float] = measures.get("mass_history", [])
+    # Backward compat: older runs lack mass_history; reconstruct from species sums.
+    if not mass_history:
+        smh: list[list[float]] = measures.get("species_mass_history", [])
+        if smh:
+            mass_history = [sum(s[i] for s in smh) for i in range(len(smh[0]))]
     snapshot_steps: list[int] = measures.get("snapshot_steps", [])
     initial_mass = measures.get("initial_mass", 0.0)
     final_mass = measures.get("final_mass", 0.0)

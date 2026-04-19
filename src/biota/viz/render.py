@@ -154,6 +154,8 @@ def _serialize_params(result: RolloutResult) -> dict[str, Any]:
         out["receptor_profile"] = [round(float(v), 4) for v in params["receptor_profile"]]  # type: ignore[typeddict-item]
         out["emission_rate"] = round(float(params["emission_rate"]), 5)  # type: ignore[typeddict-item]
         out["decay_rates"] = [round(float(v), 4) for v in params["decay_rates"]]  # type: ignore[typeddict-item]
+        out["alpha_coupling"] = round(float(params["alpha_coupling"]), 4)  # type: ignore[typeddict-item]
+        out["beta_modulation"] = round(float(params["beta_modulation"]), 4)  # type: ignore[typeddict-item]
         out["signal_kernel_r"] = round(float(params["signal_kernel_r"]), 4)  # type: ignore[typeddict-item]
         out["signal_kernel_a"] = [round(float(v), 4) for v in params["signal_kernel_a"]]  # type: ignore[typeddict-item]
 

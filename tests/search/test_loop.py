@@ -216,3 +216,46 @@ def test_searchconfig_default_batch_size_is_one() -> None:
 def test_searchconfig_default_workers_is_one() -> None:
     cfg = _cheap_config()
     assert cfg.workers == 1
+
+
+# === Signal-only descriptor validation ===
+
+
+def test_signal_only_descriptor_without_signal_field_raises() -> None:
+    """Passing a signal-only descriptor without --signal-field raises ValueError."""
+    cfg = _cheap_config(
+        budget=5,
+        random_phase_size=5,
+        descriptor_names=("emission_activity", "gyradius", "spectral_entropy"),
+        signal_field=False,
+    )
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmpdir, pytest.raises(ValueError, match="signal-enabled"):
+        search(cfg, runs_root=tmpdir)
+
+
+def test_signal_only_descriptor_with_signal_field_does_not_raise() -> None:
+    """signal-only descriptor with signal_field=True passes validation."""
+    cfg = _cheap_config(
+        budget=5,
+        random_phase_size=5,
+        descriptor_names=("emission_activity", "gyradius", "spectral_entropy"),
+        signal_field=True,
+    )
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        archive = search(cfg, runs_root=tmpdir)
+        assert archive is not None
+
+
+def test_non_signal_descriptor_without_signal_field_does_not_raise() -> None:
+    """Standard descriptors work without signal_field."""
+    cfg = _cheap_config(budget=5, random_phase_size=5)
+    assert not cfg.signal_field  # default is False
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        archive = search(cfg, runs_root=tmpdir)
+        assert archive is not None

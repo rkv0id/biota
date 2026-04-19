@@ -151,20 +151,41 @@ class LocalizedFlowLenia:
             G_s_total = G_s.sum(dim=0)  # (H, W)
 
             # Reception: species-specific receptor profile dotted with convolved signal.
+            receptor_response_s = None
             if convolved_signal is not None and sp.params.receptor_profile is not None:
-                receptor_response = (
+                receptor_response_s = (
                     convolved_signal * sp.params.receptor_profile.view(-1, 1, 1)
                 ).sum(dim=0)  # (H, W)
-                G_s_total = G_s_total + receptor_response
+
+                # Alpha coupling: multiplicative reception-to-growth, applied everywhere.
+                # Positive = chemotaxis (grow into favorable signal, including other species territory).
+                # Negative = chemorepulsion (grow away from signal).
+                alpha_c = sp.params.alpha_coupling if sp.params.alpha_coupling is not None else 0.0
+                if alpha_c != 0.0:
+                    growth_multiplier = (1.0 + alpha_c * receptor_response_s).clamp(min=0.0)
+                    G_s_total = G_s_total * growth_multiplier
 
             G_blend = G_blend + W_eff[:, :, s] * G_s_total
 
-            # Emission: species s emits into signal field proportional to positive growth.
+            # Emission: species s emits into shared signal field.
             if new_signal is not None and sp.params.emission_vector is not None:
                 G_pos = G_s_total.clamp(min=0.0)
-                ownership_s = W_eff[:, :, s]  # (H, W) -- how much of this cell species s owns
-                rate = sp.params.emission_rate if sp.params.emission_rate is not None else 0.0
-                emitted_scalar = G_pos * ownership_s * rate
+                ownership_s = W_eff[:, :, s]  # (H, W)
+                base_rate = sp.params.emission_rate if sp.params.emission_rate is not None else 0.0
+
+                # Beta modulation: adaptive emission rate.
+                # Positive beta = quorum sensing (amplify emission when signal is high).
+                # Negative beta = feedback inhibition (suppress emission when signal is high).
+                beta_m = sp.params.beta_modulation if sp.params.beta_modulation is not None else 0.0
+                if beta_m != 0.0 and receptor_response_s is not None:
+                    received_mean = float(receptor_response_s.mean().item())
+                    effective_rate = float(
+                        max(0.0, min(0.1, base_rate * (1.0 + beta_m * received_mean)))
+                    )
+                else:
+                    effective_rate = base_rate
+
+                emitted_scalar = G_pos * ownership_s * effective_rate
                 emitted_scalar = torch.minimum(emitted_scalar, A.clamp(min=0.0))
                 emit_per_channel = emitted_scalar.unsqueeze(-1) * sp.params.emission_vector
                 new_signal = new_signal + emit_per_channel

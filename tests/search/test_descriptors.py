@@ -37,9 +37,12 @@ from biota.search.descriptors import (
     compute_angular_velocity,
     compute_descriptors,
     compute_displacement_ratio,
+    compute_emission_activity,
     compute_growth_gradient,
     compute_gyradius,
     compute_morphological_instability,
+    compute_receptor_sensitivity,
+    compute_signal_retention,
     compute_spatial_entropy,
     compute_spectral_entropy,
     compute_velocity,
@@ -533,3 +536,117 @@ def test_spatial_entropy_concentrated_less_than_diffuse() -> None:
 def test_spatial_entropy_in_unit_interval() -> None:
     state = np.random.default_rng(31).random((GRID, GRID)).astype(np.float32)
     assert 0.0 <= compute_spatial_entropy(_make_trace(final_state=state)) <= 1.0
+
+
+# ===========================================================================
+# Signal descriptors
+# ===========================================================================
+
+C = 16  # signal channels
+
+
+def _make_signal_trace(
+    emission_history: np.ndarray | None = None,
+    reception_history: np.ndarray | None = None,
+    retention: float | None = None,
+) -> RolloutTrace:
+    """Build a RolloutTrace with signal history fields populated."""
+    state = np.zeros((GRID, GRID), dtype=np.float32)
+    state[40:56, 40:56] = 1.0
+    return RolloutTrace(
+        com_history=np.full((TRACE_LEN, 2), 48.0, dtype=np.float32),
+        bbox_fraction_history=np.full(TRACE_LEN, 0.04, dtype=np.float32),
+        gyradius_history=np.zeros(TRACE_LEN, dtype=np.float32),
+        final_state=state,
+        grid_size=GRID,
+        total_steps=STEPS,
+        signal_emission_history=emission_history,
+        signal_reception_history=reception_history,
+        signal_retention=retention,
+    )
+
+
+# --- emission_activity ---
+
+
+def test_emission_activity_zero_for_non_signal() -> None:
+    trace = _make_trace()
+    assert compute_emission_activity(trace) == 0.0
+
+
+def test_emission_activity_zero_for_empty_history() -> None:
+    trace = _make_signal_trace(emission_history=np.array([], dtype=np.float32))
+    assert compute_emission_activity(trace) == 0.0
+
+
+def test_emission_activity_scales_with_emission() -> None:
+    low = _make_signal_trace(emission_history=np.full(TRACE_LEN, 0.002, dtype=np.float32))
+    high = _make_signal_trace(emission_history=np.full(TRACE_LEN, 0.008, dtype=np.float32))
+    assert compute_emission_activity(low) < compute_emission_activity(high)
+
+
+def test_emission_activity_clipped_to_unit() -> None:
+    # History above normalizer -> clips to 1.0
+    trace = _make_signal_trace(emission_history=np.full(TRACE_LEN, 1.0, dtype=np.float32))
+    assert compute_emission_activity(trace) == 1.0
+
+
+def test_emission_activity_in_unit_interval() -> None:
+    trace = _make_signal_trace(
+        emission_history=np.random.default_rng(7).random(TRACE_LEN).astype(np.float32) * 0.05
+    )
+    val = compute_emission_activity(trace)
+    assert 0.0 <= val <= 1.0
+
+
+# --- receptor_sensitivity ---
+
+
+def test_receptor_sensitivity_zero_for_non_signal() -> None:
+    trace = _make_trace()
+    assert compute_receptor_sensitivity(trace) == 0.0
+
+
+def test_receptor_sensitivity_zero_for_empty_history() -> None:
+    trace = _make_signal_trace(reception_history=np.array([], dtype=np.float32))
+    assert compute_receptor_sensitivity(trace) == 0.0
+
+
+def test_receptor_sensitivity_scales_with_response() -> None:
+    low = _make_signal_trace(reception_history=np.full(TRACE_LEN, 0.003, dtype=np.float32))
+    high = _make_signal_trace(reception_history=np.full(TRACE_LEN, 0.010, dtype=np.float32))
+    assert compute_receptor_sensitivity(low) < compute_receptor_sensitivity(high)
+
+
+def test_receptor_sensitivity_in_unit_interval() -> None:
+    trace = _make_signal_trace(
+        reception_history=np.random.default_rng(9).random(TRACE_LEN).astype(np.float32) * 0.010
+    )
+    val = compute_receptor_sensitivity(trace)
+    assert 0.0 <= val <= 1.0
+
+
+# --- signal_retention ---
+
+
+def test_signal_retention_one_for_non_signal() -> None:
+    """Non-signal rollout: no mass was lost, retention = 1.0."""
+    trace = _make_trace()
+    assert compute_signal_retention(trace) == 1.0
+
+
+def test_signal_retention_reflects_mass_loss() -> None:
+    # 70% retained -> 0.7
+    trace = _make_signal_trace(retention=0.7)
+    assert abs(compute_signal_retention(trace) - 0.7) < 1e-6
+
+
+def test_signal_retention_clipped_to_unit() -> None:
+    assert compute_signal_retention(_make_signal_trace(retention=1.5)) == 1.0
+    assert compute_signal_retention(_make_signal_trace(retention=-0.1)) == 0.0
+
+
+def test_signal_retention_high_beats_low() -> None:
+    high = _make_signal_trace(retention=0.95)
+    low = _make_signal_trace(retention=0.40)
+    assert compute_signal_retention(high) > compute_signal_retention(low)

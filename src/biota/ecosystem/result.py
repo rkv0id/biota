@@ -173,6 +173,7 @@ class EcosystemResult:
                 "min_mass": m.min_mass,
                 "mass_turnover": m.mass_turnover,
                 "snapshot_steps": m.snapshot_steps,
+                "mass_history": m.mass_history,
                 "species_mass_history": m.species_mass_history,
                 "species_territory_history": m.species_territory_history,
                 "interaction_coefficients": m.interaction_coefficients,

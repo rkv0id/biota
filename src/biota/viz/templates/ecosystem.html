@@ -1623,18 +1623,26 @@
         }
     }
 
-    // Signal overlay toggle on GIF
-    // Mass / Signal view toggle
+    // Mass / Signal view toggle -- restarts both GIFs on switch so
+    // mass and signal frames stay aligned from frame 0.
     (function() {
     var tabs = document.querySelectorAll('.gif-view-tab');
     var massGif = document.getElementById('ecoGif');
     var signalGif = document.getElementById('ecoGifSignal');
     if (!tabs.length || !signalGif) return;
+    function restartGif(img) {
+        if (!img) return;
+        var src = img.src;
+        img.src = '';
+        img.src = src;
+    }
     tabs.forEach(function(tab) {
         tab.addEventListener('click', function() {
             tabs.forEach(function(t) { t.classList.remove('active'); });
             this.classList.add('active');
             var view = this.dataset.view;
+            restartGif(massGif);
+            restartGif(signalGif);
             if (view === 'signal') {
                 if (massGif) massGif.style.opacity = '0';
                 signalGif.style.opacity = '1';
