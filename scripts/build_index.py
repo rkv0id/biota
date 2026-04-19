@@ -689,7 +689,7 @@ def _extract_primary_source(summary: dict[str, Any]) -> tuple[str, list[int], in
         if isinstance(first, dict):
             return (
                 str(first.get("run", "")),
-                list(first.get("cell", [])),
+                list(first.get("cell") or []),
                 int(first.get("n", 0)),
             )
     # Legacy v2.0.x shape
@@ -715,12 +715,17 @@ def _build_sources_context(summary: dict[str, Any]) -> list[dict[str, Any]]:
         for s in sources_raw:
             if not isinstance(s, dict):
                 continue
+            creature_id = s.get("creature_id") or ""
             cell = s.get("cell", [])
+            # Deep-link: prefer creature_id hash, fall back to coords for old archives
+            deep_link = creature_id if creature_id else "-".join(str(c) for c in cell)
+            display = creature_id if creature_id else f"({', '.join(str(c) for c in cell)})"
             out.append(
                 {
                     "run_id": s.get("run", ""),
-                    "coords_str": f"({', '.join(str(c) for c in cell)})",
-                    "coords_hash": "-".join(str(c) for c in cell),
+                    "creature_id": creature_id,
+                    "coords_str": display,
+                    "coords_hash": deep_link,
                     "n": s.get("n", ""),
                 }
             )
@@ -732,6 +737,7 @@ def _build_sources_context(summary: dict[str, Any]) -> list[dict[str, Any]]:
     return [
         {
             "run_id": legacy_run,
+            "creature_id": "",
             "coords_str": f"({', '.join(str(c) for c in legacy_coords)})",
             "coords_hash": "-".join(str(c) for c in legacy_coords),
             "n": legacy_n,

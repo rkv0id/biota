@@ -42,7 +42,8 @@ class CreatureSource:
         archive_dir: Directory containing the source archive run. Optional in
             the YAML, inherits the global default when unset.
         run_id: Archive run directory name under archive_dir.
-        coords: (y, x, z) archive cell coordinate.
+        coords: (y, x, z) archive cell coordinate. Deprecated in v4.0.0; use creature_id.
+        creature_id: Stable creature identity string "{run_id}-{seed}". Preferred over coords.
         n: Number of copies of this creature to spawn in the ecosystem.
         patch: Optional per-source override for initial patch side length. When
             None, falls back to the experiment's spawn.patch. Useful when one
@@ -53,9 +54,12 @@ class CreatureSource:
 
     archive_dir: str
     run_id: str
-    coords: tuple[int, int, int]
+    coords: tuple[int, int, int] | None
     n: int
     patch: int | None = None
+    creature_id: str | None = None
+    """Stable creature identity (v4.0.0). When set, used for CVT archive lookup.
+    When None, falls back to coords-based lookup for backward compat with old archives."""
 
 
 @dataclass(frozen=True)
@@ -301,9 +305,13 @@ def _parse_one_source(
     name: str,
     default_archive_dir: str,
 ) -> CreatureSource:
-    for key in ("run", "cell", "n"):
+    for key in ("run", "n"):
         if key not in raw:
             raise ConfigError(f"experiment {name!r}: sources[{index}].{key} is required")
+    if "cell" not in raw and "creature_id" not in raw:
+        raise ConfigError(
+            f"experiment {name!r}: sources[{index}] must have either 'creature_id' or 'cell'"
+        )
 
     run_id = raw["run"]
     if not isinstance(run_id, str) or not run_id.strip():
@@ -315,7 +323,19 @@ def _parse_one_source(
             f"experiment {name!r}: sources[{index}].archive_dir must be a non-empty string"
         )
 
-    coords = _parse_coords(raw["cell"], index, name)
+    # creature_id preferred; cell is the deprecated v3.x form.
+    creature_id: str | None = None
+    coords: tuple[int, int, int] | None = None
+    if "creature_id" in raw:
+        cid = raw["creature_id"]
+        if not isinstance(cid, str) or not cid.strip():
+            raise ConfigError(
+                f"experiment {name!r}: sources[{index}].creature_id must be a non-empty string"
+            )
+        creature_id = cid
+    else:
+        coords = _parse_coords(raw["cell"], index, name)
+
     n = _parse_positive_int(raw["n"], f"sources[{index}].n", name)
 
     # Optional per-source patch override.
@@ -326,7 +346,14 @@ def _parse_one_source(
     else:
         patch = _parse_positive_int(patch_raw, f"sources[{index}].patch", name)
 
-    return CreatureSource(archive_dir=archive_dir, run_id=run_id, coords=coords, n=n, patch=patch)
+    return CreatureSource(
+        archive_dir=archive_dir,
+        run_id=run_id,
+        coords=coords,
+        n=n,
+        patch=patch,
+        creature_id=creature_id,
+    )
 
 
 def _parse_coords(raw: Any, index: int, name: str) -> tuple[int, int, int]:  # pyright: ignore[reportAny]

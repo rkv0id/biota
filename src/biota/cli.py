@@ -23,10 +23,13 @@ from pathlib import Path
 
 import typer
 
-from biota.search.archive import InsertionStatus
+from biota.search.archive import Archive
 from biota.search.descriptors import DEFAULT_DESCRIPTORS, REGISTRY, Descriptor
 from biota.search.loop import (
+    CalibrationDoneFn,
+    CalibrationProgressFn,
     CheckpointWritten,
+    EventCallback,
     RolloutCompleted,
     SearchConfig,
     SearchEvent,
@@ -34,13 +37,16 @@ from biota.search.loop import (
     search,
 )
 from biota.search.rollout import (
+    PRESET_CALIBRATION,
+    SIGNAL_CALIBRATION_BONUS,
+    SIGNAL_STEPS,
     RolloutConfig,
     dev_preset,
     pretty_preset,
-    signal_preset,
     standard_preset,
 )
 from biota.sim.flowlenia import Config as SimConfig
+from biota.viz.tty import SearchDisplay
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 
@@ -85,49 +91,58 @@ def _override_sim(
 # === search command ===
 
 
-def _format_status(status: InsertionStatus) -> str:
-    """Short tag for the progress line."""
-    return {
-        InsertionStatus.INSERTED: "inserted ",
-        InsertionStatus.REPLACED: "replaced ",
-        InsertionStatus.REJECTED_FILTER: "rej:filt ",
-        InsertionStatus.REJECTED_QUALITY: "rej:qual ",
-        InsertionStatus.REJECTED_SIMILARITY: "rej:sim  ",
-    }[status]
+def _make_event_handler(
+    display: SearchDisplay,
+    live_archive: Archive,
+) -> tuple[CalibrationProgressFn, CalibrationDoneFn, EventCallback]:
+    """Build the two callbacks wired to a SearchDisplay.
 
+    archive_ref is a single-element list mutated by the search loop so the
+    event handler can read the live archive for descriptor coverage bars.
+    """
 
-def _print_event(event: SearchEvent, budget: int) -> None:
-    """Print one line per event to stderr. Keeps stdout clean for scripting."""
-    if isinstance(event, SearchStarted):
-        print(
-            f"[search] starting run {event.run_id} "
-            f"budget={event.config.budget} "
-            f"random_phase={event.config.random_phase_size} "
-            f"device={event.config.device}",
-            file=sys.stderr,
-        )
-    elif isinstance(event, RolloutCompleted):
-        tag = _format_status(event.insertion_status)
-        result = event.result
-        q = f"q={result.quality:.3f}" if result.quality is not None else "q=  -  "
-        reason = f"  {result.rejection_reason}" if result.rejection_reason else ""
-        print(
-            f"[{event.completed_count:4d}/{budget:4d}] seed={result.seed:<5d} {tag} {q}{reason}",
-            file=sys.stderr,
-        )
-    elif isinstance(event, CheckpointWritten):
-        print(
-            f"[checkpoint] {event.path} ({event.archive_size} cells)",
-            file=sys.stderr,
-        )
-    else:
-        # SearchFinished - pyright narrows via exhaustiveness
-        print(
-            f"[done] {event.completed} rollouts, "
-            f"{event.archive_size} archive cells, "
-            f"{event.elapsed_seconds:.1f}s elapsed",
-            file=sys.stderr,
-        )
+    def on_cal_progress(completed: int, total: int, n_survivors: int) -> None:
+        display.on_calibration_progress(completed, total, n_survivors)
+
+    def on_cal_done(
+        n_survivors: int,
+        descriptor_names: tuple[str, str, str],
+        axis_ranges: "list[tuple[float,float]] | None" = None,
+    ) -> None:
+        display.on_calibration_done(n_survivors, descriptor_names, axis_ranges)
+
+    def on_event(event: SearchEvent) -> None:
+        if isinstance(event, SearchStarted):
+            display.on_search_started(event.run_id, event.config)
+        elif isinstance(event, RolloutCompleted):
+            result = event.result
+            # Update descriptor coverage from the live archive
+            if live_archive.calibrated:
+                desc_values: list[list[float]] = [[], [], []]
+                for _idx, r in live_archive.iter_occupied():
+                    if r.descriptors is not None:
+                        for i, v in enumerate(r.descriptors):
+                            desc_values[i].append(float(v))
+                display.on_archive_snapshot(
+                    archive_size=len(live_archive),
+                    fill_pct=live_archive.fill_fraction,
+                    desc_values=desc_values,
+                )
+            display.on_rollout_completed(
+                completed=event.completed_count,
+                status=event.insertion_status.value,
+                quality=result.quality,
+                rejection_reason=result.rejection_reason,
+                seed=result.seed,
+                descriptors=result.descriptors,
+            )
+        elif isinstance(event, CheckpointWritten):
+            display.on_checkpoint(str(event.path), event.archive_size)
+        else:
+            # SearchFinished -- pyright exhaustiveness
+            display.on_search_finished(event.completed, event.archive_size, event.elapsed_seconds)
+
+    return on_cal_progress, on_cal_done, on_event
 
 
 RAY_DEFAULT_PORT = 6379
@@ -260,6 +275,18 @@ def search_cmd(
     checkpoint_every: int = typer.Option(
         100, "--checkpoint-every", help="Checkpoint cadence in completed rollouts."
     ),
+    calibration: int | None = typer.Option(
+        None,
+        "--calibration",
+        help=(
+            "Calibration rollouts before search begins (not counted in budget). "
+            "Defaults to the preset value (dev=50, standard=150, pretty=200) "
+            "plus 50 when --signal-field is active. Override with an explicit N."
+        ),
+    ),
+    centroids: int = typer.Option(
+        1024, "--centroids", help="CVT archive capacity (number of Voronoi cells)."
+    ),
     output_dir: Path = typer.Option(
         Path("archive"), "--output-dir", help="Root directory for run subdirectories."
     ),
@@ -319,13 +346,22 @@ def search_cmd(
         raise typer.BadParameter(
             f"border must be 'wall' or 'torus', got {border!r}", param_hint="--border"
         )
-    # When --signal-field is active and no explicit --steps override was given,
-    # automatically use signal_preset (800 steps) instead of standard (500).
-    # This gives signal dynamics enough time to build up meaningful gradients.
     base_preset = _resolve_preset(preset)
-    if signal_field and steps is None and preset == "standard":
-        base_preset = signal_preset()
-    rollout_cfg = _override_sim(base_preset, grid=grid, steps=steps, border=border)
+    # When --signal-field is active and no explicit --steps override was given,
+    # apply the per-preset signal step count (more steps for signal dynamics).
+    effective_steps = steps
+    if signal_field and steps is None and preset in SIGNAL_STEPS:
+        effective_steps = SIGNAL_STEPS[preset]
+    rollout_cfg = _override_sim(base_preset, grid=grid, steps=effective_steps, border=border)
+
+    # Calibration: use explicit --calibration if given, otherwise derive from preset
+    # and add the signal bonus when --signal-field is active.
+    effective_calibration = calibration
+    if effective_calibration is None:
+        effective_calibration = PRESET_CALIBRATION.get(preset, 150)
+        if signal_field:
+            effective_calibration += SIGNAL_CALIBRATION_BONUS
+
     config = SearchConfig(
         rollout=rollout_cfg,
         budget=budget,
@@ -339,12 +375,34 @@ def search_cmd(
         checkpoint_every=checkpoint_every,
         descriptor_names=descriptor_names,
         signal_field=signal_field,
+        calibration=effective_calibration,
+        centroids=centroids,
     )
 
-    def on_event(event: SearchEvent) -> None:
-        _print_event(event, budget=budget)
+    from biota.search.archive import Archive as _Archive
 
-    archive = search(config=config, runs_root=output_dir, on_event=on_event)
+    live_archive = _Archive(
+        n_centroids=centroids,
+        descriptor_names=descriptor_names,
+    )
+    display = SearchDisplay(
+        budget=budget,
+        calibration=effective_calibration,
+        descriptor_names=descriptor_names,
+        device=device,
+        workers=workers,
+    )
+    # Pass the archive object so the event handler can read live state for coverage bars
+    on_cal_progress, on_cal_done, on_event = _make_event_handler(display, live_archive)
+
+    archive = search(
+        config=config,
+        runs_root=output_dir,
+        on_event=on_event,
+        on_calibration_progress=on_cal_progress,
+        on_calibration_done=on_cal_done,
+        archive=live_archive,
+    )
 
     # Final summary to stdout, one line, scriptable
     print(f"archive_size={len(archive)}")

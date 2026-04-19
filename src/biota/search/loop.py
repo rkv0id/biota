@@ -38,6 +38,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from scipy.cluster.vq import kmeans2
 
 from biota.ray_compat import (
     RolloutHandle,
@@ -49,7 +50,7 @@ from biota.ray_compat import (
 from biota.search.archive import Archive, InsertionStatus
 from biota.search.descriptors import DEFAULT_DESCRIPTORS, resolve_descriptors
 from biota.search.params import mutate, sample_random
-from biota.search.result import CellCoord, ParamDict, RolloutResult
+from biota.search.result import ParamDict, RolloutResult
 from biota.search.rollout import RolloutConfig
 
 # === config ===
@@ -121,6 +122,14 @@ class SearchConfig:
     Produces a signal-enabled archive tagged in manifest.json. Incompatible
     with non-signal archives in ecosystem runs."""
 
+    calibration: int = 150
+    """Rollouts run before search begins to fit CVT centroid positions.
+    Not counted against budget. Default matches the standard preset; override
+    with --calibration N or let the CLI derive it from the active preset."""
+
+    centroids: int = 1024
+    """Number of CVT archive cells (Voronoi regions). Archive capacity."""
+
     def __post_init__(self) -> None:
         if self.local_ray and self.ray_address is not None:
             raise ValueError(
@@ -177,6 +186,13 @@ class SearchFinished:
 SearchEvent = SearchStarted | RolloutCompleted | CheckpointWritten | SearchFinished
 EventCallback = Callable[[SearchEvent], None]
 
+CalibrationProgressFn = Callable[[int, int, int], None]
+"""Callback(completed, total, n_survivors) called after each calibration batch drains.
+Purely for display; return value is ignored."""
+
+CalibrationDoneFn = Callable[[int, tuple[str, str, str], "list[tuple[float, float]] | None"], None]
+"""Callback(n_survivors, descriptor_names) called once after calibration completes."""
+
 
 # === public API ===
 
@@ -187,6 +203,8 @@ def search(
     on_event: EventCallback | None = None,
     archive: Archive | None = None,
     run_id: str | None = None,
+    on_calibration_progress: CalibrationProgressFn | None = None,
+    on_calibration_done: "CalibrationDoneFn | None" = None,
 ) -> Archive:
     """Run a complete MAP-Elites search to budget and return the populated archive.
 
@@ -199,7 +217,10 @@ def search(
     a fresh one if None).
     """
     if archive is None:
-        archive = Archive(descriptor_names=config.descriptor_names)
+        archive = Archive(
+            n_centroids=config.centroids,
+            descriptor_names=config.descriptor_names,
+        )
     if run_id is None:
         run_id = _make_run_id()
 
@@ -228,6 +249,8 @@ def search(
         on_event=on_event,
         completed=0,
         rng=random.Random(config.base_seed + 31337),
+        on_calibration_progress=on_calibration_progress,
+        on_calibration_done=on_calibration_done,
     )
     _write_manifest(state)
     _write_config(state)
@@ -245,6 +268,13 @@ def search(
     )
     try:
         in_flight: list[RolloutHandle] = []
+        # Calibration seeds use a large offset to avoid colliding with search seeds.
+        # Search uses [base_seed, base_seed + budget); calibration uses
+        # [CAL_SEED_OFFSET, CAL_SEED_OFFSET + calibration).
+        CAL_SEED_OFFSET = 10_000_000
+        cal_start_seed = CAL_SEED_OFFSET + config.base_seed
+        _calibration_phase(state, cal_start_seed)
+
         next_seed = config.base_seed
 
         # Phase 1: random sampling
@@ -304,6 +334,8 @@ class _LoopState:
     completed: int
     rng: random.Random
     started_at: float = 0.0
+    on_calibration_progress: CalibrationProgressFn | None = None
+    on_calibration_done: "CalibrationDoneFn | None" = None
 
 
 def _emit(state: _LoopState, event: SearchEvent) -> None:
@@ -311,12 +343,11 @@ def _emit(state: _LoopState, event: SearchEvent) -> None:
         state.on_event(event)
 
 
-# Type alias for the per-phase sampler. Returns (params, parent_cell, generation_seed).
-# generation_seed gets attached to the rollout for reproducibility.
-SamplerFn = Callable[[_LoopState, int], tuple[ParamDict, CellCoord | None]]
+# Per-phase sampler: returns (params, parent_id). parent_id is None for random/calibration phase.
+SamplerFn = Callable[[_LoopState, int], tuple[ParamDict, str | None]]
 
 
-def _random_sampler(state: _LoopState, seed: int) -> tuple[ParamDict, CellCoord | None]:
+def _random_sampler(state: _LoopState, seed: int) -> tuple[ParamDict, str | None]:
     """Phase 1 sampler: uniform from the prior, no parent."""
     params = sample_random(
         kernels=state.config.rollout.sim.kernels,
@@ -329,7 +360,7 @@ def _random_sampler(state: _LoopState, seed: int) -> tuple[ParamDict, CellCoord 
 def _make_mutation_sampler(state: _LoopState) -> SamplerFn:
     """Phase 2 sampler: pick a parent from the archive, mutate, return."""
 
-    def sampler(state: _LoopState, seed: int) -> tuple[ParamDict, CellCoord | None]:
+    def sampler(state: _LoopState, seed: int) -> tuple[ParamDict, str | None]:
         if len(state.archive) == 0:
             params = sample_random(
                 kernels=state.config.rollout.sim.kernels,
@@ -338,11 +369,136 @@ def _make_mutation_sampler(state: _LoopState) -> SamplerFn:
             )
             return params, None
         rng_np = np.random.default_rng(seed)
-        parent_cell, parent_result = state.archive.random_parent(rng_np)
+        _parent_idx, parent_result = state.archive.random_parent(rng_np)
         child = mutate(parent_result.params, seed=seed)
-        return child, parent_cell
+        return child, parent_result.creature_id
 
     return sampler
+
+
+def _calibration_phase(state: _LoopState, start_seed: int) -> None:
+    """Run calibration rollouts, fit CVT centroids, attach to archive.
+
+    Calibration rollouts are identical to normal rollouts but results are
+    not inserted into the archive -- they are used only to fit k-means
+    centroids that define the Voronoi tessellation.
+
+    Falls back to uniform random centroids in the observed bounding box if
+    fewer than 20 rollouts pass the quality filter. Calls
+    state.on_calibration_progress(completed, total, n_survivors) after each
+    drain so the CLI can drive a progress spinner without any display logic
+    living in this module.
+    """
+    n_cal = state.config.calibration
+    n_centroids = state.config.centroids
+
+    survivors: list[tuple[float, float, float]] = []
+    in_flight: list[RolloutHandle] = []
+    completed_cal = 0
+
+    cal_end_seed = start_seed + n_cal
+    next_seed = start_seed
+
+    while next_seed < cal_end_seed or in_flight:
+        while len(in_flight) >= state.config.workers and next_seed < cal_end_seed:
+            completed, in_flight = wait_for_completed(in_flight, min_completed=1)
+            for batch in completed:
+                for result in batch:
+                    completed_cal += 1
+                    if result.descriptors is not None and result.quality is not None:
+                        survivors.append(result.descriptors)
+            if state.on_calibration_progress is not None:
+                state.on_calibration_progress(completed_cal, n_cal, len(survivors))
+
+        if next_seed < cal_end_seed:
+            stop = min(cal_end_seed, next_seed + state.config.batch_size)
+            this_batch = stop - next_seed
+            params_list = [
+                sample_random(
+                    kernels=state.config.rollout.sim.kernels,
+                    seed=next_seed + i,
+                    signal_field=state.config.signal_field,
+                )
+                for i in range(this_batch)
+            ]
+            seeds = list(range(next_seed, next_seed + this_batch))
+            handle = submit_batch(
+                params_list=params_list,
+                seeds=seeds,
+                config=state.config.rollout,
+                device=state.config.device,
+                parent_ids=[None] * this_batch,
+            )
+            in_flight.append(handle)
+            next_seed += this_batch
+
+        if next_seed >= cal_end_seed and in_flight:
+            completed, in_flight = wait_for_completed(in_flight, min_completed=1)
+            for batch in completed:
+                for result in batch:
+                    completed_cal += 1
+                    if result.descriptors is not None and result.quality is not None:
+                        survivors.append(result.descriptors)
+            if state.on_calibration_progress is not None:
+                state.on_calibration_progress(completed_cal, n_cal, len(survivors))
+
+    MIN_SURVIVORS = 20
+    pts: np.ndarray
+    if len(survivors) >= MIN_SURVIVORS:
+        pts = np.array(survivors, dtype=np.float64)
+    else:
+        if survivors:
+            arr = np.array(survivors, dtype=np.float64)
+            lo, hi = arr.min(axis=0), arr.max(axis=0)
+        else:
+            lo, hi = np.zeros(3), np.ones(3) * 10.0
+        rng = np.random.default_rng(state.config.base_seed)
+        pts = rng.uniform(lo, hi, size=(max(MIN_SURVIVORS, n_centroids), 3))
+        import sys
+
+        print(
+            f"[calibration] warning: only {len(survivors)} survivors "
+            f"(need {MIN_SURVIVORS}); falling back to uniform centroids",
+            file=sys.stderr,
+        )
+
+    # Fit per-axis scale factors (1/span) so all axes contribute equally to
+    # centroid distances. Use actual survivors when available for scale, since
+    # the uniform fallback pts are synthetic and may not reflect real ranges.
+    axis_scale = np.ones(3, dtype=np.float64)
+    scale_src = np.array(survivors, dtype=np.float64) if len(survivors) >= 2 else pts
+    if len(scale_src) >= 2:
+        p5 = np.percentile(scale_src, 5, axis=0)
+        p95 = np.percentile(scale_src, 95, axis=0)
+        span = p95 - p5
+        for i in range(3):
+            axis_scale[i] = 1.0 / span[i] if span[i] > 0 else 1.0
+
+    # Scale survivors before fitting centroids so the space is isotropic.
+    pts_scaled = pts * axis_scale
+
+    k = min(n_centroids, len(pts_scaled))
+    np.random.seed(state.config.base_seed)
+    centroids_scaled, _ = kmeans2(pts_scaled, k, minit="points", iter=30)
+    state.archive.attach_centroids(centroids_scaled.astype(np.float64), axis_scale=axis_scale)
+
+    # Update manifest with calibration results.
+    _append_calibration_manifest(
+        state, n_cal=n_cal, n_survivors=len(survivors), centroids=centroids_scaled
+    )
+
+    axis_ranges = (
+        [
+            (float(np.percentile(scale_src[:, i], 5)), float(np.percentile(scale_src[:, i], 95)))
+            if len(scale_src) >= 2
+            else (0.0, 1.0)
+            for i in range(3)
+        ]
+        if len(survivors) > 0
+        else None
+    )
+    if state.on_calibration_done is not None:
+        state.on_calibration_done(len(survivors), state.config.descriptor_names, axis_ranges)
 
 
 def _submit_phase(
@@ -372,19 +528,19 @@ def _submit_phase(
         this_batch_size = min(batch_size, stop_seed - next_seed)
         params_list: list[ParamDict] = []
         seeds: list[int] = []
-        parent_cells: list[CellCoord | None] = []
+        parent_ids: list[str | None] = []
         for i in range(this_batch_size):
-            params, parent_cell = sample_fn(state, next_seed + i)
+            params, parent_id = sample_fn(state, next_seed + i)
             params_list.append(params)
             seeds.append(next_seed + i)
-            parent_cells.append(parent_cell)
+            parent_ids.append(parent_id)
 
         handle = submit_batch(
             params_list=params_list,
             seeds=seeds,
             config=state.config.rollout,
             device=state.config.device,
-            parent_cells=parent_cells,
+            parent_ids=parent_ids,
         )
         in_flight.append(handle)
         next_seed += this_batch_size
@@ -403,6 +559,10 @@ def _drain_some(state: _LoopState, in_flight: list[RolloutHandle]) -> list[Rollo
     for batch in completed_batches:
         for result in batch:
             state.completed += 1
+            # Assign stable creature_id before insertion so it is stored in the archive.
+            from dataclasses import replace as _dc_replace
+
+            result = _dc_replace(result, creature_id=f"{state.run_id}-{result.seed}")
             status = state.archive.try_insert(result)
             _append_event_log(state, result, status)
             _emit(
@@ -504,8 +664,31 @@ def _write_manifest(state: _LoopState) -> None:
         "host": os.uname().nodename if hasattr(os, "uname") else "unknown",
         "ray_active": False,  # set after init in a follow-up; not load-bearing
         "signal_field": state.config.signal_field,
+        "n_centroids": state.config.centroids,
+        "calibration_n": state.config.calibration,
+        # centroid_positions and calibration_survivors added by _append_calibration_manifest
+        # after the calibration phase completes.
     }
     path = state.run_dir / "manifest.json"
+    path.write_text(json.dumps(manifest, indent=2))
+
+
+def _append_calibration_manifest(
+    state: _LoopState,
+    n_cal: int,
+    n_survivors: int,
+    centroids: np.ndarray,
+) -> None:
+    """Merge calibration results into the existing manifest.json.
+
+    Called after _calibration_phase() completes. Adds centroid_positions
+    (needed by the archive viewer and build_index.py) and calibration
+    diagnostics.
+    """
+    path = state.run_dir / "manifest.json"
+    manifest = json.loads(path.read_text())
+    manifest["calibration_survivors"] = n_survivors
+    manifest["centroid_positions"] = centroids.tolist()
     path.write_text(json.dumps(manifest, indent=2))
 
 
@@ -544,7 +727,7 @@ def _append_event_log(state: _LoopState, result: RolloutResult, status: Insertio
         "quality": result.quality,
         "rejection_reason": result.rejection_reason,
         "insertion_status": status.value,
-        "parent_cell": list(result.parent_cell) if result.parent_cell else None,
+        "parent_id": result.parent_id,
         "compute_seconds": result.compute_seconds,
         "created_at": result.created_at,
     }
@@ -583,6 +766,9 @@ def _config_to_jsonable(config: SearchConfig) -> dict[str, Any]:
         "checkpoint_every",
         "base_seed",
         "descriptor_names",
+        "signal_field",
+        "calibration",
+        "centroids",
     ):
         out[key] = getattr(config, key)
     return out

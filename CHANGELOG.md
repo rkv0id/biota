@@ -1,5 +1,60 @@
 # Changelog
 
+## v4.0.0 - 2026-04-19
+
+CVT-MAP-Elites archive, TTY search display, archive viewer rebuild, signal descriptor overhaul, batched signal rollouts.
+
+### CVT-MAP-Elites archive
+
+Replaces the fixed 32×32×16 grid with a Voronoi tessellation fitted from observed rollout distributions. A calibration phase runs before search: rollouts are evaluated, k-means centroids are fitted to the survivor descriptor cloud, and per-axis scale factors (1/span from p5/p95) are computed so all axes contribute equally to centroid distances regardless of raw value range. Lookup is O(log k) via cKDTree.
+
+`creature_id` replaces 3D grid coordinates as the stable creature identity string (`{run_id}-{seed}`). All cross-links between archive viewer, ecosystem viewer, and YAML configs use `creature_id`. Old `cell: [y, x, z]` form still accepted for backward compat.
+
+`_is_too_similar` now maintains a persistent occupied-centroid tree (lazy dirty-flag rebuild) instead of rebuilding from scratch on every insertion. Similarity epsilon operates in scaled descriptor space, consistent with `cell_for()`.
+
+### TTY search display
+
+`src/biota/viz/tty.py`: `SearchDisplay` class with two rendering modes. TTY: 7-line overwriting block (header, progress bar, archive stats, last-10 insertion summary, per-descriptor coverage bars). Non-TTY: append-only lines plus summary every 50 rollouts. Block deferred to first `RolloutCompleted` event so Ray/CUDA init noise lands before the block. Calibration phase shows a spinner with survivor count and ETA. `CalibrationProgressFn` / `CalibrationDoneFn` callback types thread through `loop.py`.
+
+### Archive viewer rebuild
+
+`archive.html` rewritten as a three-panel layout: left (58%) virtual-scrolled creature cards with filter/sort sliders and inline YAML copy button; right (42%) descriptor histograms (bars quality-colored by mean quality per bin, selected-creature marker) and 3×3 Pearson correlation matrix (teal diagonal, red for high |r|, redundancy hint). Collapsible health header shows calibration stats. Deep-link is `#<creature_id>`. Modal has copy-YAML button producing `creature_id:` form. `render.py` drops `body_inner` stub and reads `calibration_n`/`calibration_survivors` from `manifest.json`.
+
+`ecosystem.html` deep-links use `creature_id` when available. `index.html` System tab updated to CVT language (18 descriptors, CVT archive type stat). Reproduce tab YAML uses `creature_id:`. `build_index.py` emits `creature_id` in source context for deep-links.
+
+### Signal descriptor overhaul
+
+Old signal descriptors (`emission_activity`, `receptor_sensitivity`, `signal_retention`) removed. All three returned zero for equilibrium solitons because they depended on `G_pos` (positive growth activity), which is zero for stable solitons in dynamic equilibrium.
+
+Three new signal descriptors:
+
+- `signal_field_variance`: spatial variance of total signal field at end of rollout. High = signal concentrated near creature. Requires `final_signal_state` in `RolloutTrace`.
+- `signal_mass_ratio`: final signal mass / initial signal mass. Measures chemical accumulation. Varies with `emission_rate`, `decay_rates`, run length.
+- `dominant_channel_fraction`: fraction of signal mass in the dominant channel. High = chemical specialist; ~1/C = generalist. Captures effective `emission_vector` direction.
+
+`RolloutTrace` gains `final_signal_state` (H, W, C) and `initial_signal_mass` fields. Both populated by `rollout()` and `rollout_batch()`.
+
+### Batched signal rollouts
+
+`rollout_batch` previously skipped signal entirely (no signal field initialized, no signal step, no `final_signal_state`). Now:
+
+- `_build_batched_signal_params()` extracts signal kernel FFTs and params for each creature using `build_signal_kernel_fft()` directly (no B FlowLenia instances constructed).
+- `make_signal_fields_batch()` initializes all B signal fields in one call.
+- `_batched_signal_step()` applies emission, alpha coupling, beta modulation, and decay in parallel across the batch using `(B, H, W, C)` signal tensors.
+- `_batched_sim_step()` now returns `(new_A, U_sum)`. Signal step reuses `U_sum` directly, eliminating a duplicate FFT pass per step.
+
+`FlowLenia` gains `build_signal_kernel_fft()` module-level function, `make_signal_fields_batch()` module-level function, and public `mass_kernels_fft` / `decay` / `signal_tensors()` API. `localized.py` updated to use public API (all `reportPrivateUsage` suppressions removed).
+
+### Quality metric
+
+Signal run quality: `retention` term replaced by `signal_activity = clip(final_signal_mass / initial_signal_mass, 0, 1)`. Rewards creatures that maintain or replenish the chemical background field. Weights: compactness=0.5, stability=0.3, signal_activity=0.2. `initial_signal_mass` added to `RolloutEvaluation`; alive filter uses creature mass only (signal field decays by design and is excluded from conservation check).
+
+### Documentation
+
+`docs/archive-grid.svg` and `docs/search-loop.svg` updated to CVT language. README descriptor table extended to 18 entries (3 new signal-only rows). Signal-only descriptors guidance: work best mixed with at least one morphological axis. Quality metric section updated. `emission_rate` range corrected to `[0.0001, 0.01]`.
+
+---
+
 ## v3.5.0 - 2026-04-18
 
 Chemical coupling and adaptive signal. alpha_coupling and beta_modulation added as searchable

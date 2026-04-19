@@ -84,17 +84,29 @@ class ParamDict(_SignalParams):
 
 
 Descriptors = tuple[float, float, float]
-"""Three normalized behavior descriptors: (velocity, gyradius, dgm), each in
-[0, 1]. The tuple positions are unchanged from the M1 (speed, size, structure)
-design but the underlying observables and normalizers were replaced as part of
-the descriptor rework. See descriptors.py for the
-new design."""
+"""Three raw behavioral descriptors returned by compute() functions.
 
-CellCoord = tuple[int, int, int]
-"""Discrete archive cell coordinate. Tuple positions correspond to the three
-descriptors in Descriptors above. Field names elsewhere in the codebase still
-use the historical (speed, size, structure) names; rename is deferred to a
-follow-up cleanup."""
+Values are in [0, 100] (loose sanity bound). CVT-MAP-Elites handles scale
+implicitly via centroid fitting, so no per-descriptor normalization is applied.
+Typical observed ranges are well below 10 for all built-in descriptors; the
+100 cap guards against numerical outliers distorting centroid positions.
+"""
+
+# v4.0.0: CellCoord is now a centroid index (int). The old tuple form is kept
+# as a deprecated alias so that old pickled archives and callers that have not
+# been updated yet continue to parse without import errors.
+CellCoord = int
+"""Centroid index in the CVT archive. Opaque int in [0, N_CENTROIDS).
+
+Replaces the old tuple[int, int, int] grid coordinate from v3.x.
+"""
+
+LegacyCellCoord = tuple[int, int, int]
+"""Deprecated. The 3D grid coordinate used in v3.x archives.
+
+Present only for backward-compatible loading of old archive.pkl files.
+New code must not produce or consume this type.
+"""
 
 
 # === RolloutResult ===
@@ -107,34 +119,33 @@ class RolloutResult:
     Attributes:
         params: The parameter dict that produced this rollout.
         seed: The integer seed used for the initial state.
-        descriptors: The (velocity, gyradius, dgm) tuple in [0, 1]^3, or None
-            if the rollout failed early enough that descriptors couldn't be
-            computed (e.g. mass collapsed to zero). Tuple positions are
-            unchanged from M1 but the underlying observables were replaced;
-            see descriptors.py.
-        quality: The quality score in [0, 1], or None if the rollout was
-            rejected by a filter (or descriptors are None).
+        creature_id: Stable identity string of the form "{run_id}-{seed}".
+            Assigned at insertion time by the driver. Stable across archive
+            rebuilds; used in ecosystem YAML, lineage links, and deep-link URLs.
+            Empty string on worker-side results before the driver assigns it.
+        descriptors: Raw behavioral descriptor triple, each value clipped to
+            [0, 100]. None if the rollout failed before descriptors could be
+            computed (e.g. mass collapsed to zero).
+        quality: Quality score in [0, 1], or None if rejected by a filter.
         rejection_reason: Short human-readable reason if quality is None.
-            Examples: "dead", "exploded", "unstable", "no_descriptors". None if
-            the rollout passed all filters.
-        thumbnail: 16-frame 32x32 grayscale animation for the dashboard atlas.
-            Shape (16, 32, 32), dtype uint8. Captures the rollout's final
-            stretch (steps T-15..T downsampled).
-        parent_cell: The 3D archive coordinate this rollout was mutated from,
-            or None if it came from the initial random phase.
-        created_at: Unix timestamp (seconds since epoch) when the result was
-            constructed on the worker. Used for events log ordering.
-        compute_seconds: Wall-clock time the rollout took on the worker, from
-            params-in to result-out. Used for the metrics tab and benchmarks.
+            Examples: "dead", "exploded", "unstable", "no_descriptors". None
+            if the rollout passed all filters.
+        thumbnail: Animation frames for the atlas. Shape (16, 32, 32), uint8.
+        parent_id: creature_id of the parent this rollout was mutated from,
+            or None if it came from the calibration or random phase.
+        created_at: Unix timestamp when the result was constructed on the
+            worker. Used for events log ordering.
+        compute_seconds: Wall-clock time the rollout took on the worker.
     """
 
     params: ParamDict
     seed: int
+    creature_id: str
     descriptors: Descriptors | None
     quality: float | None
     rejection_reason: str | None
     thumbnail: np.ndarray
-    parent_cell: CellCoord | None
+    parent_id: str | None
     created_at: float
     compute_seconds: float
 

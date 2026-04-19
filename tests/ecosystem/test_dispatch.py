@@ -44,15 +44,24 @@ def _synthetic_creature() -> RolloutResult:
         quality=0.8,
         rejection_reason=None,
         thumbnail=np.zeros((16, 32, 32), dtype=np.uint8),
-        parent_cell=None,
+        creature_id="",
+        parent_id=None,
         created_at=0.0,
         compute_seconds=1.0,
     )
 
 
-def _write_archive(root: Path, run_id: str, coords: tuple[int, int, int]) -> None:
-    arc = Archive()
-    arc._cells[coords] = _synthetic_creature()  # type: ignore[reportPrivateUsage]
+def _write_archive(root: Path, run_id: str, coords: tuple[int, int, int] | None = None) -> None:
+    arc = Archive(n_centroids=4, similarity_epsilon=0.0)
+    centroids = np.array(
+        [[0.3, 0.5, 0.6], [5.0, 5.0, 5.0], [8.0, 2.0, 8.0], [2.0, 8.0, 2.0]],
+        dtype=np.float64,
+    )
+    arc.attach_centroids(centroids)
+    from dataclasses import replace as _replace
+
+    creature = _replace(_synthetic_creature(), creature_id=f"{run_id}-0")
+    arc.try_insert(creature)
     run_dir = root / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
     with open(run_dir / "archive.pkl", "wb") as f:
@@ -63,7 +72,13 @@ def _experiment(name: str, archive_dir: Path, run_id: str) -> EcosystemConfig:
     return EcosystemConfig(
         name=name,
         sources=(
-            CreatureSource(archive_dir=str(archive_dir), run_id=run_id, coords=(5, 8, 3), n=2),
+            CreatureSource(
+                archive_dir=str(archive_dir),
+                run_id=run_id,
+                coords=None,
+                n=2,
+                creature_id=f"{run_id}-0",
+            ),
         ),
         grid_h=64,
         grid_w=64,
@@ -117,8 +132,8 @@ def test_run_experiments_parallel_local_ray_smoke() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         archive_dir = tmp / "archive"
-        _write_archive(archive_dir, "run-a", (5, 8, 3))
-        _write_archive(archive_dir, "run-b", (5, 8, 3))
+        _write_archive(archive_dir, "run-a")
+        _write_archive(archive_dir, "run-b")
 
         experiments = (
             _experiment("alpha", archive_dir, "run-a"),
@@ -170,7 +185,7 @@ def test_run_experiments_parallel_isolates_failure() -> None:
         tmp = Path(tmpdir)
         archive_dir = tmp / "archive"
         # Only run-a exists; run-b's load fails on the driver.
-        _write_archive(archive_dir, "run-a", (5, 8, 3))
+        _write_archive(archive_dir, "run-a")
 
         experiments = (
             _experiment("good", archive_dir, "run-a"),

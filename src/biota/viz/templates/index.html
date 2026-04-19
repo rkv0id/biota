@@ -491,11 +491,11 @@
             <div class="stat-row">
                 <div class="stat">
                     <div class="stat-label">archive capacity</div>
-                    <div class="stat-value">16,384 <span class="stat-unit">cells</span></div>
+                    <div class="stat-value">1,024 <span class="stat-unit">centroids</span></div>
                 </div>
                 <div class="stat">
-                    <div class="stat-label">grid shape</div>
-                    <div class="stat-value">32 &times; 32 &times; 16</div>
+                    <div class="stat-label">archive type</div>
+                    <div class="stat-value">CVT-MAP-Elites</div>
                 </div>
                 <div class="stat">
                     <div class="stat-label">descriptor library</div>
@@ -505,7 +505,7 @@
 
             <h2 id="sys-search">MAP-Elites search</h2>
             <p><a class="pill amber" href="https://arxiv.org/abs/1504.04909" target="_blank" style="display:inline;padding:2px 6px;border-radius:3px;font-size:inherit;">MAP-Elites</a> runs a loop: sample parameters, simulate a creature, measure its behavior, insert it into the matching archive cell if it beats whatever is already there. After thousands of rollouts the archive fills with creatures covering the behavioral space as broadly as possible — not optimizing toward one solution, but toward diversity.</p>
-            <p>The archive is a three-dimensional behavioral grid. Each axis holds one descriptor chosen from a library of eighteen, all normalized to [0, 1] and empirically calibrated against real cluster runs. Each cell holds the highest-quality creature found with that behavioral fingerprint.</p>
+            <p>The archive is a CVT-MAP-Elites archive. Before search begins, a calibration phase runs a small number of rollouts and fits k-means centroids to the observed descriptor distribution. Archive cells are Voronoi regions around those centroids — dense where creatures naturally live in behavioral space, sparse where they do not. Each cell holds the highest-quality creature found in its region.</p>
 
             <div class="diagram-frame">{{ svg_archive_grid | safe }}</div>
 
@@ -514,14 +514,14 @@
             <div class="diagram-frame">{{ svg_search_loop | safe }}</div>
 
             <h2 id="sys-quality">Quality metric</h2>
-            <p>Every rollout passes three hard filters before it can enter the archive. First, the conserved quantity (mass + signal for signal runs, mass alone otherwise) must stay within [0.5, 2.0] of its initial value — creatures that explode or die are rejected. Second, the mean bounding-box fraction over the trailing window must be below 0.6 — creatures that spread across the entire grid are rejected. Third, the three behavioral descriptors measured over adjacent 50-step windows must not drift by more than 0.2 in normalized units — creatures that are still changing shape or speed are rejected.</p>
-            <p>Survivors are ranked by a three-component quality score that creates genuine selection pressure within the viable population:</p>
+            <p>Every rollout passes three hard filters before it can enter the archive. First, the conserved quantity (mass + signal for signal runs, mass alone otherwise) must stay within [0.5, 2.0] of its initial value — creatures that explode or die are rejected. Second, the mean bounding-box fraction over the trailing window must be below 0.6 — creatures that spread across the entire grid are rejected. Third, the three behavioral descriptors measured over adjacent 50-step windows must not drift by more than 20% of the observed descriptor range — creatures that are still changing shape or speed are rejected.</p>
+            <p>Survivors are ranked by a quality score that creates genuine selection pressure within the viable population:</p>
             <div class="math-block">
                 <span class="eq-label">quality score (non-signal)</span>
                 <em>q</em> = 0.6 &middot; <span class="teal">compactness</span> + 0.4 &middot; <span class="amber">stability</span>
                 <br/>
                 <span class="eq-label" style="margin-top:10px;">quality score (signal)</span>
-                <em>q</em> = 0.5 &middot; <span class="teal">compactness</span> + 0.2 &middot; <span class="amber">stability</span> + 0.3 &middot; <span class="red">retention</span>
+                <em>q</em> = 0.5 &middot; <span class="teal">compactness</span> + 0.3 &middot; <span class="amber">stability</span> + 0.2 &middot; <span class="red">signal activity</span>
             </div>
             <div class="math-block">
                 <span class="eq-label">compactness &nbsp;&mdash;&nbsp; two-point minimum</span>
@@ -534,8 +534,8 @@
                 <br/>
                 <span class="dim">where</span>  drift = max descriptor change across adjacent 50-step windows
                 <br/><br/>
-                <span class="eq-label">retention &nbsp;&mdash;&nbsp; signal runs only</span>
-                <span class="red">retention</span> = clip( final_mass / initial_mass,  0,  1 )
+                <span class="eq-label">signal activity &nbsp;&mdash;&nbsp; signal runs only</span>
+                <span class="red">signal activity</span> = clip( final_signal_mass / initial_signal_mass,  0,  1 )
             </div>
             <p>The two-point compactness term is the key addition over a naive single-snapshot metric. Almost all viable Flow-Lenia solitons score above 0.95 compactness at the final step, making a single-point measurement nearly constant across the population and providing no selection pressure. By taking the minimum of the midpoint and final compactness, creatures that peak early and gradually become diffuse score below creatures that maintain their structure throughout — exactly the property that matters for long ecosystem runs.</p>
             <p>The stability term converts the binary persistent filter into a continuous reward: a creature that barely passes (drift = 0.19) scores near zero, while a rock-stable creature (drift = 0.01) scores near 1.0. This ensures the archive prioritises behaviorally consistent creatures over lucky borderline survivors.</p>
@@ -563,11 +563,11 @@
             </div>
             <p>One simulation step: (1) convolve mass to get growth G(H,W); (2) convolve signal field with signal kernel; (3) compute reception: <code>dot(convolved_signal, receptor_profile)</code> — negative receptor weights are inhibitory; (4) apply <code>alpha_coupling</code>: <code>G &times; (1 + &alpha; &times; reception)</code> clamped to [0,&infin;) — positive &alpha; amplifies growth where signal is favorable, including inside other species’ territory (the cross-species predation pathway); negative &alpha; is chemorepulsion; (5) modulate emission rate via <code>beta_modulation</code>: <code>rate &times; (1 + &beta; &times; mean(reception))</code> — positive &beta; = quorum sensing, negative &beta; = feedback inhibition; (6) emit <code>G&sup+ &times; rate_eff &times; emission_vector</code>, draining mass into signal field; (7) reintegrate mass via Flow-Lenia advection; (8) decay signal per-channel at <code>decay_rates</code>. Total conserved: mass + signal.</p>
             <div class="diagram-frame">{{ svg_signal_field | safe }}</div>
-            <p>Searches with <code>--signal-field</code> automatically use 800 steps (vs 500 for standard) so emission and reception dynamics have time to build meaningful gradients. The quality metric gains a retention term: <code>clip(final_mass / initial_mass, 0, 1)</code> weighted at 0.2, penalising creatures that bleed all their mass into the signal field. A creature mass floor of 0.2 × initial_mass is enforced as a hard filter. In ecosystem runs, all species share one signal field: each species emits and decays by its own parameters, ownership-weighted. Signal archives and non-signal archives cannot be mixed in a single ecosystem run.</p>
+            <p>Searches with <code>--signal-field</code> automatically use 800 steps (vs 500 for standard) so emission and reception dynamics have time to build meaningful gradients. The quality metric gains a signal activity term: <code>clip(final_signal_mass / initial_signal_mass, 0, 1)</code> weighted at 0.2, rewarding creatures that maintain or build up signal mass rather than letting the background field decay. A creature mass floor of 0.2 × initial_mass is enforced as a hard filter. In ecosystem runs, all species share one signal field: each species emits and decays by its own parameters, ownership-weighted. Signal archives and non-signal archives cannot be mixed in a single ecosystem run.</p>
             <p>The ecosystem viewer exposes signal-specific observables: total signal mass history, signal mass fraction per step (signal / (mass + signal)), receptor alignment per species per snapshot (dot(receptor_profile, mean signal received in territory)), and an emission-reception compatibility matrix (dot(emission_vector[i], receptor_profile[j])) showing which species pairs have chemically compatible signal profiles.</p>
 
             <h2 id="sys-descriptors">Behavioral descriptors</h2>
-            <p>Three scalars measured from each rollout index the archive's three axes. The active set is chosen per run — any three from the built-in library of fifteen.</p>
+            <p>Three scalars measured from each rollout index the archive's three axes. The active set is chosen per run — any three from the built-in library of eighteen (15 general + 3 signal-only).</p>
             <div class="descriptor-grid">
                 <div class="descriptor-card">
                     <div class="descriptor-name">velocity</div>
@@ -630,16 +630,16 @@
                     <div class="descriptor-desc">Shannon entropy of mass distribution over a coarse spatial grid. Low = compact localized mass, high = diffuse or multi-body spread.</div>
                 </div>
                 <div class="descriptor-card" style="border-color:rgba(60,220,200,0.2);">
-                    <div class="descriptor-name" style="color:#3cdcc8;">emission activity <span style="font-size:9px;padding:1px 5px;border-radius:6px;background:rgba(60,220,200,0.1);border:1px solid rgba(60,220,200,0.2);margin-left:6px;letter-spacing:0.05em;">signal only</span></div>
-                    <div class="descriptor-desc">Mean positive-growth emission activity over the trace tail, normalized to [0,&thinsp;1]. Measures how much signal the creature actually emits dynamically &mdash; a creature with high emission_rate but low growth activity barely emits. Zero for non-signal rollouts.</div>
+                    <div class="descriptor-name" style="color:#3cdcc8;">signal field variance <span style="font-size:9px;padding:1px 5px;border-radius:6px;background:rgba(60,220,200,0.1);border:1px solid rgba(60,220,200,0.2);margin-left:6px;letter-spacing:0.05em;">signal only</span></div>
+                    <div class="descriptor-desc">Spatial variance of the total signal field (summed across channels) at the end of the rollout. High = signal is concentrated and localized near the creature body. Low = diffused evenly or barely accumulated. Captures the creature&rsquo;s chemical footprint structure. Zero for non-signal rollouts.</div>
                 </div>
                 <div class="descriptor-card" style="border-color:rgba(60,220,200,0.2);">
-                    <div class="descriptor-name" style="color:#3cdcc8;">receptor sensitivity <span style="font-size:9px;padding:1px 5px;border-radius:6px;background:rgba(60,220,200,0.1);border:1px solid rgba(60,220,200,0.2);margin-left:6px;letter-spacing:0.05em;">signal only</span></div>
-                    <div class="descriptor-desc">Mean absolute reception response |dot(convolved_signal, receptor_profile)| over the trace tail, normalized to [0,&thinsp;1]. Measures chemical responsiveness: how strongly the creature reacted to its chemical environment. Zero for non-signal rollouts.</div>
+                    <div class="descriptor-name" style="color:#3cdcc8;">signal mass ratio <span style="font-size:9px;padding:1px 5px;border-radius:6px;background:rgba(60,220,200,0.1);border:1px solid rgba(60,220,200,0.2);margin-left:6px;letter-spacing:0.05em;">signal only</span></div>
+                    <div class="descriptor-desc">Final signal field mass divided by initial signal mass. Measures how much chemical substance has accumulated relative to the background field. A pure listener scores near 1 (field unchanged); a broadcaster scores high (field built up). Zero for non-signal rollouts.</div>
                 </div>
                 <div class="descriptor-card" style="border-color:rgba(60,220,200,0.2);">
-                    <div class="descriptor-name" style="color:#3cdcc8;">signal retention <span style="font-size:9px;padding:1px 5px;border-radius:6px;background:rgba(60,220,200,0.1);border:1px solid rgba(60,220,200,0.2);margin-left:6px;letter-spacing:0.05em;">signal only</span></div>
-                    <div class="descriptor-desc">final_mass / initial_mass, clipped to [0,&thinsp;1]. High = chemically conservative emitter that retains its mass. Low = aggressive broadcaster. Partitions the archive along an ecological role axis: broadcaster vs listener vs predator candidate (high emission + high sensitivity + high &alpha;). Returns 1.0 for non-signal rollouts.</div>
+                    <div class="descriptor-name" style="color:#3cdcc8;">dominant channel fraction <span style="font-size:9px;padding:1px 5px;border-radius:6px;background:rgba(60,220,200,0.1);border:1px solid rgba(60,220,200,0.2);margin-left:6px;letter-spacing:0.05em;">signal only</span></div>
+                    <div class="descriptor-desc">Fraction of total signal mass carried by the channel with the highest accumulation. High = chemical specialist (strongly emits one channel). Low = generalist (spreads evenly across channels). Captures the effective emission_vector direction. Returns 1/C for non-signal rollouts.</div>
                 </div>
             </div>
         </div>
@@ -719,9 +719,10 @@
             {% for card in eco_cards %}
             <a class="run-card" href="ecosystem/{{ card.run_id }}/view.html">
                 <div class="card-body" style="padding-top:16px">
-                    <div class="card-id">
-                        {{ card.run_id }}
-                        {% if card.mode == "heterogeneous" %}<span style="margin-left:8px;font-size:9px;letter-spacing:0.05em;text-transform:uppercase;padding:1px 6px;border-radius:8px;background:rgba(192,132,252,0.1);color:#c084fc;border:1px solid rgba(192,132,252,0.25)">het</span>{% endif %}{% if card.has_signal %}<span style="margin-left:6px;font-size:9px;letter-spacing:0.05em;text-transform:uppercase;padding:1px 6px;border-radius:8px;background:rgba(60,220,200,0.1);color:#3cdcc8;border:1px solid rgba(60,220,200,0.25)">signal</span>{% endif %}
+                    <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:6px;">
+                        <div class="card-id" style="margin:0">{{ card.run_id }}</div>
+                        {% if card.mode == "heterogeneous" %}<span style="white-space:nowrap;font-size:9px;letter-spacing:0.05em;text-transform:uppercase;padding:1px 6px;border-radius:8px;background:rgba(192,132,252,0.1);color:#c084fc;border:1px solid rgba(192,132,252,0.25)">het</span>{% endif %}{% if card.has_signal %}<span style="white-space:nowrap;font-size:9px;letter-spacing:0.05em;text-transform:uppercase;padding:1px 6px;border-radius:8px;background:rgba(60,220,200,0.1);color:#3cdcc8;border:1px solid rgba(60,220,200,0.25)">signal</span>{% endif %}
+                        {% if card.outcome_label %}<span style="white-space:nowrap;font-size:9px;letter-spacing:0.05em;text-transform:uppercase;padding:1px 6px;border-radius:8px;background:rgba(255,255,255,0.04);color:#71717a;border:1px solid rgba(255,255,255,0.08)">{{ card.outcome_label }}</span>{% endif %}
                     </div>
                     <div class="card-stats">
                         <span class="card-stat"><span class="card-stat-v">{{ card.n_creatures }}</span> creatures</span>
@@ -733,18 +734,18 @@
                         <span class="card-stat"><span class="card-stat-v">{{ card.grid_h }}x{{ card.grid_w }}</span> grid</span>
                         <span class="card-sep">&middot;</span>
                         <span class="card-stat"><span class="card-stat-v">{{ card.steps }}</span> steps</span>
+                        <span class="card-sep">&middot;</span>
+                        <span class="card-stat">{{ card.elapsed }}</span>
                     </div>
-                    <div class="card-rollouts">{{ card.elapsed }}</div>
-                    <div class="card-config">
+                    <div class="card-config" style="margin-top:4px;">
                         {% if card.n_sources > 1 %}
                         <span class="card-cfg-item">{{ card.n_sources }} archives</span>
                         {% else %}
                         <span class="card-cfg-item">{{ card.source_run_id }}</span>
-                        <span class="card-cfg-item">cell {{ card.source_coords | join(',') }}</span>
                         {% endif %}
                         {% if card.border and card.border != "wall" %}<span class="card-cfg-item" style="color:#fbbf77">{{ card.border }}</span>{% endif %}
+                        <span class="card-cfg-item">mass turnover {{ card.mass_turnover }}%/step</span>
                     </div>
-                    <div class="card-descriptors">mass turnover {{ card.mass_turnover }}%/step{% if card.outcome_label %} &middot; {{ card.outcome_label }}{% endif %}</div>
                 </div>
             </a>
             {% endfor %}
@@ -823,7 +824,7 @@
 <span class="cmd">    --signal-field</span></pre>
 
             <h2>Choosing descriptors</h2>
-            <p>Pass <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">--descriptors</code> with three comma-separated names to control which behavioral axes the archive uses. With 18 built-ins (15 general + 3 signal-only) there are 816 possible configurations. You can also supply your own via <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">--descriptor-module path/to/file.py</code> — the file must define a list named <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">DESCRIPTORS</code> containing <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">Descriptor</code> objects.</p>
+            <p>Pass <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">--descriptors</code> with three comma-separated names to control which behavioral axes the archive uses. With 18 built-ins (15 general + 3 signal-only) there are 816 possible three-axis configurations. You can also supply your own via <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">--descriptor-module path/to/file.py</code> — the file must define a list named <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">DESCRIPTORS</code> containing <code style="font-family:monospace;font-size:12px;color:#e4e4e7;">Descriptor</code> objects.</p>
             <pre class="code-block"><span class="comment"># Default axes</span>
 <span class="cmd">uv run biota search --descriptors velocity,gyradius,spectral_entropy</span>
 
@@ -843,7 +844,7 @@ experiments:
     spawn: {seed: 42, min_dist: 80, patch: 48}
     sources:
       - run: &lt;your-run-id&gt;
-        cell: [5, 23, 13]
+        creature_id: &lt;your-creature-id&gt;
         n: 4
 
   - name: two-species
@@ -855,10 +856,10 @@ experiments:
     spawn: {seed: 42, min_dist: 100, patch: 48}
     sources:
       - run: &lt;your-run-id&gt;
-        cell: [5, 23, 13]
+        creature_id: &lt;your-creature-id&gt;
         n: 2
       - run: &lt;your-run-id&gt;
-        cell: [9, 14, 11]
+        creature_id: &lt;another-creature-id&gt;
         n: 2</pre>
             <pre class="code-block"><span class="comment"># Run experiments, then rebuild the atlas to include ecosystem results</span>
 <span class="cmd">biota ecosystem --config experiments.yaml --device cuda</span>

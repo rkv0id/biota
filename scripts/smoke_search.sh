@@ -21,6 +21,8 @@
 #   SMOKE_BATCH_SIZE    defaults to 4 (cpu) or 16 (mps/cuda)
 #   SMOKE_WORKERS       defaults to 4 (local) or 3 (cluster); ignored for noray
 #   SMOKE_BUDGET        defaults to 20 (noray/local) or 30 (cluster)
+#   SMOKE_CALIBRATION   defaults to 5 (calibration is off-budget but still costs time;
+#                       5 rollouts is enough to fit centroids for a smoke test)
 #   SMOKE_SIGNAL_FIELD  if set to '1', passes --signal-field to biota search
 #
 # All venv lives under /tmp and is cleaned up on exit.
@@ -71,6 +73,8 @@ if [ -z "${SMOKE_BUDGET:-}" ]; then
 fi
 # Random-phase ~25% of budget, matching pre-extraction recipes.
 SMOKE_RANDOM_PHASE=$((SMOKE_BUDGET / 4))
+# Calibration: tiny for smoke tests (just enough to fit centroids).
+SMOKE_CALIBRATION="${SMOKE_CALIBRATION:-5}"
 
 # Build transport-specific args.
 TRANSPORT_ARGS=()
@@ -110,6 +114,7 @@ fi
 cd /tmp && ${ENV_ARGS[@]+"${ENV_ARGS[@]}"} "$SMOKE_VENV/bin/biota" search \
     --preset dev \
     --budget "$SMOKE_BUDGET" --random-phase "$SMOKE_RANDOM_PHASE" \
+    --calibration "$SMOKE_CALIBRATION" \
     --device "$SMOKE_DEVICE" --batch-size "$SMOKE_BATCH_SIZE" \
     --grid 32 --steps 110 \
     ${TRANSPORT_ARGS[@]+"${TRANSPORT_ARGS[@]}"} \

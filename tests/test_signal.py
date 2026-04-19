@@ -201,11 +201,12 @@ def test_alive_filter_passes_with_signal_mass_conservation() -> None:
         initial_mass=initial_mass,
         final_mass=70.0,
         trace=trace,
-        initial_total=initial_mass + initial_signal,
+        initial_total=initial_mass,
         final_signal_mass=30.5,
+        initial_signal_mass=initial_signal,
     )
     result = evaluate(eval_input)
-    # Should not be rejected as "dead" -- total mass 70 + 30.5 = 100.5, within [0.5, 2.0] * 100.5
+    # Should not be rejected as "dead" -- final_mass 70 >= 0.5 * initial_mass 100
     assert result.rejection_reason != "dead"
 
 
@@ -254,24 +255,26 @@ def test_alive_filter_signal_creature_mass_floor_is_stricter() -> None:
     assert result.rejection_reason == "dead"
 
 
-def test_signal_retention_boosts_quality() -> None:
-    """Creatures that retain mass score higher than those that bleed it into signal."""
+def test_signal_activity_boosts_quality() -> None:
+    """Creatures that maintain signal mass score higher than those that let it decay."""
     trace = _minimal_trace()
-    # High retention: kept almost all mass
+    # High signal activity: final signal close to initial
     high = RolloutEvaluation(
         initial_mass=100.0,
-        final_mass=98.0,
+        final_mass=95.0,
         trace=trace,
         initial_total=100.0,
-        final_signal_mass=0.1,
+        initial_signal_mass=10.0,
+        final_signal_mass=9.0,  # retained 90% of signal
     )
-    # Low retention: lost 40% to signal (but total still conserved)
+    # Low signal activity: signal decayed away
     low = RolloutEvaluation(
         initial_mass=100.0,
-        final_mass=60.0,
+        final_mass=99.0,
         trace=trace,
         initial_total=100.0,
-        final_signal_mass=40.0,
+        initial_signal_mass=10.0,
+        final_signal_mass=0.5,  # only 5% of signal remains
     )
     r_high = evaluate(high)
     r_low = evaluate(low)
@@ -437,7 +440,8 @@ def _make_rollout_result(signal: bool) -> RolloutResult:
         quality=0.8,
         rejection_reason=None,
         thumbnail=np.zeros((16, 32, 32), dtype=np.uint8),
-        parent_cell=None,
+        creature_id="",
+        parent_id=None,
         created_at=0.0,
         compute_seconds=1.0,
     )

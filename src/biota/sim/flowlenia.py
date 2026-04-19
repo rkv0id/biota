@@ -30,6 +30,78 @@ import torch.nn.functional as F
 SIGNAL_CHANNELS = 16
 
 
+def build_signal_kernel_fft(
+    R: float,
+    signal_kernel_r: float,
+    signal_kernel_a: torch.Tensor,
+    signal_kernel_b: torch.Tensor,
+    signal_kernel_w: torch.Tensor,
+    grid_h: int,
+    grid_w: int,
+    device: str = "cpu",
+) -> torch.Tensor:
+    """Build the (H, W) complex signal convolution kernel FFT.
+
+    Public function so rollout_batch can build kernels for a batch of param
+    sets without constructing a full FlowLenia instance per creature.
+    Same formula as FlowLenia._build_signal_kernel_fft.
+    """
+    mid_h = grid_h // 2
+    mid_w = grid_w // 2
+    coords_y = torch.arange(-mid_h, mid_h, device=device, dtype=torch.float32)
+    coords_x = torch.arange(-mid_w, mid_w, device=device, dtype=torch.float32)
+    yy, xx = torch.meshgrid(coords_y, coords_x, indexing="ij")
+    radius = torch.sqrt(xx**2 + yy**2)
+
+    scale = (R + 15.0) * signal_kernel_r
+    D = radius / max(scale, 1e-6)
+    mask = torch.sigmoid(-(D - 1.0) * 10.0)
+
+    a = signal_kernel_a.to(device).view(1, 1, 3)
+    b_ring = signal_kernel_b.to(device).view(1, 1, 3)
+    w_ring = signal_kernel_w.to(device).view(1, 1, 3)
+    D3 = D.unsqueeze(-1)
+    ring = (b_ring * torch.exp(-((D3 - a) ** 2) / w_ring)).sum(dim=-1)
+
+    K = mask * ring
+    total = K.sum()
+    nK = K / total if total > 0 else K
+    nK_shifted = torch.fft.fftshift(nK)
+    return torch.fft.fft2(nK_shifted)
+
+
+def make_signal_fields_batch(
+    seeds: list[int],
+    grid_h: int,
+    grid_w: int,
+    device: str = "cpu",
+) -> torch.Tensor:
+    """Build (B, H, W, C) initial signal fields for B creatures in one pass.
+
+    Same per-element field as FlowLenia.make_initial_signal_field but batched:
+    generates all B fields using their respective seeds, stacked to (B, H, W, C).
+    Avoids B separate torch.Generator instances by generating the full noise
+    array and then applying the seed-based offset pattern.
+    """
+    H, W = grid_h, grid_w
+    fields: list[torch.Tensor] = []
+    for seed in seeds:
+        rng = torch.Generator(device=device)
+        rng.manual_seed(seed)
+        noise = torch.randn(SIGNAL_CHANNELS, H, W, generator=rng, device=device)
+        noise_fft = torch.fft.fft2(noise)
+        freq_h = torch.fft.fftfreq(H, device=device).abs()
+        freq_w = torch.fft.fftfreq(W, device=device).abs()
+        fh, fw = torch.meshgrid(freq_h, freq_w, indexing="ij")
+        freq_mag = torch.sqrt(fh**2 + fw**2)
+        lowpass = (freq_mag < 0.2).float()
+        filtered = torch.fft.ifft2(noise_fft * lowpass.unsqueeze(0)).real
+        mean_abs = filtered.abs().mean(dim=(1, 2), keepdim=True).clamp(min=1e-8)
+        field = (filtered / mean_abs * 0.01).clamp(min=0.0)
+        fields.append(field.permute(1, 2, 0))  # (H, W, C)
+    return torch.stack(fields, dim=0)  # (B, H, W, C)
+
+
 @dataclass(frozen=True)
 class Config:
     grid_h: int = 96
@@ -127,6 +199,29 @@ class FlowLenia:
         )
         self._sobel_kx, self._sobel_ky = self._build_sobel_kernels()
         self._pos = self._build_position_grid()
+
+    @property
+    def mass_kernels_fft(self) -> torch.Tensor:
+        """(K, H, W) complex mass convolution kernels in frequency domain."""
+        return self._fK
+
+    @property
+    def decay(self) -> torch.Tensor:
+        """(C,) per-channel signal decay rates."""
+        return self._decay
+
+    def signal_tensors(self) -> tuple[torch.Tensor, torch.Tensor] | None:
+        """Return (fK_signal, decay) for external batched signal stepping.
+
+        Returns None when this instance has no signal field.
+        fK_signal: (H, W) complex -- signal convolution kernel in freq domain.
+        Single kernel shared across all C channels; channels are differentiated
+        by the receptor dot product and emission vector, not the kernel.
+        decay:     (C,) float -- per-channel decay rates.
+        """
+        if self._fK_signal is None:
+            return None
+        return self._fK_signal, self._decay
 
     def make_initial_signal_field(self, seed: int = 0) -> torch.Tensor:
         """Build a spatially varied (H, W, C) float32 signal field background.
@@ -300,8 +395,9 @@ class FlowLenia:
             convolved = torch.fft.ifft2(self._fK_signal * fSig).real
             receptor_response = (convolved * self.params.receptor_profile.view(-1, 1, 1)).sum(dim=0)
 
-            # receptor_sensitivity: mean absolute reception response over the grid
-            receptor_sensitivity_scalar = float(receptor_response.abs().mean().item())
+            # receptor_sensitivity: sum of absolute reception response over the grid.
+            # sum() avoids dilution by empty cells.
+            receptor_sensitivity_scalar = float(receptor_response.abs().sum().item())
 
             alpha_c = self.params.alpha_coupling if self.params.alpha_coupling is not None else 0.0
             if alpha_c != 0.0:
@@ -319,8 +415,11 @@ class FlowLenia:
             else:
                 effective_rate = base_rate
 
-            # emission_activity: mean(G_pos * effective_rate) -- actual emission per cell
-            emission_activity_scalar = float((G_pos * effective_rate).mean().item())
+            # emission_activity: sum(G_pos * effective_rate) over the grid.
+            # sum() rather than mean() avoids dilution by empty cells, which
+            # makes the value proportional to actual creature output regardless
+            # of grid size (dev vs standard vs pretty).
+            emission_activity_scalar = float((G_pos * effective_rate).sum().item())
 
             emitted = G_pos * effective_rate
             emitted = torch.minimum(emitted, A2.clamp(min=0.0))

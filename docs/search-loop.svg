@@ -21,7 +21,7 @@
   <!-- Archive box -->
   <rect x="44" y="48" width="172" height="104" rx="6" fill="#1f1a0e" stroke="#ba7517" stroke-width="0.5"/>
   <text class="th" x="130" y="82" text-anchor="middle" dominant-baseline="central">MAP-Elites archive</text>
-  <text class="ts" x="130" y="102" text-anchor="middle" dominant-baseline="central">32 × 32 × 16 cells</text>
+  <text class="ts" x="130" y="102" text-anchor="middle" dominant-baseline="central">1,024 CVT centroids</text>
   <text class="tsa" x="130" y="120" text-anchor="middle" dominant-baseline="central">velocity · gyradius · spectral</text>
   <text class="tsa" x="130" y="136" text-anchor="middle" dominant-baseline="central">one best creature per cell</text>
 

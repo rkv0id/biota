@@ -41,7 +41,7 @@ class SessionSearch(TypedDict):
 
 
 def _cheap_config(budget: int = 10, random_phase_size: int = 5, **kwargs: Any) -> SearchConfig:
-    defaults: dict[str, Any] = {"batch_size": 1, "workers": 1}
+    defaults: dict[str, Any] = {"batch_size": 1, "workers": 1, "calibration": 5, "centroids": 16}
     defaults.update(kwargs)
     return SearchConfig(
         rollout=RolloutConfig(sim=SimConfig(grid_h=32, grid_w=32, kernels=10), steps=110),
@@ -153,12 +153,12 @@ def test_search_emits_checkpoint_events(session_search: SessionSearch) -> None:
 # === phase transitions ===
 
 
-def test_random_phase_results_have_no_parent_cell(session_search: SessionSearch) -> None:
+def test_random_phase_results_have_no_parent_id(session_search: SessionSearch) -> None:
     events = session_search["events"]
     completed = [e for e in events if isinstance(e, RolloutCompleted)]
     sorted_by_seed = sorted(completed, key=lambda e: e.result.seed)
     for event in sorted_by_seed[:5]:
-        assert event.result.parent_cell is None
+        assert event.result.parent_id is None
 
 
 def test_mutation_phase_runs_to_completion(session_search: SessionSearch) -> None:
@@ -226,7 +226,7 @@ def test_signal_only_descriptor_without_signal_field_raises() -> None:
     cfg = _cheap_config(
         budget=5,
         random_phase_size=5,
-        descriptor_names=("emission_activity", "gyradius", "spectral_entropy"),
+        descriptor_names=("signal_field_variance", "gyradius", "spectral_entropy"),
         signal_field=False,
     )
     import tempfile
@@ -240,7 +240,7 @@ def test_signal_only_descriptor_with_signal_field_does_not_raise() -> None:
     cfg = _cheap_config(
         budget=5,
         random_phase_size=5,
-        descriptor_names=("emission_activity", "gyradius", "spectral_entropy"),
+        descriptor_names=("signal_field_variance", "gyradius", "spectral_entropy"),
         signal_field=True,
     )
     import tempfile

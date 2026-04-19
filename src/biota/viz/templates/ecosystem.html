@@ -751,7 +751,7 @@
                 <span class="source-label">source:</span>
                 <a class="source-link" href="../../archive/{{ sources[0].run_id }}/view.html">{{ sources[0].run_id }}</a>
                 <span class="meta-sep">&middot;</span>
-                <a class="source-link" href="../../archive/{{ sources[0].run_id }}/view.html#cell-{{ sources[0].coords_hash }}">cell {{ sources[0].coords_str }}</a>
+                <a class="source-link" href="../../archive/{{ sources[0].run_id }}/view.html#{{ sources[0].coords_hash }}">{{ sources[0].coords_str }}</a>
                 <span class="meta-sep">&middot;</span>
                 spawn min-dist {{ min_dist }}px
             </div>
@@ -760,7 +760,7 @@
             source:
             <a class="source-link" href="../../archive/{{ source_run_id }}/view.html">{{ source_run_id }}</a>
             <span class="meta-sep">&middot;</span>
-            <a class="source-link" href="../../archive/{{ source_run_id }}/view.html#cell-{{ source_coords_hash }}">cell {{ source_coords }}</a>
+            <a class="source-link" href="../../archive/{{ source_run_id }}/view.html#{{ source_coords_hash }}">{{ source_coords }}</a>
             <span class="meta-sep">&middot;</span>
             spawn min-dist {{ min_dist }}px
             {% endif %}
@@ -789,7 +789,7 @@
                 {% endif %}
                 <a class="source-entry-id" href="../../archive/{{ src.run_id }}/view.html">{{ src.run_id }}</a>
                 <div class="source-entry-cell">
-                    <a href="../../archive/{{ src.run_id }}/view.html#cell-{{ src.coords_hash }}">cell {{ src.coords_str }}</a>
+                    <a href="../../archive/{{ src.run_id }}/view.html#{{ src.coords_hash }}">{{ src.coords_str }}</a>
                 </div>
                 <div class="source-entry-meta">{{ src.n }} creature{{ 's' if src.n != 1 else '' }}</div>
             </div>
@@ -835,9 +835,9 @@
             <div class="meta-section-title" style="margin-top: 20px;">species mass</div>
             <div class="species-legend">
                 {% for src in sources %}
-                <span class="species-legend-item" title="{{ src.run_id }} cell {{ src.cell }}">
+                <span class="species-legend-item" title="{{ src.run_id }} {{ src.coords_str }}">
                     <span class="species-swatch" style="background: {{ species_palette[loop.index0] }};"></span>
-                    <span class="species-legend-name">s{{ loop.index }} {{ src.cell }}</span>
+                    <span class="species-legend-name">s{{ loop.index }} {{ src.coords_str }}</span>
                 </span>
                 {% endfor %}
             </div>
@@ -890,24 +890,12 @@
         {% if n_species > 1 and interaction_coefficients %}
         <div class="meta-section">
             <div class="meta-section-title">interaction coefficients</div>
-            <div class="interaction-heatmap-wrap">
-                <canvas id="interactionHeatmap" class="interaction-heatmap-canvas"></canvas>
+            <div style="font-size:9px;color:#71717a;margin-bottom:8px;">row A, col B: effect of B on A&#x2019;s growth</div>
+            <div id="interactionTable"></div>            <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;">
+                <span style="display:flex;align-items:center;gap:4px;font-size:9px;color:#71717a;"><span style="width:10px;height:10px;border-radius:2px;background:rgba(60,220,200,0.25);flex-shrink:0;"></span>mutualism</span>
+                <span style="display:flex;align-items:center;gap:4px;font-size:9px;color:#71717a;"><span style="width:10px;height:10px;border-radius:2px;background:rgba(248,113,113,0.25);flex-shrink:0;"></span>competition</span>
+                <span style="display:flex;align-items:center;gap:4px;font-size:9px;color:#71717a;"><span style="width:10px;height:10px;border-radius:2px;background:rgba(255,255,255,0.06);flex-shrink:0;"></span>neutral / no contact</span>
             </div>
-            <div class="interaction-legend">
-                <span class="interaction-legend-item">
-                    <span class="interaction-legend-swatch" style="background:#3cdcc8;"></span>
-                    mutualism
-                </span>
-                <span class="interaction-legend-item">
-                    <span class="interaction-legend-swatch" style="background:#ff6464;"></span>
-                    competition
-                </span>
-                <span class="interaction-legend-item">
-                    <span class="interaction-legend-swatch" style="background:#3f3f46;"></span>
-                    neutral
-                </span>
-            </div>
-            <div style="font-size:9px;color:#52525b;margin-top:6px;">row A, col B: effect of B on A's growth</div>
         </div>
         {% endif %}
 
@@ -934,9 +922,11 @@
             {% endif %}
             {% if n_species > 1 and emission_reception_matrix_json != "[]" %}
             <div class="meta-section-title" style="margin-top:16px;">emission-reception compatibility</div>
-            <div style="font-size:9px;color:#71717a;margin-bottom:6px;">dot(emission[i], receptor[j]) — positive: species i's signal benefits species j</div>
-            <div class="interaction-heatmap-wrap">
-                <canvas id="emissionReceptionHeatmap" class="interaction-heatmap-canvas"></canvas>
+            <div style="font-size:9px;color:#71717a;margin-bottom:8px;">dot(emission[i], receptor[j]) — positive: i&#x2019;s signal chemically benefits j</div>
+            <div id="emitRecepTable"></div>            <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;">
+                <span style="display:flex;align-items:center;gap:4px;font-size:9px;color:#71717a;"><span style="width:10px;height:10px;border-radius:2px;background:rgba(60,220,200,0.25);flex-shrink:0;"></span>chemotaxis</span>
+                <span style="display:flex;align-items:center;gap:4px;font-size:9px;color:#71717a;"><span style="width:10px;height:10px;border-radius:2px;background:rgba(248,113,113,0.25);flex-shrink:0;"></span>chemorepulsion</span>
+                <span style="display:flex;align-items:center;gap:4px;font-size:9px;color:#71717a;"><span style="width:10px;height:10px;border-radius:2px;background:rgba(255,255,255,0.06);flex-shrink:0;"></span>incompatible</span>
             </div>
             {% endif %}
         </div>
@@ -1330,93 +1320,42 @@
         var coeff = {{ interaction_coefficients | tojson }};
         var contact = {{ contact_occurred_json | safe }};
         var palette = {{ species_palette | tojson }};
-        var canvas = document.getElementById('interactionHeatmap');
-        if (!canvas) return;
-
+        var wrap = document.getElementById('interactionTable');
+        if (!wrap) return;
         var S = coeff.length;
-        var labelH = 18;
-        // offsetWidth is the actual rendered CSS width of the canvas element,
-        // which CSS has already sized to 100% of the block container. This is
-        // reliable at rAF time on all viewport sizes without any DOM walking.
-        var availW = canvas.offsetWidth || 260;
-        var cellPx = Math.floor((availW - labelH) / S);
-        var totalW = S * cellPx + labelH;
-        var totalH = S * cellPx + labelH;
-
-        var dpr = window.devicePixelRatio || 1;
-        canvas.width = totalW * dpr;
-        canvas.height = totalH * dpr;
-        canvas.style.height = totalH + 'px';
-
-        var ctx = canvas.getContext('2d');
-        ctx.scale(dpr, dpr);
-
-        // Find max absolute coefficient for color scaling (ignoring NaN).
         var maxAbs = 0;
-        for (var r = 0; r < S; r++) {
-            for (var c = 0; c < S; c++) {
-                var v = coeff[r][c];
-                if (!isNaN(v)) maxAbs = Math.max(maxAbs, Math.abs(v));
-            }
-        }
+        for (var r = 0; r < S; r++)
+            for (var c = 0; c < S; c++)
+                if (!isNaN(coeff[r][c])) maxAbs = Math.max(maxAbs, Math.abs(coeff[r][c]));
         if (maxAbs < 1e-8) maxAbs = 1;
 
-        function coeffColor(v, noContact) {
-            if (isNaN(v)) return noContact ? 'rgba(30,30,35,0.8)' : 'rgba(63,63,70,0.5)';
-
-            var t = v / maxAbs;  // [-1, 1]
-            if (t > 0) {
-                // Positive: neutral dark to teal (#3cdcc8)
-                var r = Math.round(26 + t * (60 - 26));
-                var g = Math.round(26 + t * (220 - 26));
-                var b = Math.round(31 + t * (200 - 31));
-                return 'rgb(' + r + ',' + g + ',' + b + ')';
-            } else {
-                // Negative: neutral dark to red (#ff6464)
-                var ta = -t;
-                var r2 = Math.round(26 + ta * (255 - 26));
-                var g2 = Math.round(26 + ta * (100 - 26));
-                var b2 = Math.round(31 + ta * (100 - 31));
-                return 'rgb(' + r2 + ',' + g2 + ',' + b2 + ')';
-            }
-        }
-
-        for (var row = 0; row < S; row++) {
-            for (var col = 0; col < S; col++) {
-                var val = coeff[row][col];
-                var noContact = contact.length > row && contact[row].length > col && !contact[row][col];
-                ctx.fillStyle = coeffColor(val, noContact);
-                ctx.fillRect(labelH + col * cellPx, row * cellPx, cellPx, cellPx);
-                ctx.strokeStyle = 'rgba(8,9,11,0.6)';
-                ctx.lineWidth = 1;
-                ctx.strokeRect(labelH + col * cellPx + 0.5, row * cellPx + 0.5, cellPx - 1, cellPx - 1);
-                if (cellPx >= 36) {
-                    ctx.font = '9px -apple-system, BlinkMacSystemFont, sans-serif';
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-                    var cx = labelH + col * cellPx + cellPx / 2;
-                    var cy = row * cellPx + cellPx / 2;
-                    if (!isNaN(val)) {
-                        ctx.fillStyle = Math.abs(val / maxAbs) > 0.4 ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.5)';
-                        ctx.fillText(val.toFixed(2), cx, cy);
-                    } else if (noContact) {
-                        ctx.fillStyle = 'rgba(82,82,91,0.8)';
-                        ctx.fillText('no contact', cx, cy);
-                    }
-                }
-            }
-        }
-
-        // Axis labels colored by species palette
-        ctx.font = '9px -apple-system, BlinkMacSystemFont, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
+        var tbl = '<table style="border-collapse:collapse;font-size:11px;width:100%"><thead><tr>';
+        tbl += '<th style="padding:4px 6px;font-size:10px;border:1px solid rgba(255,255,255,0.05);"></th>';
+        for (var j = 0; j < S; j++)
+            tbl += '<th style="padding:4px 8px;color:' + (palette[j]||'#a1a1aa') + ';font-weight:500;font-size:10px;text-align:center;border:1px solid rgba(255,255,255,0.05);">s' + (j+1) + '</th>';
+        tbl += '</tr></thead><tbody>';
         for (var i = 0; i < S; i++) {
-            ctx.fillStyle = palette[i % palette.length];
-            ctx.fillText('s' + (i + 1), labelH + i * cellPx + cellPx / 2, S * cellPx + labelH / 2);
-            ctx.fillText('s' + (i + 1), labelH / 2, i * cellPx + cellPx / 2);
+            tbl += '<tr><td style="padding:4px 6px;color:' + (palette[i]||'#a1a1aa') + ';font-weight:500;font-size:10px;text-align:right;border:1px solid rgba(255,255,255,0.05);">s' + (i+1) + '</td>';
+            for (var j = 0; j < S; j++) {
+                var v = coeff[i][j];
+                var noContact = contact.length > i && contact[i].length > j && !contact[i][j];
+                var bg, col, txt;
+                if (isNaN(v) || noContact) {
+                    bg = 'rgba(255,255,255,0.02)'; col = '#3f3f46'; txt = '&mdash;';
+                } else {
+                    var t = v / maxAbs;
+                    if (t > 0.1) { bg = 'rgba(60,220,200,' + (0.06 + t*0.14) + ')'; col = '#3cdcc8'; }
+                    else if (t < -0.1) { bg = 'rgba(248,113,113,' + (0.06 + Math.abs(t)*0.14) + ')'; col = '#f87171'; }
+                    else { bg = 'rgba(255,255,255,0.03)'; col = '#71717a'; }
+                    txt = (v >= 0 ? '+' : '') + v.toFixed(2);
+                }
+                tbl += '<td style="padding:5px 8px;text-align:center;background:' + bg + ';color:' + col + ';font-family:ui-monospace,monospace;border:1px solid rgba(255,255,255,0.05);">' + txt + '</td>';
+            }
+            tbl += '</tr>';
         }
-    })();
+        tbl += '</tbody></table>';
+        wrap.innerHTML = tbl;
+        })();
     });
     {% endif %}
 
@@ -1580,46 +1519,35 @@
         }
     }
 
-    // Emission-reception compatibility heatmap (S x S matrix, static)
+    // Emission-reception compatibility matrix as compact HTML table
     if (emitRecepMat.length) {
-        var hCanvas = document.getElementById('emissionReceptionHeatmap');
-        if (hCanvas) {
+        var wrap = document.getElementById('emitRecepTable');
+        if (wrap) {
             var S = emitRecepMat.length;
-            var cellSize = 60;
-            hCanvas.width = S * cellSize;
-            hCanvas.height = S * cellSize;
-            var hCtx = hCanvas.getContext('2d');
             var absMax = 0;
             for (var i = 0; i < S; i++)
                 for (var j = 0; j < S; j++)
                     absMax = Math.max(absMax, Math.abs(emitRecepMat[i][j]));
             if (absMax === 0) absMax = 1;
+            var tbl = '<table style="border-collapse:collapse;font-size:11px;width:100%"><thead><tr><th style="padding:4px 6px;color:#52525b;font-weight:500;font-size:10px;text-align:right;border:1px solid rgba(255,255,255,0.05);"></th>';
+            for (var j = 0; j < S; j++)
+                tbl += '<th style="padding:4px 8px;color:' + (palette[j]||'#a1a1aa') + ';font-weight:500;font-size:10px;text-align:center;border:1px solid rgba(255,255,255,0.05);">s' + (j+1) + '</th>';
+            tbl += '</tr></thead><tbody>';
             for (var i = 0; i < S; i++) {
+                tbl += '<tr><td style="padding:4px 6px;color:' + (palette[i]||'#a1a1aa') + ';font-weight:500;font-size:10px;text-align:right;border:1px solid rgba(255,255,255,0.05);">s' + (i+1) + '</td>';
                 for (var j = 0; j < S; j++) {
-                    var v = emitRecepMat[i][j] / absMax;
-                    var r, g, b;
-                    if (v > 0) { r = 60; g = Math.round(60 + v * 160); b = Math.round(60 + v * 140); }
-                    else       { r = Math.round(60 - v * 160); g = 60; b = 60; }
-                    hCtx.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
-                    hCtx.fillRect(j * cellSize, i * cellSize, cellSize, cellSize);
-                    hCtx.fillStyle = '#e4e4e7';
-                    hCtx.font = '11px monospace';
-                    hCtx.textAlign = 'center';
-                    hCtx.textBaseline = 'middle';
-                    hCtx.fillText(emitRecepMat[i][j].toFixed(2),
-                                  j * cellSize + cellSize / 2,
-                                  i * cellSize + cellSize / 2);
-                    // Row/col labels
-                    if (j === 0) {
-                        hCtx.fillStyle = '#a1a1aa'; hCtx.font = '9px monospace';
-                        hCtx.textAlign = 'right';
-                        hCtx.fillText('s' + (i + 1), cellSize * 0.18, i * cellSize + cellSize / 2);
-                    }
+                    var v = emitRecepMat[i][j];
+                    var t = v / absMax;
+                    var bg, col;
+                    if (t > 0.15) { bg = 'rgba(60,220,200,' + (0.06 + t*0.14) + ')'; col = '#3cdcc8'; }
+                    else if (t < -0.15) { bg = 'rgba(248,113,113,' + (0.06 + Math.abs(t)*0.14) + ')'; col = '#f87171'; }
+                    else { bg = 'rgba(255,255,255,0.03)'; col = '#71717a'; }
+                    tbl += '<td style="padding:5px 8px;text-align:center;background:' + bg + ';color:' + col + ';font-family:ui-monospace,monospace;border:1px solid rgba(255,255,255,0.05);">' + (v >= 0 ? '+' : '') + v.toFixed(2) + '</td>';
                 }
-                hCtx.fillStyle = '#a1a1aa'; hCtx.font = '9px monospace';
-                hCtx.textAlign = 'center';
-                hCtx.fillText('s' + (i + 1), i * cellSize + cellSize / 2, cellSize * 0.18);
+                tbl += '</tr>';
             }
+            tbl += '</tbody></table>';
+            wrap.innerHTML = tbl;
         }
     }
 

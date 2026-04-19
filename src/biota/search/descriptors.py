@@ -26,9 +26,10 @@ Custom descriptors can be loaded from a user Python file via --descriptor-module
 see cli.py. The file must define a list named DESCRIPTORS containing Descriptor
 objects. Loaded descriptors are merged into the registry at startup.
 
-A Descriptor's compute function must return float in [0, 1]. Out-of-range
-values are silently clipped during archive cell assignment. Validate your
-normalizers against real rollout data before running a full search.
+A Descriptor's compute function must return a raw float clipped to [0, 100].
+CVT-MAP-Elites handles scale implicitly via centroid fitting; no per-descriptor
+normalization is needed. The [0, 100] bound guards against numerical outliers
+distorting centroid positions. Typical values are well below 10.
 """
 
 import zlib
@@ -96,10 +97,10 @@ with margin for slightly less-structured outliers."""
 class Descriptor:
     """A behavioral descriptor: metadata plus a pure compute function.
 
-    The compute function receives a RolloutTrace and must return a float
-    in [0, 1]. Values outside this range are clipped at archive cell
-    assignment; they do not raise an error but will silently produce
-    degenerate archive coverage.
+    The compute function receives a RolloutTrace and must return a raw float
+    clipped to [0, 100]. CVT handles scale; no normalization is applied inside
+    compute(). Typical observed ranges are well below 10 for all built-in
+    descriptors.
 
     Attributes:
         name:            Full display name used in the UI ("spectral entropy").
@@ -155,10 +156,12 @@ class RolloutTrace:
     grid_size: int
     total_steps: int
     midpoint_state: np.ndarray | None = None
-    """State at the midpoint step (total_steps // 2). Used by the multi-
-    point compactness term in the quality metric to penalise creatures that
-    peak early and degrade. None when not captured (older code paths and
-    rollout_batch, which does not support per-element midpoint capture)."""
+    """State at the midpoint step (total_steps // 2). Used by the two-point
+    compactness term in the quality metric to penalise creatures that peak
+    early and degrade. None when not captured (rollout_batch does not capture
+    midpoint states; only the single-creature rollout() path does).
+    Note: slice() passes this field through unchanged -- it always refers to
+    the original midpoint, not the midpoint of the sliced window."""
     signal_emission_history: np.ndarray | None = None
     """Mean positive-growth emission activity per step in the trace tail.
     Shape (T,) float32. Proportional to how much signal the creature
@@ -172,6 +175,11 @@ class RolloutTrace:
     """final_mass / initial_mass for signal rollouts. Measures how much
     mass the creature retained vs bled into the signal field.
     None for non-signal rollouts."""
+    final_signal_state: np.ndarray | None = None
+    """Final signal field (H, W, C) float32, summed to (H, W) for spatial
+    descriptors. None for non-signal rollouts."""
+    initial_signal_mass: float = 0.0
+    """Total signal field mass at step 0. Zero for non-signal rollouts."""
 
     def slice(self, start: int, end: int) -> "RolloutTrace":
         """Return a trace covering steps [start, end) within the original window.
@@ -199,6 +207,8 @@ class RolloutTrace:
                 else None
             ),
             signal_retention=self.signal_retention,
+            final_signal_state=self.final_signal_state,
+            initial_signal_mass=self.initial_signal_mass,
         )
 
 
@@ -206,12 +216,10 @@ class RolloutTrace:
 
 
 def compute_velocity(trace: RolloutTrace) -> float:
-    """Mean COM step-delta over the last WINDOW steps, normalized to [0, 1].
+    """Mean COM step-delta over the last WINDOW steps, in cells/step.
 
-    Velocity is the L2 norm of the per-step center-of-mass displacement,
-    averaged across the trailing WINDOW steps. The normalizer is
-    VELOCITY_NORMALIZER (0.02 cells/step), an empirical bound calibrated
-    against an actual biota cluster run.
+    Raw value: typically 0.0-0.02 for biota's parameter prior. CVT handles
+    scale; VELOCITY_NORMALIZER is kept as a reference for typical ranges.
     """
     coms = trace.com_history[-WINDOW:]
     if len(coms) < 2:
@@ -219,11 +227,11 @@ def compute_velocity(trace: RolloutTrace) -> float:
     deltas = np.diff(coms, axis=0)
     speeds = np.linalg.norm(deltas, axis=1)
     mean_speed = float(speeds.mean())
-    return float(np.clip(mean_speed / VELOCITY_NORMALIZER, 0.0, 1.0))
+    return float(np.clip(mean_speed, 0.0, 100.0))
 
 
 def compute_gyradius(trace: RolloutTrace) -> float:
-    """Mass-weighted RMS distance from center of mass, normalized to [0, 1].
+    """Mass-weighted RMS distance from center of mass, in grid units.
 
     This is Chan's `rm` from the original Lenia paper: a continuous, smooth
     measure of how spread-out the creature's mass is. Unlike the bounding
@@ -248,14 +256,11 @@ def compute_gyradius(trace: RolloutTrace) -> float:
     variance = float((state * sq_dist).sum() / total_mass)
     gyradius = float(np.sqrt(max(variance, 0.0)))
 
-    normalizer = trace.grid_size / GYRADIUS_NORMALIZER_DIVISOR
-    if normalizer <= 0.0:
-        return 0.0
-    return float(np.clip(gyradius / normalizer, 0.0, 1.0))
+    return float(np.clip(gyradius, 0.0, 100.0))
 
 
 def compute_spectral_entropy(trace: RolloutTrace) -> float:
-    """Shannon entropy of the radially-averaged FFT magnitude spectrum, in [0, 1].
+    """Shannon entropy of the radially-averaged FFT magnitude spectrum.
 
     Captures spatial frequency content of the final-step mass distribution.
     Smooth blobs cluster near zero; sharp-edged structured creatures spread
@@ -309,8 +314,7 @@ def compute_spectral_entropy(trace: RolloutTrace) -> float:
         return 0.0
 
     raw = entropy / max_entropy
-    remapped = (raw - SPECTRAL_ENTROPY_FLOOR) / (1.0 - SPECTRAL_ENTROPY_FLOOR)
-    return float(np.clip(remapped, 0.0, 1.0))
+    return float(np.clip(raw, 0.0, 100.0))
 
 
 def compute_oscillation(trace: RolloutTrace) -> float:
@@ -326,7 +330,7 @@ def compute_oscillation(trace: RolloutTrace) -> float:
     if len(fractions) < 2:
         return 0.0
     variance = float(np.var(fractions))
-    return float(np.clip(variance / 0.05, 0.0, 1.0))
+    return float(np.clip(variance, 0.0, 100.0))
 
 
 def compute_compactness(trace: RolloutTrace) -> float:
@@ -360,7 +364,7 @@ def compute_compactness(trace: RolloutTrace) -> float:
     x_min, x_max = int(cols[0]), int(cols[-1]) + 1
 
     bbox_mass = float(state[y_min:y_max, x_min:x_max].sum())
-    return float(np.clip(bbox_mass / total_mass, 0.0, 1.0))
+    return float(np.clip(bbox_mass / total_mass, 0.0, 100.0))
 
 
 def compute_mass_asymmetry(trace: RolloutTrace) -> float:
@@ -382,7 +386,7 @@ def compute_mass_asymmetry(trace: RolloutTrace) -> float:
     total = mean_x + mean_y
     if total <= 0.0:
         return 0.0
-    return float(np.clip(abs(mean_x - mean_y) / total, 0.0, 1.0))
+    return float(np.clip(abs(mean_x - mean_y) / total, 0.0, 100.0))
 
 
 def compute_png_compressibility(trace: RolloutTrace) -> float:
@@ -405,7 +409,7 @@ def compute_png_compressibility(trace: RolloutTrace) -> float:
     quantized = (state / peak * 255).clip(0, 255).astype(np.uint8)
     raw_bytes = quantized.tobytes()
     compressed = zlib.compress(raw_bytes, level=6)
-    return float(np.clip(len(compressed) / len(raw_bytes), 0.0, 1.0))
+    return float(np.clip(len(compressed) / len(raw_bytes), 0.0, 100.0))
 
 
 def compute_rotational_symmetry(trace: RolloutTrace) -> float:
@@ -449,7 +453,7 @@ def compute_rotational_symmetry(trace: RolloutTrace) -> float:
     max_variance = mean_p * (1.0 - mean_p)
     if max_variance <= 0.0:
         return 0.0
-    return float(np.clip(variance / max_variance, 0.0, 1.0))
+    return float(np.clip(variance / max_variance, 0.0, 100.0))
 
 
 def compute_persistence_score(trace: RolloutTrace) -> float:
@@ -485,9 +489,8 @@ def compute_persistence_score(trace: RolloutTrace) -> float:
         compute_spectral_entropy(early_slice),
     )
 
-    drift_threshold = 0.2  # matches PERSISTENT_DESCRIPTOR_DRIFT in quality.py
     max_drift = max(abs(a - b) for a, b in zip(late, early, strict=True))
-    return float(np.clip(max_drift / drift_threshold, 0.0, 1.0))
+    return float(np.clip(max_drift, 0.0, 100.0))
 
 
 ANGULAR_VELOCITY_NORMALIZER = 0.15
@@ -535,7 +538,7 @@ def compute_displacement_ratio(trace: "RolloutTrace") -> float:
     if path_length <= 0.0:
         return 0.0
     total_displacement = float(np.linalg.norm(coms[-1] - coms[0]))
-    return float(np.clip(total_displacement / path_length, 0.0, 1.0))
+    return float(np.clip(total_displacement / path_length, 0.0, 100.0))
 
 
 def compute_angular_velocity(trace: "RolloutTrace") -> float:
@@ -566,7 +569,7 @@ def compute_angular_velocity(trace: "RolloutTrace") -> float:
     if valid.sum() == 0:
         return 0.0
     mean_angular_speed = float(np.abs(angle_diffs[valid]).mean())
-    return float(np.clip(mean_angular_speed / ANGULAR_VELOCITY_NORMALIZER, 0.0, 1.0))
+    return float(np.clip(mean_angular_speed, 0.0, 100.0))
 
 
 def compute_growth_gradient(trace: "RolloutTrace") -> float:
@@ -591,9 +594,7 @@ def compute_growth_gradient(trace: "RolloutTrace") -> float:
     # GROWTH_GRADIENT_NORMALIZER is an absolute bound: a uniform block scores
     # ~0.065, a thin ring ~0.22, strongly noisy states ~0.5+. Using 0.5 as
     # the normalizer puts structured creatures in the mid-range.
-    if GROWTH_GRADIENT_NORMALIZER <= 0.0:
-        return 0.0
-    return float(np.clip(weighted_grad / GROWTH_GRADIENT_NORMALIZER, 0.0, 1.0))
+    return float(np.clip(weighted_grad, 0.0, 100.0))
 
 
 def compute_morphological_instability(trace: "RolloutTrace") -> float:
@@ -612,10 +613,7 @@ def compute_morphological_instability(trace: "RolloutTrace") -> float:
     if len(gyr) < 2:
         return 0.0
     variance = float(np.var(gyr))
-    normalizer = MORPHOLOGICAL_INSTABILITY_NORMALIZER * (trace.grid_size**2)
-    if normalizer <= 0.0:
-        return 0.0
-    return float(np.clip(variance / normalizer, 0.0, 1.0))
+    return float(np.clip(variance, 0.0, 100.0))
 
 
 def compute_activity(trace: "RolloutTrace") -> float:
@@ -635,10 +633,7 @@ def compute_activity(trace: "RolloutTrace") -> float:
         return 0.0
     step_changes = np.abs(np.diff(gyr))
     mean_change = float(step_changes.mean())
-    normalizer = ACTIVITY_NORMALIZER * max(trace.grid_size, 1)
-    if normalizer <= 0.0:
-        return 0.0
-    return float(np.clip(mean_change / normalizer, 0.0, 1.0))
+    return float(np.clip(mean_change, 0.0, 100.0))
 
 
 def compute_spatial_entropy(trace: "RolloutTrace") -> float:
@@ -675,7 +670,7 @@ def compute_spatial_entropy(trace: "RolloutTrace") -> float:
     max_entropy = float(np.log(n * n))
     if max_entropy <= 0.0:
         return 0.0
-    return float(np.clip(entropy / max_entropy, 0.0, 1.0))
+    return float(np.clip(entropy / max_entropy, 0.0, 100.0))
 
 
 # === registry ===
@@ -684,62 +679,62 @@ def compute_spatial_entropy(trace: "RolloutTrace") -> float:
 # === signal descriptors ===
 
 
-def compute_emission_activity(trace: RolloutTrace) -> float:
-    """Mean emission activity over the trace tail, normalized to [0, 1].
+def compute_signal_field_variance(trace: RolloutTrace) -> float:
+    """Spatial variance of the total signal field at the end of the rollout.
 
-    Measures how much signal the creature actually emitted during its rollout,
-    not just what its emission_rate parameter is. A creature with high
-    emission_rate but low positive growth activity barely emits.
+    Measures how structured and localized the creature's chemical footprint
+    is. High variance = signal is concentrated near the creature body (strong
+    local emission, fast decay). Low variance = signal has diffused evenly
+    across the grid or barely accumulated.
 
-    Returns 0.0 for non-signal rollouts (signal_emission_history is None).
-    Normalized against a typical peak of 0.02 (2x the max emission_rate).
+    Computed from final_signal_state summed across channels to a (H, W)
+    scalar field. Returns 0.0 for non-signal rollouts.
     """
-    if trace.signal_emission_history is None or len(trace.signal_emission_history) == 0:
+    if trace.final_signal_state is None:
         return 0.0
-    mean_activity = float(trace.signal_emission_history.mean())
-    # Normalizer calibrated against observed rollout distributions:
-    # emit values span ~0.000-0.010 in practice. 0.012 maps the typical
-    # max (~0.010) to ~0.83, giving good bin spread across the 32-bin axis.
-    return float(np.clip(mean_activity / 0.012, 0.0, 1.0))
+    # Sum across channels -> (H, W) total signal per cell
+    field = trace.final_signal_state.sum(axis=-1)
+    return float(np.var(field))
 
 
-def compute_receptor_sensitivity(trace: RolloutTrace) -> float:
-    """Mean absolute reception response over the trace tail, normalized to [0, 1].
+def compute_signal_mass_ratio(trace: RolloutTrace) -> float:
+    """Ratio of final signal field mass to creature mass at step 0.
 
-    Measures how strongly the creature actually responded to the chemical
-    environment it encountered during its solo rollout. High = the creature's
-    receptor profile was well-aligned with the signal it encountered and
-    produced strong growth modulation. Low = chemical mismatch or inert.
+    Measures how much chemical substance has accumulated in the field
+    relative to the creature's body. Varies with emission_rate, decay_rates,
+    and how long the run lasted. A pure listener (no emission) scores near 0;
+    a broadcaster scores high.
 
     Returns 0.0 for non-signal rollouts.
-    # Normalizer calibrated against observed rollout distributions:
-    # reception values span ~0.000-0.014 in practice. 0.016 maps the
-    # typical max (~0.014) to ~0.875, giving good bin spread.
     """
-    if trace.signal_reception_history is None or len(trace.signal_reception_history) == 0:
+    if trace.final_signal_state is None or trace.initial_signal_mass == 0.0:
         return 0.0
-    mean_response = float(np.abs(trace.signal_reception_history).mean())
-    return float(np.clip(mean_response / 0.016, 0.0, 1.0))
+    final_signal = float(trace.final_signal_state.sum())
+    # Normalize by initial signal mass so the ratio is relative to the
+    # background field that was present at the start of the rollout.
+    return float(np.clip(final_signal / max(trace.initial_signal_mass, 1e-9), 0.0, 100.0))
 
 
-def compute_signal_retention(trace: RolloutTrace) -> float:
-    """Mass retained vs bled into the signal field: final_mass / initial_mass.
+def compute_dominant_channel_fraction(trace: RolloutTrace) -> float:
+    """Fraction of total signal mass carried by the dominant channel.
 
-    High retention (near 1.0) = chemically conservative creature; keeps most
-    of its mass and emits sparingly. Low retention (near 0.0) = aggressive
-    emitter; broadcasts heavily at the cost of mass.
+    Captures the effective emission_vector direction: a creature that
+    strongly emits into one chemical channel scores near 1.0; one whose
+    signal spreads evenly across all channels scores near 1/C (~0.25 for
+    C=4 channels).
 
-    Together with emission_activity and receptor_sensitivity this creates a
-    three-axis chemical behavior space:
-      high emission + low retention = broadcaster
-      low emission + high sensitivity = listener
-      high emission + high sensitivity + high alpha = predator candidate
-
-    Returns 1.0 for non-signal rollouts (no mass was lost to signal field).
+    High values = chemical specialists; low values = generalists.
+    Returns 1/C (uniform prior) for non-signal rollouts or zero signal.
     """
-    if trace.signal_retention is None:
-        return 1.0
-    return float(np.clip(trace.signal_retention, 0.0, 1.0))
+    if trace.final_signal_state is None:
+        return 0.0
+    # Sum over spatial dims -> (C,) total per channel
+    per_channel = trace.final_signal_state.sum(axis=(0, 1))
+    total = float(per_channel.sum())
+    if total <= 0.0:
+        C = trace.final_signal_state.shape[-1]
+        return 1.0 / max(C, 1)
+    return float(per_channel.max() / total)
 
 
 REGISTRY: dict[str, Descriptor] = {
@@ -834,25 +829,25 @@ REGISTRY: dict[str, Descriptor] = {
         compute=compute_spatial_entropy,
     ),
     # --- signal-only descriptors ---
-    "emission_activity": Descriptor(
-        name="emission activity",
-        short_name="emit.act.",
-        direction_label="more active emission",
-        compute=compute_emission_activity,
+    "signal_field_variance": Descriptor(
+        name="signal field variance",
+        short_name="sig.var.",
+        direction_label="more localized",
+        compute=compute_signal_field_variance,
         signal_only=True,
     ),
-    "receptor_sensitivity": Descriptor(
-        name="receptor sensitivity",
-        short_name="recep.sens.",
-        direction_label="more sensitive",
-        compute=compute_receptor_sensitivity,
+    "signal_mass_ratio": Descriptor(
+        name="signal mass ratio",
+        short_name="sig.ratio",
+        direction_label="more accumulated",
+        compute=compute_signal_mass_ratio,
         signal_only=True,
     ),
-    "signal_retention": Descriptor(
-        name="signal retention",
-        short_name="sig.ret.",
-        direction_label="more conservative",
-        compute=compute_signal_retention,
+    "dominant_channel_fraction": Descriptor(
+        name="dominant channel fraction",
+        short_name="dom.ch.",
+        direction_label="more specialized",
+        compute=compute_dominant_channel_fraction,
         signal_only=True,
     ),
 }

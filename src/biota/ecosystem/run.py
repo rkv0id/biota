@@ -140,12 +140,29 @@ def load_creature(source: CreatureSource) -> RolloutResult:
         raise TypeError(f"archive.pkl in {run_dir} is a {type(loaded).__name__}, expected Archive")
     archive: Archive = loaded
 
-    if source.coords not in archive:
+    # v4.0.0: look up by creature_id when available; fall back to coords for
+    # old-format archives that pre-date creature_id.
+    if source.creature_id is not None:
+        for _idx, result in archive.iter_occupied():
+            if result.creature_id == source.creature_id:
+                return result
         raise KeyError(
-            f"cell {source.coords} not present in archive {source.run_id}. "
+            f"creature_id {source.creature_id!r} not found in archive {source.run_id}. "
+            f"Check the creature_id matches one in the archive."
+        )
+    if source.coords is None:
+        raise KeyError(
+            f"source for {source.run_id} has neither creature_id nor coords; cannot load creature."
+        )
+    # Legacy coords lookup for pre-v4.0.0 archives. The archive may be an old
+    # pickled dict with tuple keys; type: ignore covers the CellCoord mismatch.
+    coords = source.coords
+    if coords not in archive._cells:  # type: ignore[operator]
+        raise KeyError(
+            f"cell {coords} not present in archive {source.run_id}. "
             f"Use build_index.py to see occupied cells."
         )
-    return archive[source.coords]
+    return archive._cells[coords]  # type: ignore[index]
 
 
 def validate_signal_consistency(creatures: list[RolloutResult]) -> None:
@@ -581,7 +598,8 @@ def _config_json_bytes(config: EcosystemConfig) -> bytes:
             {
                 "archive_dir": s.archive_dir,
                 "run": s.run_id,
-                "cell": list(s.coords),
+                "creature_id": s.creature_id,
+                "cell": list(s.coords) if s.coords is not None else None,
                 "n": s.n,
                 "patch": s.patch if s.patch is not None else config.spawn.patch,
             }
@@ -843,6 +861,13 @@ def compute_ecosystem(
 
     run_id = _make_run_id(config.name)
     run_dir = Path(output_root) / run_id
+
+    # Load creatures here so they are available to _compute_outputs for
+    # signal observables (receptor_alignment, emission_reception_matrix).
+    # When called from the CLI, creatures is None and must be loaded; the
+    # Ray dispatcher pre-loads and passes them explicitly.
+    if creatures is None:
+        creatures = [load_creature(s) for s in config.sources]
 
     started_at = time.time()
     if config.is_heterogeneous:

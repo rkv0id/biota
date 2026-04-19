@@ -181,21 +181,21 @@ def test_submit_batch_multiple_returns_all_results() -> None:
     assert len(pending) == 0
 
 
-def test_submit_batch_passes_through_parent_cells() -> None:
+def test_submit_batch_passes_through_parent_ids() -> None:
     init()
     params = sample_random(kernels=10, seed=0)
-    handle = submit_batch([params], seeds=[0], config=CHEAP_CONFIG, parent_cells=[(5, 10, 3)])
+    handle = submit_batch([params], seeds=[0], config=CHEAP_CONFIG, parent_ids=["run-42"])
     completed, _ = wait_for_completed([handle])
-    assert completed[0][0].parent_cell == (5, 10, 3)
+    assert completed[0][0].parent_id == "run-42"
 
 
-def test_submit_batch_default_parent_cells_none() -> None:
-    """parent_cells defaults to [None]*B when not supplied."""
+def test_submit_batch_default_parent_ids_none() -> None:
+    """parent_ids defaults to [None]*B when not supplied."""
     init()
     params = sample_random(kernels=10, seed=0)
     handle = submit_batch([params], seeds=[0], config=CHEAP_CONFIG)
     completed, _ = wait_for_completed([handle])
-    assert completed[0][0].parent_cell is None
+    assert completed[0][0].parent_id is None
 
 
 def test_wait_for_completed_drains_multiple_handles() -> None:

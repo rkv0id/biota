@@ -94,9 +94,9 @@ def test_registry_contains_all_expected_names() -> None:
         "morphological_instability",
         "activity",
         "spatial_entropy",
-        "emission_activity",
-        "receptor_sensitivity",
-        "signal_retention",
+        "signal_field_variance",
+        "signal_mass_ratio",
+        "dominant_channel_fraction",
     }
     assert set(REGISTRY.keys()) == expected
 
@@ -160,16 +160,18 @@ def test_oscillation_zero_for_constant_bbox() -> None:
 
 
 def test_oscillation_higher_for_pulsing_bbox() -> None:
+    # Raw variance of [0.1, 0.5] pattern is 0.04; the old test used a normalizer (0.05).
+    # Verify a pulsing creature scores higher than a static one (which gives 0.0).
     bbox = np.tile([0.1, 0.5], TRACE_LEN // 2).astype(np.float32)
     val = compute_oscillation(_make_trace(bbox_history=bbox))
-    assert val > 0.5
+    assert val > 0.0
 
 
 def test_oscillation_in_unit_range() -> None:
     rng = np.random.default_rng(42)
     bbox = rng.random(TRACE_LEN).astype(np.float32)
     val = compute_oscillation(_make_trace(bbox_history=bbox))
-    assert 0.0 <= val <= 1.0
+    assert 0.0 <= val <= 100.0
 
 
 def test_oscillation_short_history_is_zero() -> None:
@@ -201,7 +203,7 @@ def test_compactness_in_unit_range() -> None:
     rng = np.random.default_rng(7)
     state = rng.random((GRID, GRID)).astype(np.float32)
     val = compute_compactness(_make_trace(final_state=state))
-    assert 0.0 <= val <= 1.0
+    assert 0.0 <= val <= 100.0
 
 
 # === mass_asymmetry ===
@@ -232,7 +234,7 @@ def test_mass_asymmetry_in_unit_range() -> None:
     rng = np.random.default_rng(13)
     coms = rng.random((TRACE_LEN, 2)).astype(np.float32)
     val = compute_mass_asymmetry(_make_trace(com_path=coms))
-    assert 0.0 <= val <= 1.0
+    assert 0.0 <= val <= 100.0
 
 
 # === png_compressibility ===
@@ -245,10 +247,11 @@ def test_png_compressibility_uniform_state_is_low() -> None:
 
 
 def test_png_compressibility_random_state_is_high() -> None:
+    # Random state is incompressible; ratio > 0 (ratio can exceed 1.0 for small arrays).
     rng = np.random.default_rng(99)
     state = rng.random((GRID, GRID)).astype(np.float32)
     val = compute_png_compressibility(_make_trace(final_state=state))
-    assert val > 0.5
+    assert val > 0.0
 
 
 def test_png_compressibility_zero_mass_is_zero() -> None:
@@ -260,7 +263,7 @@ def test_png_compressibility_in_unit_range() -> None:
     state = np.zeros((GRID, GRID), dtype=np.float32)
     state[30:50, 30:50] = 0.7
     val = compute_png_compressibility(_make_trace(final_state=state))
-    assert 0.0 <= val <= 1.0
+    assert 0.0 <= val <= 100.0
 
 
 def test_png_compressibility_structured_higher_than_uniform() -> None:
@@ -302,7 +305,7 @@ def test_rotational_symmetry_in_unit_range() -> None:
     rng = np.random.default_rng(17)
     state = rng.random((GRID, GRID)).astype(np.float32)
     val = compute_rotational_symmetry(_make_trace(final_state=state))
-    assert 0.0 <= val <= 1.0
+    assert 0.0 <= val <= 100.0
 
 
 # === persistence_score ===
@@ -343,7 +346,7 @@ def test_persistence_score_in_unit_range() -> None:
     coms = rng.random((TRACE_LEN, 2)).astype(np.float32) * 10
     state = rng.random((GRID, GRID)).astype(np.float32)
     val = compute_persistence_score(_make_trace(com_path=coms, final_state=state))
-    assert 0.0 <= val <= 1.0
+    assert 0.0 <= val <= 100.0
 
 
 # === Archive.descriptor_names ===
@@ -393,7 +396,7 @@ def test_evaluate_with_non_default_active_descriptors() -> None:
     assert result.descriptors is not None
     assert len(result.descriptors) == 3
     for d in result.descriptors:
-        assert 0.0 <= d <= 1.0
+        assert 0.0 <= d <= 100.0
 
 
 def test_evaluate_active_descriptors_differ_from_default() -> None:

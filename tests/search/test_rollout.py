@@ -22,13 +22,15 @@ import numpy as np
 from biota.search.params import sample_random
 from biota.search.result import ParamDict
 from biota.search.rollout import (
+    PRESET_CALIBRATION,
+    SIGNAL_CALIBRATION_BONUS,
+    SIGNAL_STEPS,
     THUMBNAIL_FRAMES,
     THUMBNAIL_SIZE,
     RolloutConfig,
     dev_preset,
     pretty_preset,
     rollout,
-    signal_preset,
     standard_preset,
 )
 from biota.sim.flowlenia import Config as SimConfig
@@ -63,10 +65,20 @@ def test_pretty_preset_shape() -> None:
     assert cfg.steps == 500
 
 
-def test_signal_preset_shape() -> None:
-    cfg = signal_preset()
-    assert cfg.sim.grid == 192
-    assert cfg.steps == 800
+def test_signal_steps_table() -> None:
+    assert SIGNAL_STEPS["dev"] == 300
+    assert SIGNAL_STEPS["standard"] == 800
+    assert SIGNAL_STEPS["pretty"] == 800
+
+
+def test_preset_calibration_table() -> None:
+    assert PRESET_CALIBRATION["dev"] == 50
+    assert PRESET_CALIBRATION["standard"] == 150
+    assert PRESET_CALIBRATION["pretty"] == 200
+
+
+def test_signal_calibration_bonus() -> None:
+    assert SIGNAL_CALIBRATION_BONUS == 50
 
 
 # === cheap unit tests ===
@@ -112,10 +124,10 @@ def test_rollout_preserves_params_unchanged() -> None:
     assert result.params == params
 
 
-def test_rollout_with_parent_cell() -> None:
+def test_rollout_with_parent_id() -> None:
     params = sample_random(kernels=10, seed=0)
-    result = rollout(params, seed=0, config=CHEAP_CONFIG, parent_cell=(5, 10, 3))
-    assert result.parent_cell == (5, 10, 3)
+    result = rollout(params, seed=0, config=CHEAP_CONFIG, parent_id="run-42")
+    assert result.parent_id == "run-42"
 
 
 def test_rollout_short_steps_yields_unstable() -> None:
@@ -159,7 +171,7 @@ def test_rollout_m0_fixture_produces_accepted_creature() -> None:
     assert result.rejection_reason is None
     assert 0.0 <= result.quality <= 1.0
     for d in result.descriptors:
-        assert 0.0 <= d <= 1.0
+        assert 0.0 <= d <= 100.0
 
     # M0 fixture is a stationary, well-localized creature with sharp internal
     # structure. Empirically observed values:
@@ -176,8 +188,10 @@ def test_rollout_m0_fixture_produces_accepted_creature() -> None:
     #   than literal frequency content. See descriptors.py for the design
     #   discussion.
     velocity, gyradius, spectral_entropy = result.descriptors
-    assert velocity < 0.3, f"M0 fixture should barely move, got velocity={velocity}"
-    assert gyradius < 0.9, f"M0 fixture should not fill the grid, got gyradius={gyradius}"
+    # Raw velocity in cells/step, typically 0.0-0.02 for stationary creatures
+    assert velocity < 1.0, f"M0 fixture should barely move, got velocity={velocity}"
+    # Raw gyradius in grid units; grid=96, creature fills fraction of it
+    assert gyradius < 50.0, f"M0 fixture should not fill the grid, got gyradius={gyradius}"
     assert 0.5 < spectral_entropy < 1.0, (
         f"M0 fixture spectral_entropy should be in the structured range, "
         f"got spectral_entropy={spectral_entropy}"

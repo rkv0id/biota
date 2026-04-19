@@ -29,8 +29,13 @@ where:
                    it directly penalises runaway emission.
 
 Weights:
-    Non-signal:  w_c = 0.6,  w_s = 0.4,  w_r = 0.0
-    Signal:      w_c = 0.5,  w_s = 0.2,  w_r = 0.3
+    Non-signal:  w_c = 0.6,  w_s = 0.4
+    Signal:      w_c = 0.5,  w_s = 0.3,  w_a = 0.2
+
+where signal w_a = signal_activity bonus: clip(final_signal / initial_signal, 0, 1).
+Rewards creatures that build up or maintain signal mass rather than penalising
+emission. Replaces the old retention term which discouraged any mass-to-signal
+transfer.
 
 The midpoint compactness term is the key addition over the old single-point
 metric. Most Flow-Lenia solitons score >0.95 compactness at the final step,
@@ -66,8 +71,8 @@ CREATURE_MASS_FLOOR = 0.05
 _W_COMPACT_BASE = 0.6
 _W_STABLE_BASE = 0.4
 _W_COMPACT_SIG = 0.5
-_W_STABLE_SIG = 0.2
-_W_RETAIN_SIG = 0.3
+_W_STABLE_SIG = 0.3
+_W_SIGNAL_ACTIVITY = 0.2
 
 
 @dataclass(frozen=True)
@@ -91,6 +96,8 @@ class RolloutEvaluation:
     trace: RolloutTrace
     initial_total: float = 0.0
     final_signal_mass: float = 0.0
+    initial_signal_mass: float = 0.0
+    """Initial signal field mass. Used for signal_activity quality term."""
 
     def __post_init__(self) -> None:
         if self.initial_total == 0.0:
@@ -191,12 +198,13 @@ def evaluate(
     then persistent filter, then multi-component quality score.
 
     Quality components:
-        compactness  min(compact at midpoint, compact at final step)
-        stability    1 - drift / PERSISTENT_DESCRIPTOR_DRIFT, clipped [0,1]
-        retention    final_mass / initial_mass, clipped [0,1] (signal only)
+        compactness      min(compact at midpoint, compact at final step)
+        stability        1 - drift / PERSISTENT_DESCRIPTOR_DRIFT, clipped [0,1]
+        signal_activity  clip(final_signal / initial_signal, 0, 1) (signal only)
+                         Rewards creatures that maintain or build signal mass.
 
     Weights (non-signal): compactness=0.6, stability=0.4
-    Weights (signal):     compactness=0.5, stability=0.2, retention=0.3
+    Weights (signal):     compactness=0.5, stability=0.3, signal_activity=0.2
     """
     if not _alive(eval_input):
         return EvaluationResult(descriptors=None, quality=None, rejection_reason="dead")
@@ -225,22 +233,27 @@ def evaluate(
     # Stability: continuous version of the persistent filter.
     stability = float(np.clip(1.0 - drift / PERSISTENT_DESCRIPTOR_DRIFT, 0.0, 1.0))
 
-    # Retention: mass field preservation (meaningful for signal runs).
+    # Signal activity: rewards creatures that maintain or build signal mass.
+    # Uses final/initial signal ratio so passive creatures (that let background
+    # signal decay) score low; emitters that replenish the field score high.
     is_signal = (
         eval_input.final_signal_mass > 0 or eval_input.initial_total > eval_input.initial_mass
     )
     if is_signal:
-        retention = float(
+        # signal_activity: how much of the initial signal field remains.
+        # Background field decays naturally; creatures that emit replenish it.
+        initial_sig = eval_input.initial_signal_mass
+        signal_activity = float(
             np.clip(
-                eval_input.final_mass / eval_input.initial_mass
-                if eval_input.initial_mass > 0
-                else 1.0,
+                eval_input.final_signal_mass / initial_sig if initial_sig > 1e-9 else 0.0,
                 0.0,
                 1.0,
             )
         )
         quality = (
-            _W_COMPACT_SIG * compactness + _W_STABLE_SIG * stability + _W_RETAIN_SIG * retention
+            _W_COMPACT_SIG * compactness
+            + _W_STABLE_SIG * stability
+            + _W_SIGNAL_ACTIVITY * signal_activity
         )
     else:
         quality = _W_COMPACT_BASE * compactness + _W_STABLE_BASE * stability
