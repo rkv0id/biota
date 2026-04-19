@@ -157,7 +157,7 @@ This adds six signal parameters to each creature's searchable parameter space:
 |---|---|---|---|
 | `emission_vector` | `(16,)` | `[0, 1]` | How emitted signal is distributed across the 16 channels |
 | `receptor_profile` | `(16,)` | `[-1, 1]` | Channel weights for sensing. Negative values produce inhibitory (aversive) responses |
-| `emission_rate` | scalar | `[0.001, 0.05]` | Fraction of positive growth activity converted to signal per step. Lower values reduce mass bleed over long ecosystem runs |
+| `emission_rate` | scalar | `[0.0001, 0.01]` | Base signal emission rate per step. Modulated by beta_modulation and G_pos (positive growth activity) |
 | `decay_rates` | `(16,)` | `[0, 0.9]` | Per-channel decay rate applied each step. Creatures with low decay on key channels maintain longer-range chemical gradients |
 | `alpha_coupling` | scalar | `[-1, 1]` | Reception-to-growth coupling. Positive = chemotaxis (grow into favorable signal, enables cross-species predation). Negative = chemorepulsion. Zero = no coupling |
 | `beta_modulation` | scalar | `[-1, 1]` | Adaptive emission. Positive = quorum sensing (amplify emission when receiving signal). Negative = feedback inhibition (suppress emission). Zero = static rate |

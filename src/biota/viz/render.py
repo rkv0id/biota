@@ -191,7 +191,7 @@ def _result_to_card_data(
 
 
 # _compute_grid_bbox removed in v4.0.0 (CVT archive has no grid structure).
-# Replaced by histogram + correlation panel in the archive viewer rebuild (workstream 6).
+# Replaced by histogram + Pearson correlation panel in the archive viewer (v4.0.0).
 
 
 def render_archive_page(

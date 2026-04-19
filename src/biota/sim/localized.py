@@ -71,8 +71,7 @@ class LocalizedFlowLenia:
             FlowLenia(config, p, device=device) for p in species_params
         ]
         ref = self._species[0]
-        self._sobel_kx, self._sobel_ky = ref._sobel_kx, ref._sobel_ky  # pyright: ignore[reportPrivateUsage]
-        self._pos = ref._pos  # pyright: ignore[reportPrivateUsage]
+        _, self._sobel_kx, self._sobel_ky, self._pos = ref.kernel_tensors()
 
     @property
     def num_species(self) -> int:
@@ -120,12 +119,12 @@ class LocalizedFlowLenia:
         if signal is not None:
             # Find the first species with a signal kernel to convolve.
             for sp in self._species:
-                if sp._fK_signal is not None:  # pyright: ignore[reportPrivateUsage]
+                sig_t_info = sp.signal_tensors()
+                if sig_t_info is not None:
+                    fK_sig, _ = sig_t_info
                     sig_t = signal.permute(2, 0, 1)  # (C, H, W)
                     fSig = torch.fft.fft2(sig_t)
-                    convolved_signal = torch.fft.ifft2(
-                        sp._fK_signal * fSig  # pyright: ignore[reportPrivateUsage]
-                    ).real  # (C, H, W)
+                    convolved_signal = torch.fft.ifft2(fK_sig * fSig).real  # (C, H, W)
                     break
 
         # Effective weights: uniform at empty cells so flow responds to neighbours.
@@ -142,7 +141,7 @@ class LocalizedFlowLenia:
         new_signal = signal.clone() if signal is not None else None
 
         for s, sp in enumerate(self._species):
-            fK_s = sp._fK  # pyright: ignore[reportPrivateUsage]
+            fK_s = sp.mass_kernels_fft
             U_s = torch.fft.ifft2(fK_s * fA.unsqueeze(0)).real  # (K, H, W)
             m = sp.params.m.view(-1, 1, 1)
             sigma = sp.params.s.view(-1, 1, 1)
@@ -203,8 +202,7 @@ class LocalizedFlowLenia:
 
         # Decay signal field.
         if new_signal is not None:
-            decay = self._species[0]._decay  # pyright: ignore[reportPrivateUsage]
-            new_signal = new_signal * (1.0 - decay)
+            new_signal = new_signal * (1.0 - self._species[0].decay)
 
         return (
             LocalizedState(mass=new_A.unsqueeze(-1), weights=new_W, signal=new_signal),

@@ -33,8 +33,16 @@ from biota.search.descriptors import (
 from biota.search.params import sample_random
 from biota.search.quality import RolloutEvaluation, evaluate
 from biota.search.result import ParamDict, RolloutResult
-from biota.sim.flowlenia import Config as SimConfig
-from biota.sim.flowlenia import FlowLenia, Params
+from biota.sim.flowlenia import (
+    SIGNAL_CHANNELS,
+    FlowLenia,
+    Params,
+    build_signal_kernel_fft,
+    make_signal_fields_batch,
+)
+from biota.sim.flowlenia import (
+    Config as SimConfig,
+)
 
 THUMBNAIL_FRAMES = 32
 """Default number of frames captured per rollout into the thumbnail buffer.
@@ -539,7 +547,7 @@ def _batched_sim_step(
     sobel_ky: torch.Tensor,
     pos: torch.Tensor,
     config: SimConfig,
-) -> torch.Tensor:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """One Flow-Lenia step for B states with per-element params.
 
     A:      (B, H, W, 1)
@@ -548,7 +556,7 @@ def _batched_sim_step(
     sobel_kx, sobel_ky: (1, 1, 3, 3)
     pos:    (2, H, W)
 
-    Returns (B, H, W, 1).
+    Returns (new_A (B, H, W, 1), U_sum (B, H, W)).
     """
     B = A.shape[0]
     A2 = A[:, :, :, 0]  # (B, H, W)
@@ -614,7 +622,7 @@ def _batched_sim_step(
             area = (sz_clipped[:, 0] * sz_clipped[:, 1]) / denom
             new_A2 = new_A2 + Ar * area
 
-    return new_A2.unsqueeze(-1)
+    return new_A2.unsqueeze(-1), U_sum
 
 
 def _build_batched_signal_params(
@@ -640,7 +648,6 @@ def _build_batched_signal_params(
     Returns (False, None, ...) when no creature has signal params.
     """
     from biota.search.params import has_signal_field
-    from biota.sim.flowlenia import SIGNAL_CHANNELS
 
     has_signals = [has_signal_field(p) for p in params_list]
     if not any(has_signals):
@@ -658,18 +665,33 @@ def _build_batched_signal_params(
 
     for p in params_list:
         if has_signal_field(p):
-            # Build signal kernel FFT for this creature
+            # Build signal kernel FFT directly without a full FlowLenia instance.
             fl_params = _params_dict_to_tensors(p, device=device)
-            fl_tmp = FlowLenia(config, fl_params, device=device)
-            sig_t = fl_tmp.signal_tensors()
-            assert sig_t is not None
-            fk_sig, decay_sig = sig_t
-            fK_signal_list.append(fk_sig)  # (C, H, W) complex
+            assert fl_params.signal_kernel_r is not None
+            assert fl_params.signal_kernel_a is not None
+            assert fl_params.signal_kernel_b is not None
+            assert fl_params.signal_kernel_w is not None
+            fk_sig = build_signal_kernel_fft(
+                R=float(fl_params.R),
+                signal_kernel_r=float(fl_params.signal_kernel_r),
+                signal_kernel_a=fl_params.signal_kernel_a,
+                signal_kernel_b=fl_params.signal_kernel_b,
+                signal_kernel_w=fl_params.signal_kernel_w,
+                grid_h=config.grid_h,
+                grid_w=config.grid_w,
+                device=device,
+            )
+            fK_signal_list.append(fk_sig)  # (H, W) complex
             assert fl_params.emission_vector is not None
             emission_vec_list.append(fl_params.emission_vector)  # (C,)
             assert fl_params.receptor_profile is not None
             receptor_list.append(fl_params.receptor_profile)  # (C,)
-            decay_list.append(decay_sig)  # (C,)
+            decay_rates_t = (
+                fl_params.decay_rates
+                if fl_params.decay_rates is not None
+                else torch.zeros(SIGNAL_CHANNELS, device=device)
+            )
+            decay_list.append(decay_rates_t)  # (C,)
             emission_rates.append(
                 float(fl_params.emission_rate) if fl_params.emission_rate is not None else 0.0
             )
@@ -844,22 +866,15 @@ def rollout_batch(
     signals: torch.Tensor | None = None
     initial_signal_masses: list[float] = [0.0] * B
     if any_signal and fK_signal_batch is not None:
-        from biota.sim.flowlenia import SIGNAL_CHANNELS
+        from biota.search.params import has_signal_field as _hsf
 
         H, W = config.sim.grid_h, config.sim.grid_w
-        # Initialize one signal field per element using its seed
-        sig_list = []
-        for i, p in enumerate(params_list):
-            from biota.search.params import has_signal_field
-
-            if has_signal_field(p):
-                fl_i = FlowLenia(
-                    config.sim, _params_dict_to_tensors(p, device=device), device=device
-                )
-                sig_list.append(fl_i.make_initial_signal_field(seed=seeds[i]))
-            else:
-                sig_list.append(torch.zeros(H, W, SIGNAL_CHANNELS, device=device))
-        signals = torch.stack(sig_list, dim=0)  # (B, H, W, C)
+        # Build all signal fields in one batched call; zero-fill non-signal slots.
+        all_fields = make_signal_fields_batch(seeds, H, W, device=device)
+        for i in range(B):
+            if not _hsf(params_list[i]):
+                all_fields[i] = torch.zeros(H, W, SIGNAL_CHANNELS, device=device)
+        signals = all_fields  # (B, H, W, C)
         initial_signal_masses = [float(signals[i].sum().item()) for i in range(B)]
 
     # Per-element history buffers
@@ -884,7 +899,7 @@ def rollout_batch(
                 thumb_bufs[i].append(frames[i])
 
         if step < config.steps:
-            states = _batched_sim_step(
+            states, U_sum_step = _batched_sim_step(
                 states,
                 fK,
                 m_batch,
@@ -902,19 +917,12 @@ def rollout_batch(
                 and receptor_batch is not None
                 and decay_batch is not None
             ):
+                # Reuse U_sum from the sim step -- no second FFT needed.
                 A2_cur = states[:, :, :, 0]  # (B, H, W)
-                # Compute U_sum from current states for signal physics
-                fA_cur = torch.fft.fft2(A2_cur)
-                U_cur_full = torch.fft.ifft2(fK * fA_cur.unsqueeze(1), dim=(-2, -1)).real
-                m_ = m_batch.view(B, -1, 1, 1)
-                s_ = s_batch.view(B, -1, 1, 1)
-                h_ = h_batch.view(B, -1, 1, 1)
-                G_cur = (torch.exp(-(((U_cur_full - m_) / s_) ** 2) / 2.0) * 2.0 - 1.0) * h_
-                U_sum_cur = G_cur.sum(dim=1)  # (B, H, W)
                 signals, new_A2, _ = _batched_signal_step(
                     signals,
                     A2_cur,
-                    U_sum_cur,
+                    U_sum_step,
                     fK_signal_batch,
                     emission_vec_batch,
                     receptor_batch,

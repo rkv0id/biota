@@ -156,10 +156,12 @@ class RolloutTrace:
     grid_size: int
     total_steps: int
     midpoint_state: np.ndarray | None = None
-    """State at the midpoint step (total_steps // 2). Used by the multi-
-    point compactness term in the quality metric to penalise creatures that
-    peak early and degrade. None when not captured (older code paths and
-    rollout_batch, which does not support per-element midpoint capture)."""
+    """State at the midpoint step (total_steps // 2). Used by the two-point
+    compactness term in the quality metric to penalise creatures that peak
+    early and degrade. None when not captured (rollout_batch does not capture
+    midpoint states; only the single-creature rollout() path does).
+    Note: slice() passes this field through unchanged -- it always refers to
+    the original midpoint, not the midpoint of the sliced window."""
     signal_emission_history: np.ndarray | None = None
     """Mean positive-growth emission activity per step in the trace tail.
     Shape (T,) float32. Proportional to how much signal the creature

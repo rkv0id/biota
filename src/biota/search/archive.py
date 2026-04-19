@@ -91,6 +91,12 @@ class Archive:
         # axes contribute equally to centroid distances. Each factor is
         # 1/span where span = p95 - p5 of observed values; span=0 -> scale=1.
         self._axis_scale: np.ndarray = np.ones(3, dtype=np.float64)
+        # Persistent cKDTree over occupied centroids only, kept in sync with
+        # _cells to avoid O(n) rebuild on every _is_too_similar call.
+        # None when the archive is empty. Operates in scaled space.
+        self._occupied_tree: Any = None
+        self._occupied_idxs: list[int] = []
+        self._occupied_tree_dirty: bool = False
 
     def __len__(self) -> int:
         return len(self._cells)
@@ -173,6 +179,7 @@ class Archive:
             assert existing.quality is not None
             if result.quality > existing.quality:
                 self._cells[idx] = result
+                self._occupied_tree_dirty = True
                 return InsertionStatus.REPLACED
             return InsertionStatus.REJECTED_QUALITY
 
@@ -180,6 +187,8 @@ class Archive:
             return InsertionStatus.REJECTED_SIMILARITY
 
         self._cells[idx] = result
+        self._occupied_idxs.append(idx)
+        self._occupied_tree_dirty = True
         return InsertionStatus.INSERTED
 
     def random_parent(self, rng: np.random.Generator) -> tuple[CellCoord, RolloutResult]:
@@ -193,33 +202,46 @@ class Archive:
 
     # === private ===
 
+    def _refresh_occupied_tree(self) -> None:
+        """Rebuild the occupied-centroid tree when dirty. Called lazily."""
+        if not self._occupied_tree_dirty:
+            return
+        if not self._occupied_idxs or self._centroids is None:
+            self._occupied_tree = None
+            self._occupied_tree_dirty = False
+            return
+        # Operate in scaled space to match cell_for() distances.
+        occupied_scaled = self._centroids[self._occupied_idxs] * self._axis_scale
+        self._occupied_tree = cKDTree(occupied_scaled)
+        self._occupied_tree_dirty = False
+
     def _is_too_similar(self, candidate: RolloutResult) -> bool:
         """True if any occupied centroid is within similarity_epsilon of candidate.
 
-        Queries only the occupied subset. If fewer than 2 cells are occupied
-        the similarity check is skipped (nothing meaningful to compare against).
+        Operates in scaled descriptor space (same as cell_for) so the epsilon
+        is consistent with centroid distances. Uses a persistent cKDTree over
+        occupied centroids refreshed lazily on insertion.
+
         Override: if candidate quality exceeds quality_override_factor times the
-        neighbor quality, the rejection is waived.
+        nearest neighbor quality, the rejection is waived.
         """
         assert candidate.descriptors is not None
         assert candidate.quality is not None
 
-        if len(self._cells) < 1:
+        if not self._occupied_idxs:
             return False
 
-        if self._tree is None:
+        self._refresh_occupied_tree()
+        if self._occupied_tree is None:
             return False
 
-        occupied_idxs = list(self._cells.keys())
-        occupied_centroids = self._centroids[occupied_idxs]  # type: ignore[index]
-        occupied_tree = cKDTree(occupied_centroids)
-
-        pt = np.array(candidate.descriptors, dtype=np.float64)
-        dist, local_idx = occupied_tree.query(pt)
+        # Query in scaled space to match centroid distances.
+        pt = np.array(candidate.descriptors, dtype=np.float64) * self._axis_scale
+        dist, local_idx = self._occupied_tree.query(pt)
 
         if dist >= self.similarity_epsilon:
             return False
 
-        neighbor = self._cells[occupied_idxs[int(local_idx)]]
+        neighbor = self._cells[self._occupied_idxs[int(local_idx)]]
         assert neighbor.quality is not None
         return candidate.quality <= self.quality_override_factor * neighbor.quality

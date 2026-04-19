@@ -1,6 +1,6 @@
 <svg width="100%" viewBox="0 0 680 360" role="img" xmlns="http://www.w3.org/2000/svg">
   <title>biota archive grid</title>
-  <desc>The MAP-Elites archive is a 3D behavioral grid. Each of its three axes holds one descriptor chosen from a library of 15 (velocity, gyradius, spectral entropy, oscillation, compactness, and more); the diagram shows velocity × gyradius with spectral entropy as the depth axis as one common choice. Each cell holds the highest-quality creature found with that behavioral fingerprint. Bright magma colors indicate occupied cells; dark cells are empty.</desc>
+  <desc>The biota archive is a CVT-MAP-Elites archive. Three behavioral descriptors index its axes -- chosen from a library of 18 (velocity, gyradius, spectral entropy, and more). Before search begins, a calibration phase fits k-means centroids to the observed descriptor distribution, placing cells where creatures actually live in behavioral space. Each cell holds the highest-quality creature in its Voronoi region. Bright magma colors indicate occupied cells; dark cells are empty.</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
       <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
