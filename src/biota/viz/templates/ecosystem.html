@@ -751,7 +751,7 @@
                 <span class="source-label">source:</span>
                 <a class="source-link" href="../../archive/{{ sources[0].run_id }}/view.html">{{ sources[0].run_id }}</a>
                 <span class="meta-sep">&middot;</span>
-                <a class="source-link" href="../../archive/{{ sources[0].run_id }}/view.html#cell-{{ sources[0].coords_hash }}">cell {{ sources[0].coords_str }}</a>
+                <a class="source-link" href="../../archive/{{ sources[0].run_id }}/view.html#{{ sources[0].coords_hash }}">{{ sources[0].coords_str }}</a>
                 <span class="meta-sep">&middot;</span>
                 spawn min-dist {{ min_dist }}px
             </div>
@@ -760,7 +760,7 @@
             source:
             <a class="source-link" href="../../archive/{{ source_run_id }}/view.html">{{ source_run_id }}</a>
             <span class="meta-sep">&middot;</span>
-            <a class="source-link" href="../../archive/{{ source_run_id }}/view.html#cell-{{ source_coords_hash }}">cell {{ source_coords }}</a>
+            <a class="source-link" href="../../archive/{{ source_run_id }}/view.html#{{ source_coords_hash }}">{{ source_coords }}</a>
             <span class="meta-sep">&middot;</span>
             spawn min-dist {{ min_dist }}px
             {% endif %}
@@ -789,7 +789,7 @@
                 {% endif %}
                 <a class="source-entry-id" href="../../archive/{{ src.run_id }}/view.html">{{ src.run_id }}</a>
                 <div class="source-entry-cell">
-                    <a href="../../archive/{{ src.run_id }}/view.html#cell-{{ src.coords_hash }}">cell {{ src.coords_str }}</a>
+                    <a href="../../archive/{{ src.run_id }}/view.html#{{ src.coords_hash }}">{{ src.coords_str }}</a>
                 </div>
                 <div class="source-entry-meta">{{ src.n }} creature{{ 's' if src.n != 1 else '' }}</div>
             </div>
@@ -835,9 +835,9 @@
             <div class="meta-section-title" style="margin-top: 20px;">species mass</div>
             <div class="species-legend">
                 {% for src in sources %}
-                <span class="species-legend-item" title="{{ src.run_id }} cell {{ src.cell }}">
+                <span class="species-legend-item" title="{{ src.run_id }} {{ src.coords_str }}">
                     <span class="species-swatch" style="background: {{ species_palette[loop.index0] }};"></span>
-                    <span class="species-legend-name">s{{ loop.index }} {{ src.cell }}</span>
+                    <span class="species-legend-name">s{{ loop.index }} {{ src.coords_str }}</span>
                 </span>
                 {% endfor %}
             </div>

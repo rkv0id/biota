@@ -491,11 +491,11 @@
             <div class="stat-row">
                 <div class="stat">
                     <div class="stat-label">archive capacity</div>
-                    <div class="stat-value">16,384 <span class="stat-unit">cells</span></div>
+                    <div class="stat-value">1,024 <span class="stat-unit">centroids</span></div>
                 </div>
                 <div class="stat">
-                    <div class="stat-label">grid shape</div>
-                    <div class="stat-value">32 &times; 32 &times; 16</div>
+                    <div class="stat-label">archive type</div>
+                    <div class="stat-value">CVT-MAP-Elites</div>
                 </div>
                 <div class="stat">
                     <div class="stat-label">descriptor library</div>
@@ -505,7 +505,7 @@
 
             <h2 id="sys-search">MAP-Elites search</h2>
             <p><a class="pill amber" href="https://arxiv.org/abs/1504.04909" target="_blank" style="display:inline;padding:2px 6px;border-radius:3px;font-size:inherit;">MAP-Elites</a> runs a loop: sample parameters, simulate a creature, measure its behavior, insert it into the matching archive cell if it beats whatever is already there. After thousands of rollouts the archive fills with creatures covering the behavioral space as broadly as possible — not optimizing toward one solution, but toward diversity.</p>
-            <p>The archive is a three-dimensional behavioral grid. Each axis holds one descriptor chosen from a library of eighteen, all normalized to [0, 1] and empirically calibrated against real cluster runs. Each cell holds the highest-quality creature found with that behavioral fingerprint.</p>
+            <p>The archive is a CVT-MAP-Elites archive. Before search begins, a calibration phase runs a small number of rollouts and fits k-means centroids to the observed descriptor distribution. Archive cells are Voronoi regions around those centroids — dense where creatures naturally live in behavioral space, sparse where they do not. Each cell holds the highest-quality creature found in its region.</p>
 
             <div class="diagram-frame">{{ svg_archive_grid | safe }}</div>
 
@@ -514,7 +514,7 @@
             <div class="diagram-frame">{{ svg_search_loop | safe }}</div>
 
             <h2 id="sys-quality">Quality metric</h2>
-            <p>Every rollout passes three hard filters before it can enter the archive. First, the conserved quantity (mass + signal for signal runs, mass alone otherwise) must stay within [0.5, 2.0] of its initial value — creatures that explode or die are rejected. Second, the mean bounding-box fraction over the trailing window must be below 0.6 — creatures that spread across the entire grid are rejected. Third, the three behavioral descriptors measured over adjacent 50-step windows must not drift by more than 0.2 in normalized units — creatures that are still changing shape or speed are rejected.</p>
+            <p>Every rollout passes three hard filters before it can enter the archive. First, the conserved quantity (mass + signal for signal runs, mass alone otherwise) must stay within [0.5, 2.0] of its initial value — creatures that explode or die are rejected. Second, the mean bounding-box fraction over the trailing window must be below 0.6 — creatures that spread across the entire grid are rejected. Third, the three behavioral descriptors measured over adjacent 50-step windows must not drift by more than 20% of the observed descriptor range — creatures that are still changing shape or speed are rejected.</p>
             <p>Survivors are ranked by a three-component quality score that creates genuine selection pressure within the viable population:</p>
             <div class="math-block">
                 <span class="eq-label">quality score (non-signal)</span>
@@ -843,7 +843,7 @@ experiments:
     spawn: {seed: 42, min_dist: 80, patch: 48}
     sources:
       - run: &lt;your-run-id&gt;
-        cell: [5, 23, 13]
+        creature_id: &lt;your-creature-id&gt;
         n: 4
 
   - name: two-species
@@ -855,10 +855,10 @@ experiments:
     spawn: {seed: 42, min_dist: 100, patch: 48}
     sources:
       - run: &lt;your-run-id&gt;
-        cell: [5, 23, 13]
+        creature_id: &lt;your-creature-id&gt;
         n: 2
       - run: &lt;your-run-id&gt;
-        cell: [9, 14, 11]
+        creature_id: &lt;another-creature-id&gt;
         n: 2</pre>
             <pre class="code-block"><span class="comment"># Run experiments, then rebuild the atlas to include ecosystem results</span>
 <span class="cmd">biota ecosystem --config experiments.yaml --device cuda</span>

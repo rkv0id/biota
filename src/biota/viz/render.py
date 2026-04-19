@@ -194,23 +194,6 @@ def _result_to_card_data(
 # Replaced by histogram + correlation panel in the archive viewer rebuild (workstream 6).
 
 
-def _build_body_inner_stub(cards: dict[str, Any]) -> str:
-    """Minimal placeholder body used until the archive viewer is rebuilt in workstream 6."""
-    items = []
-    for key, card in sorted(cards.items(), key=lambda kv: -(kv[1]["quality"] or 0)):
-        cid = card.get("creature_id", key)
-        q = card.get("quality")
-        q_str = f"{q:.3f}" if q is not None else "-"
-        thumb = card.get("thumbnail", "")
-        items.append(
-            f'<div class="cell" data-key="{cid}">'
-            f'<img src="{thumb}" alt="{cid}" loading="lazy" />'
-            f'<div class="cell-quality">{q_str}</div>'
-            f"</div>"
-        )
-    return '<div class="grid">' + "\n".join(items) + "</div>"
-
-
 def render_archive_page(
     archive: Archive,
     run_id: str,
@@ -248,35 +231,34 @@ def render_archive_page(
         key = card["creature_id"] if card["creature_id"] else str(centroid_idx)
         cards[key] = card
 
-    swatch_stops = ", ".join(
-        f"rgb({r},{g},{b})"
-        for r, g, b in apply_magma(np.linspace(0, 255, 16, dtype=np.uint8).reshape(1, 16))[0]
-    )
-
-    full_names, short_names, dir_labels = _descriptor_display(archive.descriptor_names)
-    d0_dir, d1_dir, d2_dir = dir_labels
+    full_names, short_names, _dir_labels = _descriptor_display(archive.descriptor_names)
     d0_name, d1_name, d2_name = full_names
     d0_short, d1_short, d2_short = short_names
-    footer_legend = (
-        f"rows {d0_name}  \u00b7  columns {d1_name}  \u00b7  {d2_name} collapsed into cell color"
-    )
     desc_labels_json = json.dumps([d0_short, d1_short, d2_short])
-
-    body_inner = _build_body_inner_stub(cards)
     grid_desc = f"{archive.n_centroids} centroids"
+
+    # Read calibration metadata from manifest if available; fall back gracefully.
+    calibration_n: int = 0
+    calibration_survivors: int = 0
+    manifest_path = run_dir / "manifest.json"
+    if manifest_path.exists():
+        import json as _json
+
+        try:
+            manifest = _json.loads(manifest_path.read_text())
+            calibration_n = int(manifest.get("calibration_n", 0))
+            calibration_survivors = int(manifest.get("calibration_survivors", 0))
+        except Exception:
+            pass
 
     template = _ENV.get_template("archive.html")
     return template.render(
         run_id=run_id,
         run_dir=str(run_dir),
-        cell_render_px=CELL_RENDER_PX,
-        detail_render_px=DETAIL_RENDER_PX,
         n_cells=len(occupied),
         fill_pct=f"{archive.fill_fraction * 100:.1f}%",
         grid_desc=grid_desc,
         total_cells=archive.total_cells,
-        swatch_stops=swatch_stops,
-        body_inner=body_inner,
         cards_json=json.dumps(cards),
         stats_html=stats_html,
         stats_css=stats_css,
@@ -287,10 +269,8 @@ def render_archive_page(
         d0_short=d0_short,
         d1_short=d1_short,
         d2_short=d2_short,
-        d0_dir=d0_dir,
-        d1_dir=d1_dir,
-        d2_dir=d2_dir,
-        footer_legend=footer_legend,
         border=border,
         has_signal=has_signal,
+        calibration_n=calibration_n,
+        calibration_survivors=calibration_survivors,
     )
