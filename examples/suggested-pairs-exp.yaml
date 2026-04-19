@@ -2,9 +2,9 @@ experiments:
 
   # Density guide:
   # patch: 32 -> creature ~64px visible radius
-  # min_dist: 0  -> random placement, heavy initial overlap, instant chaos
-  # min_dist: 15 -> slight separation, dense but not overlapping
-  # min_dist: 30 -> moderate separation, ~2 creature widths apart
+  # min_dist: 35 -> patch width, patches just touching, solitons immediately in contact
+  # min_dist: 50 -> 1.5x patch, small visible gap, creatures within signal range
+  # min_dist: 70 -> 2x patch, moderate gap, only signal diffusion bridges them
   # Grid rule: 512x512 comfortably holds 50+ creatures at min_dist=15
 
   # ── REPULSION: high density territorial ────────────────────────────────────
@@ -27,7 +27,7 @@ experiments:
         n: 15
     spawn:
       patch: 32
-      min_dist: 15
+      min_dist: 50
       seed: 42
 
   # Same pair, immediate overlap start -- does repulsion self-organize
@@ -49,7 +49,7 @@ experiments:
         n: 20
     spawn:
       patch: 32
-      min_dist: 0
+      min_dist: 35
       seed: 42
 
   # Torus dense -- periodic boundaries, no walls to die against.
@@ -70,7 +70,7 @@ experiments:
         n: 15
     spawn:
       patch: 32
-      min_dist: 15
+      min_dist: 50
       seed: 42
 
   # Landscape dense -- long thin habitat, species compete for horizontal bands.
@@ -91,7 +91,7 @@ experiments:
         n: 12
     spawn:
       patch: 32
-      min_dist: 15
+      min_dist: 50
       seed: 42
 
   # ── PURSUIT: dense chase field ─────────────────────────────────────────────
@@ -114,7 +114,7 @@ experiments:
         n: 15
     spawn:
       patch: 32
-      min_dist: 15
+      min_dist: 50
       seed: 42
 
   # Overlapping start, pursuit -- pursuers embedded among prey from step 1.
@@ -135,7 +135,7 @@ experiments:
         n: 20
     spawn:
       patch: 32
-      min_dist: 0
+      min_dist: 35
       seed: 42
 
   # Torus pursuit landscape -- infinite horizontal pursuit corridor.
@@ -156,7 +156,7 @@ experiments:
         n: 12
     spawn:
       patch: 32
-      min_dist: 15
+      min_dist: 50
       seed: 7
 
   # ── COMPETITION: dense mutual attraction ───────────────────────────────────
@@ -179,7 +179,7 @@ experiments:
         n: 15
     spawn:
       patch: 32
-      min_dist: 15
+      min_dist: 50
       seed: 42
 
   # Overlapping start -- both species already intermixed. Does exclusion happen?
@@ -200,7 +200,7 @@ experiments:
         n: 20
     spawn:
       patch: 32
-      min_dist: 0
+      min_dist: 35
       seed: 42
 
   # ── TRIOS: three species dense ─────────────────────────────────────────────
@@ -227,7 +227,7 @@ experiments:
         n: 12
     spawn:
       patch: 32
-      min_dist: 15
+      min_dist: 50
       seed: 42
 
   # Repulsion trio torus dense -- periodic, no walls to sort into.
@@ -252,7 +252,7 @@ experiments:
         n: 12
     spawn:
       patch: 32
-      min_dist: 15
+      min_dist: 50
       seed: 42
 
   # Mixed dynamics trio, overlapping start -- repulsion + pursuit + competition
@@ -278,7 +278,7 @@ experiments:
         n: 15
     spawn:
       patch: 32
-      min_dist: 0
+      min_dist: 35
       seed: 42
 
   # ── QUADS: four species dense ──────────────────────────────────────────────
@@ -309,7 +309,7 @@ experiments:
         n: 10
     spawn:
       patch: 32
-      min_dist: 15
+      min_dist: 50
       seed: 42
 
   # Quad repulsion torus landscape -- four species competing for bands.
@@ -338,7 +338,7 @@ experiments:
         n: 10
     spawn:
       patch: 32
-      min_dist: 15
+      min_dist: 50
       seed: 42
 
   # ── PENTA: five species dense ──────────────────────────────────────────────
@@ -373,7 +373,7 @@ experiments:
         n: 10
     spawn:
       patch: 32
-      min_dist: 15
+      min_dist: 50
       seed: 42
 
   # Five species chaos -- 50 creatures with zero separation, from total overlap.
@@ -406,7 +406,7 @@ experiments:
         n: 10
     spawn:
       patch: 32
-      min_dist: 0
+      min_dist: 35
       seed: 42
 
   # ── HOMOGENEOUS: microscope density ────────────────────────────────────────
@@ -425,7 +425,7 @@ experiments:
         n: 25
     spawn:
       patch: 32
-      min_dist: 15
+      min_dist: 50
       seed: 42
 
   # 340 torus packed -- self-signal soup on periodic grid.
@@ -442,7 +442,7 @@ experiments:
         n: 25
     spawn:
       patch: 32
-      min_dist: 15
+      min_dist: 50
       seed: 42
 
   # 180 produced CANNIBALISM -- 30 copies from chaos. Full grid consumption.
@@ -459,7 +459,7 @@ experiments:
         n: 30
     spawn:
       patch: 32
-      min_dist: 0
+      min_dist: 35
       seed: 42
 
   # 46 packed -- signal accumulator colony. Does shared signal field
@@ -477,7 +477,7 @@ experiments:
         n: 30
     spawn:
       patch: 32
-      min_dist: 15
+      min_dist: 50
       seed: 42
 
   # Maximum density specimen -- 40 copies of 180 from total overlap.
@@ -495,7 +495,7 @@ experiments:
         n: 40
     spawn:
       patch: 32
-      min_dist: 0
+      min_dist: 35
       seed: 42
 
   # ── SPATIAL ARCHIVE: non-signal morphological experiments ─────────────────
@@ -519,7 +519,7 @@ experiments:
         n: 12
     spawn:
       patch: 32
-      min_dist: 15
+      min_dist: 50
       seed: 42
 
   # Lattice network vs concentric rings -- two structured but geometrically
@@ -541,7 +541,7 @@ experiments:
         n: 12
     spawn:
       patch: 32
-      min_dist: 15
+      min_dist: 50
       seed: 42
 
   # Three-way spatial morphology -- chaos from overlap.
@@ -566,7 +566,7 @@ experiments:
         n: 12
     spawn:
       patch: 32
-      min_dist: 0
+      min_dist: 35
       seed: 42
 
   # Homogeneous dot-grid -- 30 copies of the tessellated circle.
@@ -584,7 +584,7 @@ experiments:
         n: 30
     spawn:
       patch: 32
-      min_dist: 0
+      min_dist: 35
       seed: 42
 
   # ── SIGNAL SPECIALISTS: exotic morphologies from 08 and 04 ────────────────
@@ -607,7 +607,7 @@ experiments:
         n: 12
     spawn:
       patch: 32
-      min_dist: 15
+      min_dist: 50
       seed: 42
 
   # Mandala vs square lattice -- both from signal specialist archive.
@@ -628,7 +628,7 @@ experiments:
         n: 12
     spawn:
       patch: 32
-      min_dist: 15
+      min_dist: 50
       seed: 42
 
   # Smiley face homogeneous -- 25 copies. What do smileys do to each other?
@@ -645,7 +645,7 @@ experiments:
         n: 25
     spawn:
       patch: 32
-      min_dist: 15
+      min_dist: 50
       seed: 42
 
   # ── SIGNAL MORPHO: brain folds, circuit boards, dot arrays ────────────────
@@ -668,7 +668,7 @@ experiments:
         n: 12
     spawn:
       patch: 32
-      min_dist: 15
+      min_dist: 50
       seed: 42
 
   # Dot-array vs ring-with-satellites -- the two most visually distinct
@@ -690,7 +690,7 @@ experiments:
         n: 12
     spawn:
       patch: 32
-      min_dist: 15
+      min_dist: 50
       seed: 42
 
   # Five morpho species chaos -- all the exotic signal-morpho forms at once.
@@ -723,7 +723,7 @@ experiments:
         n: 8
     spawn:
       patch: 32
-      min_dist: 0
+      min_dist: 35
       seed: 42
 
   # ── CROSS-ARCHIVE: exotic morphologies meet signal specialists ─────────────
@@ -746,7 +746,7 @@ experiments:
         n: 12
     spawn:
       patch: 32
-      min_dist: 15
+      min_dist: 50
       seed: 42
 
   # Mandala meets dot-array -- competing symmetric structures.
@@ -767,7 +767,7 @@ experiments:
         n: 12
     spawn:
       patch: 32
-      min_dist: 15
+      min_dist: 50
       seed: 42
 
   # ── VISUALLY INTERESTING MORPHOLOGIES ─────────────────────────────────────
@@ -792,7 +792,7 @@ experiments:
         n: 25
     spawn:
       patch: 32
-      min_dist: 15
+      min_dist: 50
       seed: 42
 
   # 177 on torus -- ring solitons in periodic space, self-signal wraps around.
@@ -809,7 +809,7 @@ experiments:
         n: 25
     spawn:
       patch: 32
-      min_dist: 15
+      min_dist: 50
       seed: 42
 
   # 177 from total overlap -- 30 rings starting fully intermixed.
@@ -826,7 +826,7 @@ experiments:
         n: 30
     spawn:
       patch: 32
-      min_dist: 0
+      min_dist: 35
       seed: 42
 
   # 231: ring with internal bubble structure -- 20 copies packed.
@@ -843,7 +843,7 @@ experiments:
         n: 20
     spawn:
       patch: 32
-      min_dist: 15
+      min_dist: 50
       seed: 42
 
   # 231 chaos -- bubble-ring structures from total overlap.
@@ -860,7 +860,7 @@ experiments:
         n: 30
     spawn:
       patch: 32
-      min_dist: 0
+      min_dist: 35
       seed: 42
 
   # 248: labyrinthine/neural pattern -- 20 copies. Does the maze structure
@@ -878,7 +878,7 @@ experiments:
         n: 20
     spawn:
       patch: 32
-      min_dist: 15
+      min_dist: 50
       seed: 42
 
   # Ring vs labyrinth -- two maximally different morphologies.
@@ -900,7 +900,7 @@ experiments:
         n: 12
     spawn:
       patch: 32
-      min_dist: 15
+      min_dist: 50
       seed: 42
 
   # Ring vs bubble-ring -- similar morphological family, different internal
@@ -922,7 +922,7 @@ experiments:
         n: 12
     spawn:
       patch: 32
-      min_dist: 15
+      min_dist: 50
       seed: 42
 
   # Ring vs blob-cluster -- 340 is the established repeller, 177 is the ring.
@@ -944,7 +944,7 @@ experiments:
         n: 12
     spawn:
       patch: 32
-      min_dist: 15
+      min_dist: 50
       seed: 42
 
   # Trio: ring + labyrinth + blob -- three maximally distinct morphologies.
@@ -969,7 +969,7 @@ experiments:
         n: 10
     spawn:
       patch: 32
-      min_dist: 15
+      min_dist: 50
       seed: 42
 
   # Quad: ring + bubble-ring + labyrinth + maze -- all complex morphologies.
@@ -999,7 +999,7 @@ experiments:
         n: 8
     spawn:
       patch: 32
-      min_dist: 15
+      min_dist: 50
       seed: 42
 
   # Quad chaos -- all four complex morphologies from total overlap on torus.
@@ -1028,5 +1028,5 @@ experiments:
         n: 10
     spawn:
       patch: 32
-      min_dist: 0
+      min_dist: 35
       seed: 42
