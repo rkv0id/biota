@@ -186,6 +186,13 @@ class SearchFinished:
 SearchEvent = SearchStarted | RolloutCompleted | CheckpointWritten | SearchFinished
 EventCallback = Callable[[SearchEvent], None]
 
+CalibrationProgressFn = Callable[[int, int, int], None]
+"""Callback(completed, total, n_survivors) called after each calibration batch drains.
+Purely for display; return value is ignored."""
+
+CalibrationDoneFn = Callable[[int, tuple[str, str, str]], None]
+"""Callback(n_survivors, descriptor_names) called once after calibration completes."""
+
 
 # === public API ===
 
@@ -196,6 +203,8 @@ def search(
     on_event: EventCallback | None = None,
     archive: Archive | None = None,
     run_id: str | None = None,
+    on_calibration_progress: CalibrationProgressFn | None = None,
+    on_calibration_done: CalibrationDoneFn | None = None,
 ) -> Archive:
     """Run a complete MAP-Elites search to budget and return the populated archive.
 
@@ -240,6 +249,8 @@ def search(
         on_event=on_event,
         completed=0,
         rng=random.Random(config.base_seed + 31337),
+        on_calibration_progress=on_calibration_progress,
+        on_calibration_done=on_calibration_done,
     )
     _write_manifest(state)
     _write_config(state)
@@ -323,6 +334,8 @@ class _LoopState:
     completed: int
     rng: random.Random
     started_at: float = 0.0
+    on_calibration_progress: CalibrationProgressFn | None = None
+    on_calibration_done: CalibrationDoneFn | None = None
 
 
 def _emit(state: _LoopState, event: SearchEvent) -> None:
@@ -368,18 +381,20 @@ def _calibration_phase(state: _LoopState, start_seed: int) -> None:
 
     Calibration rollouts are identical to normal rollouts but results are
     not inserted into the archive -- they are used only to fit k-means
-    centroids that define the Voronoi tessellation. Seeds are offset
-    negative so they never collide with search seeds.
+    centroids that define the Voronoi tessellation.
 
     Falls back to uniform random centroids in the observed bounding box if
-    fewer than 20 rollouts pass the quality filter, logging a warning.
+    fewer than 20 rollouts pass the quality filter. Calls
+    state.on_calibration_progress(completed, total, n_survivors) after each
+    drain so the CLI can drive a progress spinner without any display logic
+    living in this module.
     """
     n_cal = state.config.calibration
     n_centroids = state.config.centroids
 
     survivors: list[tuple[float, float, float]] = []
     in_flight: list[RolloutHandle] = []
-    next_seed = start_seed
+    completed_cal = 0
 
     cal_end_seed = start_seed + n_cal
     next_seed = start_seed
@@ -389,8 +404,11 @@ def _calibration_phase(state: _LoopState, start_seed: int) -> None:
             completed, in_flight = wait_for_completed(in_flight, min_completed=1)
             for batch in completed:
                 for result in batch:
+                    completed_cal += 1
                     if result.descriptors is not None and result.quality is not None:
                         survivors.append(result.descriptors)
+            if state.on_calibration_progress is not None:
+                state.on_calibration_progress(completed_cal, n_cal, len(survivors))
 
         if next_seed < cal_end_seed:
             stop = min(cal_end_seed, next_seed + state.config.batch_size)
@@ -418,8 +436,11 @@ def _calibration_phase(state: _LoopState, start_seed: int) -> None:
             completed, in_flight = wait_for_completed(in_flight, min_completed=1)
             for batch in completed:
                 for result in batch:
+                    completed_cal += 1
                     if result.descriptors is not None and result.quality is not None:
                         survivors.append(result.descriptors)
+            if state.on_calibration_progress is not None:
+                state.on_calibration_progress(completed_cal, n_cal, len(survivors))
 
     MIN_SURVIVORS = 20
     pts: np.ndarray
@@ -450,6 +471,9 @@ def _calibration_phase(state: _LoopState, start_seed: int) -> None:
     _append_calibration_manifest(
         state, n_cal=n_cal, n_survivors=len(survivors), centroids=centroids
     )
+
+    if state.on_calibration_done is not None:
+        state.on_calibration_done(len(survivors), state.config.descriptor_names)
 
 
 def _submit_phase(
