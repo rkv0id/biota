@@ -369,3 +369,199 @@ experiments:
       patch: 20
       min_dist: 35
       seed: 123
+
+  # ── HOMOGENEOUS: single species, multiple copies ───────────────────────────
+
+  # 340 with itself -- strong signal emitter on a large grid. Does quorum
+  # sensing produce aggregation (copies cluster) or self-repulsion (copies
+  # spread out)? Depends on sign of alpha_coupling when receiving own signal.
+  - name: homo-340-large
+    grid: [256, 256]
+    steps: 12000
+    snapshot_every: 30
+    border: wall
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-340
+        n: 6
+    spawn:
+      patch: 20
+      min_dist: 35
+      seed: 42
+
+  # 340 on torus -- periodic boundary means signal wraps around and hits
+  # the creature from behind. Self-signal saturation effect.
+  - name: homo-340-torus
+    grid: [256, 256]
+    steps: 12000
+    snapshot_every: 30
+    border: torus
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-340
+        n: 6
+    spawn:
+      patch: 20
+      min_dist: 35
+      seed: 42
+
+  # 46 homogeneous -- signal accumulator, see if copies coexist or merge.
+  - name: homo-46-landscape
+    grid: [192, 384]
+    steps: 10000
+    snapshot_every: 25
+    border: wall
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 06-wall-signal-accumulation
+        creature_id: 20260419-193848-quiet-zephyr-46
+        n: 6
+    spawn:
+      patch: 20
+      min_dist: 35
+      seed: 42
+
+  # 180 homogeneous -- high mutual chemotaxis within species.
+  # Many copies in a dense grid -- do they form colonies?
+  - name: homo-180-dense
+    grid: [192, 192]
+    steps: 10000
+    snapshot_every: 25
+    border: wall
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 06-wall-signal-accumulation
+        creature_id: 20260419-193848-quiet-zephyr-180
+        n: 8
+    spawn:
+      patch: 16
+      min_dist: 25
+      seed: 42
+
+  # ── MORE SPECIES: 4-way heterogeneous ─────────────────────────────────────
+
+  # Four species -- repulsion pair + pursuit pair simultaneously.
+  # 340 repels 46, 340 pursues 180, 176 competes with 180.
+  # Most complex chemical environment of all runs.
+  - name: quad-repulsion-pursuit-competition
+    grid: [320, 320]
+    steps: 15000
+    snapshot_every: 35
+    border: wall
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-340
+        n: 2
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 06-wall-signal-accumulation
+        creature_id: 20260419-193848-quiet-zephyr-46
+        n: 2
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 06-wall-signal-accumulation
+        creature_id: 20260419-193848-quiet-zephyr-180
+        n: 2
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-176
+        n: 2
+    spawn:
+      patch: 18
+      min_dist: 40
+      seed: 42
+
+  # Four species on torus, large grid -- all repulsion combinations.
+  # 340 repels 46, 349 repels 248, all in the same chemical soup.
+  - name: quad-repulsion-torus-large
+    grid: [384, 384]
+    steps: 15000
+    snapshot_every: 35
+    border: torus
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-340
+        n: 2
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 06-wall-signal-accumulation
+        creature_id: 20260419-193848-quiet-zephyr-46
+        n: 2
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 04-wall-signal-specialist
+        creature_id: 20260419-192839-hazy-willow-349
+        n: 2
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-248
+        n: 2
+    spawn:
+      patch: 20
+      min_dist: 45
+      seed: 42
+
+  # Five species -- maximum diversity. One from each major interaction class.
+  # 340 (repeller), 46 (repelled by 340), 180 (pursuer target), 176 (competitor),
+  # 248 (blind to most). Unpredictable chemical environment.
+  - name: penta-all-modes
+    grid: [384, 384]
+    steps: 15000
+    snapshot_every: 35
+    border: wall
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-340
+        n: 2
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 06-wall-signal-accumulation
+        creature_id: 20260419-193848-quiet-zephyr-46
+        n: 2
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 06-wall-signal-accumulation
+        creature_id: 20260419-193848-quiet-zephyr-180
+        n: 2
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-176
+        n: 2
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-248
+        n: 2
+    spawn:
+      patch: 18
+      min_dist: 40
+      seed: 42
+
+  # ── HIGH CREATURE COUNT: same species pairs, many copies ──────────────────
+
+  # Best repulsion pair at very high density -- 8 of each on a huge grid.
+  # Can 16 creatures negotiate stable territories? Mosaic pattern expected.
+  - name: repulsion-340-vs-46-mosaic
+    grid: [384, 512]
+    steps: 15000
+    snapshot_every: 35
+    border: wall
+    output_format: gif
+    sources:
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 05-torus-signal-morpho
+        creature_id: 20260419-193323-plush-yew-340
+        n: 8
+      - archive_dir: /mnt/scratch/biota/archive
+        run: 06-wall-signal-accumulation
+        creature_id: 20260419-193848-quiet-zephyr-46
+        n: 8
+    spawn:
+      patch: 16
+      min_dist: 30
+      seed: 42
