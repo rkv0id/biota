@@ -68,7 +68,7 @@ PARAMETER_SPECS: tuple[ParameterSpec, ...] = (
 SIGNAL_PARAMETER_SPECS: tuple[ParameterSpec, ...] = (
     ParameterSpec("emission_vector", "c", 0.0, 1.0, 0.1),
     ParameterSpec("receptor_profile", "c_sym", -1.0, 1.0, 0.2),
-    ParameterSpec("emission_rate", "scalar", 0.001, 0.05, 0.005),
+    ParameterSpec("emission_rate", "scalar", 0.0001, 0.01, 0.001),
     ParameterSpec("decay_rates", "c", 0.0, 0.9, 0.05),
     ParameterSpec("alpha_coupling", "scalar", -1.0, 1.0, 0.15),
     ParameterSpec("beta_modulation", "scalar", -1.0, 1.0, 0.15),

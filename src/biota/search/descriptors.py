@@ -698,9 +698,9 @@ def compute_emission_activity(trace: RolloutTrace) -> float:
         return 0.0
     mean_activity = float(trace.signal_emission_history.mean())
     # Normalizer calibrated to mean(G_pos * rate): G_pos averaged over grid
-    # is typically 0.0-0.1; rate in [0.001, 0.05]. So mean(G_pos * rate)
-    # spans ~0.00005-0.003 in practice. 0.001 gives good spread.
-    return float(np.clip(mean_activity / 0.001, 0.0, 1.0))
+    # is typically 0.0-0.1; rate in [0.0001, 0.01]. So mean(G_pos * rate)
+    # spans ~0.00001-0.0005 in practice. 0.0002 gives good spread.
+    return float(np.clip(mean_activity / 0.0002, 0.0, 1.0))
 
 
 def compute_receptor_sensitivity(trace: RolloutTrace) -> float:

@@ -580,8 +580,8 @@ def test_emission_activity_zero_for_empty_history() -> None:
 
 
 def test_emission_activity_scales_with_emission() -> None:
-    low = _make_signal_trace(emission_history=np.full(TRACE_LEN, 0.0002, dtype=np.float32))
-    high = _make_signal_trace(emission_history=np.full(TRACE_LEN, 0.0008, dtype=np.float32))
+    low = _make_signal_trace(emission_history=np.full(TRACE_LEN, 0.00005, dtype=np.float32))
+    high = _make_signal_trace(emission_history=np.full(TRACE_LEN, 0.00015, dtype=np.float32))
     assert compute_emission_activity(low) < compute_emission_activity(high)
 
 

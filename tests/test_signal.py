@@ -108,7 +108,7 @@ def test_signal_vector_lengths() -> None:
 
 def test_emission_rate_in_range() -> None:
     params = _make_signal_params()
-    assert 0.001 <= params["emission_rate"] <= 0.05  # type: ignore[typeddict-item]
+    assert 0.0001 <= params["emission_rate"] <= 0.01  # type: ignore[typeddict-item]
 
 
 def test_decay_rates_in_range() -> None:
@@ -150,7 +150,7 @@ def test_mutate_preserves_signal_keys() -> None:
     assert len(child["emission_vector"]) == SIGNAL_CHANNELS  # type: ignore[typeddict-item]
     assert len(child["receptor_profile"]) == SIGNAL_CHANNELS  # type: ignore[typeddict-item]
     assert len(child["decay_rates"]) == SIGNAL_CHANNELS  # type: ignore[typeddict-item]
-    assert 0.001 <= child["emission_rate"] <= 0.05  # type: ignore[typeddict-item]
+    assert 0.0001 <= child["emission_rate"] <= 0.01  # type: ignore[typeddict-item]
     assert -1.0 <= child["alpha_coupling"] <= 1.0  # type: ignore[typeddict-item]
     assert -1.0 <= child["beta_modulation"] <= 1.0  # type: ignore[typeddict-item]
 
@@ -213,13 +213,13 @@ def test_alive_filter_fails_when_creature_mass_collapses() -> None:
     """Creature converted almost all mass to signal -- below creature floor."""
     trace = _minimal_trace()
     initial_mass = 100.0
-    # Creature mass dropped to 5% of initial -- below CREATURE_MASS_FLOOR (20%)
+    # Creature mass dropped to 3% of initial -- below CREATURE_MASS_FLOOR (5%)
     eval_input = RolloutEvaluation(
         initial_mass=initial_mass,
-        final_mass=5.0,
+        final_mass=3.0,
         trace=trace,
         initial_total=initial_mass,
-        final_signal_mass=95.0,
+        final_signal_mass=97.0,
     )
     result = evaluate(eval_input)
     assert result.rejection_reason == "dead"
@@ -240,15 +240,15 @@ def test_alive_filter_fails_when_total_mass_lost() -> None:
 
 
 def test_alive_filter_signal_creature_mass_floor_is_stricter() -> None:
-    """Signal creature mass floor is 0.2 (vs no effective floor for non-signal)."""
+    """Signal creature mass floor is 0.05 -- only truly collapsed creatures fail."""
     trace = _minimal_trace()
-    # 15% of initial_mass remaining -- above old 10% floor, below new 20% floor
+    # 4% of initial_mass remaining -- below CREATURE_MASS_FLOOR (5%)
     eval_input = RolloutEvaluation(
         initial_mass=100.0,
-        final_mass=15.0,
+        final_mass=4.0,
         trace=trace,
         initial_total=100.0,
-        final_signal_mass=85.0,  # total conserved
+        final_signal_mass=96.0,  # total conserved
     )
     result = evaluate(eval_input)
     assert result.rejection_reason == "dead"

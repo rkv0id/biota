@@ -57,8 +57,10 @@ ALIVE_UPPER = 2.0
 LOCALIZED_THRESHOLD = 0.6
 PERSISTENT_DESCRIPTOR_DRIFT = 0.2
 # Signal creatures: mass field must not drop below this fraction of initial_mass
-# even when total (mass + signal) is conserved.
-CREATURE_MASS_FLOOR = 0.2
+# even when total (mass + signal) is conserved. Set low (0.05) so that
+# signal_retention in the quality metric does the selection work rather
+# than this hard floor killing viable emitters.
+CREATURE_MASS_FLOOR = 0.05
 
 # Quality component weights
 _W_COMPACT_BASE = 0.6

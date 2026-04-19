@@ -27,8 +27,9 @@ class _SignalParams(TypedDict, total=False):
     receptor_profile: (C,) floats in [-1, 1]. Dot product with the convolved
                       signal field produces a scalar growth boost. Negative
                       values produce an inhibitory (aversive) response.
-    emission_rate:    Scalar in [0.001, 0.05]. Fraction of positive growth
-                      activity converted to signal per step.
+    emission_rate:    Scalar in [0.0001, 0.01]. Fraction of positive growth
+                      activity converted to signal per step. Kept low to
+                      prevent catastrophic mass bleed over 500+ steps.
     decay_rates:      (C,) floats in [0, 0.9]. Per-channel decay rate.
     alpha_coupling:   Scalar in [-1, 1]. Reception-to-growth coupling strength.
                       Positive = chemotaxis (grow into favorable signal gradients,
