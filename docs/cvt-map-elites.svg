@@ -1,0 +1,117 @@
+<svg width="100%" viewBox="0 0 680 420" role="img" xmlns="http://www.w3.org/2000/svg">
+  <title>biota CVT-MAP-Elites algorithm</title>
+  <desc>Two-phase algorithm. Phase 1: calibration. M random creatures are rolled out and their descriptors are recorded. K-means fits k centroids to the survivor distribution, placing archive cells where creatures actually live in behavioral space. Phase 2: search. The MAP-Elites loop samples a parent from occupied cells, mutates its parameters to produce a child, rolls it out, and finds the nearest CVT centroid via cKDTree lookup. If the child's quality beats the current occupant (or the cell is empty), it replaces it.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+      .th     { font-size: 13px; font-weight: 500; fill: #e4e4e7; }
+      .ts     { font-size: 11px; font-weight: 400; fill: #a1a1aa; }
+      .tsa    { font-size: 10px; font-weight: 400; fill: #71717a; }
+      .tlabel { font-size: 10px; font-weight: 500; fill: #52525b; letter-spacing: 0.07em; }
+    </style>
+  </defs>
+
+  <!-- ═══ PHASE 1: CALIBRATION ═══ -->
+  <rect x="28" y="20" width="300" height="180" rx="8" fill="#16181f" stroke="#2e3044" stroke-width="1"/>
+  <text class="tlabel" x="44" y="38">PHASE 1 — CALIBRATION</text>
+
+  <!-- Random rollouts box -->
+  <rect x="44" y="48" width="120" height="136" rx="6" fill="#141a26" stroke="#185fa5" stroke-width="0.5"/>
+  <text class="th"  x="104" y="82"  text-anchor="middle" dominant-baseline="central">random</text>
+  <text class="th"  x="104" y="98"  text-anchor="middle" dominant-baseline="central">rollouts</text>
+  <text class="ts"  x="104" y="120" text-anchor="middle" dominant-baseline="central">M creatures</text>
+  <text class="tsa" x="104" y="138" text-anchor="middle" dominant-baseline="central">uniform params</text>
+  <text class="tsa" x="104" y="154" text-anchor="middle" dominant-baseline="central">survivors only</text>
+  <!-- survivor dots in box -->
+  <circle cx="72"  cy="172" r="2" fill="#71717a" opacity="0.6"/>
+  <circle cx="84"  cy="168" r="2" fill="#71717a" opacity="0.6"/>
+  <circle cx="96"  cy="174" r="2" fill="#71717a" opacity="0.6"/>
+  <circle cx="108" cy="170" r="2" fill="#71717a" opacity="0.6"/>
+  <circle cx="120" cy="172" r="2" fill="#71717a" opacity="0.6"/>
+  <circle cx="132" cy="168" r="2" fill="#71717a" opacity="0.6"/>
+  <circle cx="144" cy="174" r="2" fill="#71717a" opacity="0.6"/>
+
+  <!-- Arrow: rollouts → centroids -->
+  <path d="M164 116 L190 116" fill="none" stroke="#ba7517" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+  <text class="tsa" x="177" y="109" text-anchor="middle">k-means</text>
+
+  <!-- k centroids box -->
+  <rect x="192" y="48" width="120" height="136" rx="6" fill="#1f1a0e" stroke="#ba7517" stroke-width="0.5"/>
+  <text class="th"  x="252" y="82"  text-anchor="middle" dominant-baseline="central">k centroids</text>
+  <text class="ts"  x="252" y="100" text-anchor="middle" dominant-baseline="central">1,024 cells</text>
+  <text class="tsa" x="252" y="118" text-anchor="middle" dominant-baseline="central">fitted to survivor</text>
+  <text class="tsa" x="252" y="134" text-anchor="middle" dominant-baseline="central">distribution</text>
+  <text class="tsa" x="252" y="152" text-anchor="middle" dominant-baseline="central">cKDTree for O(log k)</text>
+  <!-- centroid dots in box -->
+  <circle cx="222" cy="172" r="4" fill="#fcd880" stroke="#d4d4d8" stroke-width="0.4"/>
+  <circle cx="240" cy="168" r="4" fill="#f8b040" stroke="#a1a1aa" stroke-width="0.4"/>
+  <circle cx="258" cy="174" r="4" fill="#200828" stroke="#3f3f46" stroke-width="0.4"/>
+  <circle cx="276" cy="170" r="4" fill="#f07018" stroke="#a1a1aa" stroke-width="0.4"/>
+  <circle cx="294" cy="172" r="4" fill="#9c2040" stroke="#71717a" stroke-width="0.4"/>
+
+  <!-- ═══ PHASE 2: SEARCH ═══ -->
+  <rect x="352" y="20" width="300" height="380" rx="8" fill="#16181f" stroke="#2e3044" stroke-width="1"/>
+  <text class="tlabel" x="368" y="38">PHASE 2 — SEARCH LOOP</text>
+
+  <!-- Archive box -->
+  <rect x="368" y="48" width="268" height="80" rx="6" fill="#1f1a0e" stroke="#ba7517" stroke-width="0.5"/>
+  <text class="th"  x="502" y="76" text-anchor="middle" dominant-baseline="central">MAP-Elites archive</text>
+  <text class="ts"  x="502" y="96" text-anchor="middle" dominant-baseline="central">k CVT cells · one best creature each</text>
+  <!-- mini centroid row -->
+  <circle cx="410" cy="116" r="4" fill="#fcd880" stroke="#d4d4d8" stroke-width="0.4"/>
+  <circle cx="430" cy="116" r="4" fill="#f8b040" stroke="#a1a1aa" stroke-width="0.4"/>
+  <circle cx="450" cy="116" r="4" fill="#200828" stroke="#3f3f46" stroke-width="0.4"/>
+  <circle cx="470" cy="116" r="4" fill="#f07018" stroke="#a1a1aa" stroke-width="0.4"/>
+  <circle cx="490" cy="116" r="4" fill="#9c2040" stroke="#71717a" stroke-width="0.4"/>
+  <circle cx="510" cy="116" r="4" fill="#200828" stroke="#3f3f46" stroke-width="0.4"/>
+  <circle cx="530" cy="116" r="4" fill="#f8a028" stroke="#a1a1aa" stroke-width="0.4"/>
+  <circle cx="550" cy="116" r="4" fill="#f8c030" stroke="#a1a1aa" stroke-width="0.4"/>
+  <circle cx="570" cy="116" r="4" fill="#200828" stroke="#3f3f46" stroke-width="0.4"/>
+  <circle cx="590" cy="116" r="4" fill="#d84820" stroke="#a1a1aa" stroke-width="0.4"/>
+
+  <!-- Arrow: archive → select parent -->
+  <path d="M502 128 L502 148" fill="none" stroke="#ba7517" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+  <text class="tsa" x="540" y="142" text-anchor="start">select parent</text>
+
+  <!-- Select + mutate box -->
+  <rect x="368" y="150" width="268" height="68" rx="6" fill="#1c1e27" stroke="#3e4160" stroke-width="0.5"/>
+  <text class="th"  x="502" y="176" text-anchor="middle" dominant-baseline="central">select · mutate</text>
+  <text class="ts"  x="502" y="196" text-anchor="middle" dominant-baseline="central">random parent or random params</text>
+  <text class="tsa" x="502" y="210" text-anchor="middle" dominant-baseline="central">Gaussian perturbation of param vector</text>
+
+  <!-- Arrow: mutate → rollout -->
+  <path d="M502 218 L502 238" fill="none" stroke="#4a4e6a" stroke-width="1" marker-end="url(#arrow)"/>
+  <text class="tsa" x="540" y="232" text-anchor="start">child params</text>
+
+  <!-- Rollout box -->
+  <rect x="368" y="240" width="268" height="60" rx="6" fill="#141a26" stroke="#185fa5" stroke-width="0.5"/>
+  <text class="th"  x="502" y="266" text-anchor="middle" dominant-baseline="central">Flow-Lenia rollout</text>
+  <text class="tsa" x="502" y="284" text-anchor="middle" dominant-baseline="central">B creatures · descriptors · quality</text>
+
+  <!-- Arrow: rollout → centroid lookup -->
+  <path d="M502 300 L502 320" fill="none" stroke="#4a4e6a" stroke-width="1" marker-end="url(#arrow)"/>
+
+  <!-- Centroid lookup box -->
+  <rect x="368" y="322" width="268" height="60" rx="6" fill="#121e1c" stroke="#0f6e56" stroke-width="0.5"/>
+  <text class="th"  x="502" y="348" text-anchor="middle" dominant-baseline="central">nearest centroid</text>
+  <text class="tsa" x="502" y="366" text-anchor="middle" dominant-baseline="central">cKDTree · O(log k) lookup</text>
+
+  <!-- Arrow: lookup → insert/discard -->
+  <path d="M502 382 L502 396" fill="none" stroke="#4a4e6a" stroke-width="1" marker-end="url(#arrow)"/>
+
+  <!-- Insert/discard decision -->
+  <text class="ts"  x="502" y="394" text-anchor="middle" dominant-baseline="central">quality &gt; occupant ?</text>
+
+  <!-- Insert arc back to archive -->
+  <path d="M636 390 L636 88 L638 88" fill="none" stroke="#ba7517" stroke-width="1" marker-end="url(#arrow)"/>
+  <text class="tsa" x="640" y="250" text-anchor="start">yes → replace</text>
+  <text class="tsa" x="640" y="266" text-anchor="start">no → discard</text>
+
+  <!-- ═══ CALIBRATION → SEARCH connector ═══ -->
+  <path d="M179 200 L179 230 L330 230 L330 116 L350 116" fill="none" stroke="#ba7517" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+  <text class="tsa" x="244" y="224" text-anchor="middle">centroid positions</text>
+
+</svg>

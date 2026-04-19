@@ -22,7 +22,7 @@
   <rect x="44" y="48" width="172" height="104" rx="6" fill="#1f1a0e" stroke="#ba7517" stroke-width="0.5"/>
   <text class="th" x="130" y="82" text-anchor="middle" dominant-baseline="central">MAP-Elites archive</text>
   <text class="ts" x="130" y="102" text-anchor="middle" dominant-baseline="central">1,024 CVT centroids</text>
-  <text class="tsa" x="130" y="120" text-anchor="middle" dominant-baseline="central">velocity · gyradius · spectral</text>
+  <text class="tsa" x="130" y="120" text-anchor="middle" dominant-baseline="central">any 3 from 18 descriptors</text>
   <text class="tsa" x="130" y="136" text-anchor="middle" dominant-baseline="central">one best creature per cell</text>
 
   <!-- Search loop box -->
@@ -61,9 +61,9 @@
 
   <rect x="256" y="244" width="168" height="120" rx="6" fill="#121e1c" stroke="#0f6e56" stroke-width="0.5"/>
   <text class="th" x="340" y="278" text-anchor="middle" dominant-baseline="central">descriptors</text>
-  <text class="ts" x="340" y="300" text-anchor="middle" dominant-baseline="central">velocity</text>
-  <text class="ts" x="340" y="318" text-anchor="middle" dominant-baseline="central">gyradius</text>
-  <text class="ts" x="340" y="336" text-anchor="middle" dominant-baseline="central">spectral entropy</text>
+  <text class="ts" x="340" y="296" text-anchor="middle" dominant-baseline="central">3 behavioral axes</text>
+  <text class="tsa" x="340" y="314" text-anchor="middle" dominant-baseline="central">velocity · gyradius · entropy</text>
+  <text class="tsa" x="340" y="330" text-anchor="middle" dominant-baseline="central">signal · spatial · +14 more</text>
 
   <rect x="444" y="244" width="168" height="120" rx="6" fill="#1a1626" stroke="#7c3aed" stroke-width="0.5"/>
   <text class="th" x="528" y="284" text-anchor="middle" dominant-baseline="central">quality</text>

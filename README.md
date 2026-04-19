@@ -14,11 +14,13 @@ biota runs MAP-Elites searches across a Ray cluster, dispatching batches of [Flo
 
 [MAP-Elites](https://arxiv.org/abs/1504.04909) searches that parameter space for behavioral diversity rather than a single optimum. Instead of one best creature, it fills a grid where each cell holds the highest-quality creature with a particular phenotypic fingerprint: an atlas of qualitatively distinct life-forms.
 
-<p align="center"><img src="docs/archive-grid.svg" alt="MAP-Elites archive grid" width="85%"/></p>
+<p align="center"><img src="docs/archive-grid.svg" alt="CVT-MAP-Elites archive: calibration survivors (grey dots) and occupied Voronoi cells (magma color = quality)" width="85%"/></p>
 
 The driver owns the archive and the search loop. Each Ray task evaluates B creatures as a single `(B, H, W)` vectorized forward pass. One task fills one GPU. Workers are stateless; nothing persistent lives on the cluster between tasks.
 
 <p align="center"><img src="docs/search-loop.svg" alt="Search loop and Ray dispatch" width="95%"/></p>
+
+<p align="center"><img src="docs/cvt-map-elites.svg" alt="CVT-MAP-Elites two-phase algorithm: calibration fits k centroids, search loop inserts via nearest-centroid lookup" width="95%"/></p>
 
 `--workers N` controls how many batches are in flight simultaneously. `--workers 1` is synchronous MAP-Elites (maximally fresh archive). Higher values trade freshness for throughput on multi-node setups.
 
@@ -31,6 +33,8 @@ After the simulation, a suite of spatial observables is computed from the captur
 Ecosystem dispatch is Ray-correct: each experiment is a self-contained payload. The driver loads creatures from its local archive and ships them with the config; workers simulate and render to bytes; the driver materializes outputs locally. No shared filesystem is assumed at any step, so experiments run correctly on real multi-node clusters without NFS or rsync setup.
 
 <p align="center"><img src="docs/ecosystem-dispatch.svg" alt="Ecosystem dispatch: driver loads creatures, workers simulate and render, driver materializes" width="95%"/></p>
+
+<p align="center"><img src="docs/ecosystem-outcomes.svg" alt="Ecosystem outcome taxonomy: coexistence, exclusion, merger, fragmentation, stable isolation, cannibalism" width="95%"/></p>
 
 ## Behavioral descriptors
 
@@ -165,6 +169,8 @@ This adds six signal parameters to each creature's searchable parameter space:
 | `signal_kernel_a/b/w` | `(3,)` each | same as mass kernels | Ring function parameters for signal diffusion |
 
 ![signal field mechanics](docs/signal-field.svg)
+
+<p align="center"><img src="docs/signal-coupling.svg" alt="Inter-species signal coupling: dot products between emission vectors and receptor profiles determine chemotaxis, chemorepulsion, pursuit, or blind interaction" width="95%"/></p>
 
 **Physics.** At each step: (1) convolve mass to get G(H,W); (2) convolve signal field; (3) compute reception `dot(convolved_signal, receptor_profile)`; (4) apply `alpha_coupling`: `G *= (1 + alpha * reception).clamp(min=0)` -- positive alpha is chemotaxis (grow into favorable signal, including other species' territory, enabling cross-species predation); negative alpha is chemorepulsion; (5) modulate emission rate via `beta_modulation`: `rate_eff = rate * (1 + beta * mean(reception))` clipped to [0, 0.1] -- positive beta is quorum sensing, negative beta is feedback inhibition; (6) emit `G_pos * rate_eff * emission_vector`, draining mass into signal field; (7) reintegrate mass; (8) decay signal at `decay_rates`. Note: signal mass decays each step by design -- total mass+signal is not conserved. Creature mass alone is conserved modulo emission (which transfers mass into the signal field).
 

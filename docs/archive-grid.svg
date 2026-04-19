@@ -1,19 +1,16 @@
 <svg width="100%" viewBox="0 0 680 360" role="img" xmlns="http://www.w3.org/2000/svg">
-  <title>biota archive grid</title>
-  <desc>The biota archive is a CVT-MAP-Elites archive. Three behavioral descriptors index its axes -- chosen from a library of 18 (velocity, gyradius, spectral entropy, and more). Before search begins, a calibration phase fits k-means centroids to the observed descriptor distribution, placing cells where creatures actually live in behavioral space. Each cell holds the highest-quality creature in its Voronoi region. Bright magma colors indicate occupied cells; dark cells are empty.</desc>
+  <title>biota CVT archive</title>
+  <desc>The biota archive uses CVT-MAP-Elites. A calibration phase fits k-means centroids to the observed distribution of survivor descriptors, placing cells where creatures actually live in behavioral space. Each centroid holds the highest-quality creature found in its Voronoi region. Small grey dots show calibration survivors; large circles show CVT cells colored by quality (magma scale, bright = high quality).</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
       <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
     </marker>
     <style>
       text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
-      /* Light-mode defaults (GitHub README on a light page, print, etc.) */
       .tsh  { font-size: 11px; font-weight: 600; fill: #3f3f46; }
       .tsa  { font-size: 10px; font-weight: 400; fill: #71717a; }
       .tsax { font-size: 10px; font-weight: 500; fill: #52525b; }
       .axis-line { stroke: #d4d4d8; }
-      /* Dark-mode overrides: inherit when the host page is dark
-         (atlas index, GitHub dark theme, etc.) so text stays readable. */
       @media (prefers-color-scheme: dark) {
         .tsh  { fill: #e4e4e7; }
         .tsa  { fill: #a1a1aa; }
@@ -23,108 +20,112 @@
     </style>
   </defs>
 
-  <!-- Grid: 7 cols x 7 rows, cell 34x26, gap 3, origin x=148 y=44 -->
-  <!-- col x positions: 148 185 222 259 296 333 370  (step 37) -->
-  <!-- row y positions:  44  73 102 131 160 189 218  (step 29) -->
+  <!-- Calibration survivors: small grey dots scattered in behavioral space -->
+  <!-- fast region -->
+  <circle cx="172" cy="58" r="2.2" fill="#71717a" opacity="0.45"/>
+  <circle cx="208" cy="55" r="2.2" fill="#71717a" opacity="0.45"/>
+  <circle cx="246" cy="60" r="2.2" fill="#71717a" opacity="0.45"/>
+  <circle cx="284" cy="54" r="2.2" fill="#71717a" opacity="0.45"/>
+  <circle cx="322" cy="62" r="2.2" fill="#71717a" opacity="0.45"/>
+  <circle cx="362" cy="58" r="2.2" fill="#71717a" opacity="0.45"/>
+  <circle cx="408" cy="68" r="2.2" fill="#71717a" opacity="0.45"/>
+  <!-- medium-fast -->
+  <circle cx="158" cy="100" r="2.2" fill="#71717a" opacity="0.45"/>
+  <circle cx="192" cy="106" r="2.2" fill="#71717a" opacity="0.45"/>
+  <circle cx="228" cy="98"  r="2.2" fill="#71717a" opacity="0.45"/>
+  <circle cx="262" cy="102" r="2.2" fill="#71717a" opacity="0.45"/>
+  <circle cx="298" cy="96"  r="2.2" fill="#71717a" opacity="0.45"/>
+  <circle cx="334" cy="104" r="2.2" fill="#71717a" opacity="0.45"/>
+  <circle cx="366" cy="108" r="2.2" fill="#71717a" opacity="0.45"/>
+  <circle cx="398" cy="116" r="2.2" fill="#71717a" opacity="0.45"/>
+  <circle cx="424" cy="108" r="2.2" fill="#71717a" opacity="0.45"/>
+  <!-- medium -->
+  <circle cx="170" cy="150" r="2.2" fill="#71717a" opacity="0.45"/>
+  <circle cx="200" cy="158" r="2.2" fill="#71717a" opacity="0.45"/>
+  <circle cx="234" cy="150" r="2.2" fill="#71717a" opacity="0.45"/>
+  <circle cx="268" cy="152" r="2.2" fill="#71717a" opacity="0.45"/>
+  <circle cx="302" cy="154" r="2.2" fill="#71717a" opacity="0.45"/>
+  <circle cx="336" cy="160" r="2.2" fill="#71717a" opacity="0.45"/>
+  <circle cx="368" cy="155" r="2.2" fill="#71717a" opacity="0.45"/>
+  <circle cx="400" cy="170" r="2.2" fill="#71717a" opacity="0.45"/>
+  <circle cx="422" cy="162" r="2.2" fill="#71717a" opacity="0.45"/>
+  <!-- slow -->
+  <circle cx="174" cy="200" r="2.2" fill="#71717a" opacity="0.45"/>
+  <circle cx="210" cy="205" r="2.2" fill="#71717a" opacity="0.45"/>
+  <circle cx="246" cy="200" r="2.2" fill="#71717a" opacity="0.45"/>
+  <circle cx="278" cy="208" r="2.2" fill="#71717a" opacity="0.45"/>
+  <circle cx="312" cy="212" r="2.2" fill="#71717a" opacity="0.45"/>
+  <circle cx="346" cy="220" r="2.2" fill="#71717a" opacity="0.45"/>
+  <circle cx="376" cy="218" r="2.2" fill="#71717a" opacity="0.45"/>
+  <!-- very slow -->
+  <circle cx="194" cy="240" r="2.2" fill="#71717a" opacity="0.45"/>
+  <circle cx="230" cy="244" r="2.2" fill="#71717a" opacity="0.45"/>
+  <circle cx="266" cy="248" r="2.2" fill="#71717a" opacity="0.45"/>
+  <circle cx="302" cy="250" r="2.2" fill="#71717a" opacity="0.45"/>
 
-  <!-- Row 0 (fastest) -->
-  <rect x="148" y="44"  width="34" height="26" rx="2" fill="#200828" stroke="#3f3f46" stroke-width="0.3"/>
-  <rect x="185" y="44"  width="34" height="26" rx="2" fill="#4a1030" stroke="#52525b" stroke-width="0.3"/>
-  <rect x="222" y="44"  width="34" height="26" rx="2" fill="#140814" stroke="#27272a" stroke-width="0.3"/>
-  <rect x="259" y="44"  width="34" height="26" rx="2" fill="#140814" stroke="#27272a" stroke-width="0.3"/>
-  <rect x="296" y="44"  width="34" height="26" rx="2" fill="#781838" stroke="#71717a" stroke-width="0.3"/>
-  <rect x="333" y="44"  width="34" height="26" rx="2" fill="#9c2040" stroke="#71717a" stroke-width="0.3"/>
-  <rect x="370" y="44"  width="34" height="26" rx="2" fill="#140814" stroke="#27272a" stroke-width="0.3"/>
-
-  <!-- Row 1 -->
-  <rect x="148" y="73"  width="34" height="26" rx="2" fill="#140814" stroke="#27272a" stroke-width="0.3"/>
-  <rect x="185" y="73"  width="34" height="26" rx="2" fill="#300c30" stroke="#3f3f46" stroke-width="0.3"/>
-  <rect x="222" y="73"  width="34" height="26" rx="2" fill="#6a1840" stroke="#52525b" stroke-width="0.3"/>
-  <rect x="259" y="73"  width="34" height="26" rx="2" fill="#b02840" stroke="#71717a" stroke-width="0.3"/>
-  <rect x="296" y="73"  width="34" height="26" rx="2" fill="#cc3838" stroke="#71717a" stroke-width="0.3"/>
-  <rect x="333" y="73"  width="34" height="26" rx="2" fill="#d84820" stroke="#a1a1aa" stroke-width="0.3"/>
-  <rect x="370" y="73"  width="34" height="26" rx="2" fill="#b82c20" stroke="#71717a" stroke-width="0.3"/>
-
-  <!-- Row 2 -->
-  <rect x="148" y="102" width="34" height="26" rx="2" fill="#140814" stroke="#27272a" stroke-width="0.3"/>
-  <rect x="185" y="102" width="34" height="26" rx="2" fill="#140814" stroke="#27272a" stroke-width="0.3"/>
-  <rect x="222" y="102" width="34" height="26" rx="2" fill="#380c28" stroke="#3f3f46" stroke-width="0.3"/>
-  <rect x="259" y="102" width="34" height="26" rx="2" fill="#8c2040" stroke="#52525b" stroke-width="0.3"/>
-  <rect x="296" y="102" width="34" height="26" rx="2" fill="#dc5820" stroke="#a1a1aa" stroke-width="0.3"/>
-  <rect x="333" y="102" width="34" height="26" rx="2" fill="#f07018" stroke="#a1a1aa" stroke-width="0.5"/>
-  <rect x="370" y="102" width="34" height="26" rx="2" fill="#e06018" stroke="#a1a1aa" stroke-width="0.3"/>
-
-  <!-- Row 3 -->
-  <rect x="148" y="131" width="34" height="26" rx="2" fill="#140814" stroke="#27272a" stroke-width="0.3"/>
-  <rect x="185" y="131" width="34" height="26" rx="2" fill="#1e0818" stroke="#3f3f46" stroke-width="0.3"/>
-  <rect x="222" y="131" width="34" height="26" rx="2" fill="#5c1430" stroke="#3f3f46" stroke-width="0.3"/>
-  <rect x="259" y="131" width="34" height="26" rx="2" fill="#c04030" stroke="#71717a" stroke-width="0.3"/>
-  <rect x="296" y="131" width="34" height="26" rx="2" fill="#f08020" stroke="#a1a1aa" stroke-width="0.5"/>
-  <rect x="333" y="131" width="34" height="26" rx="2" fill="#f8a028" stroke="#a1a1aa" stroke-width="0.5"/>
-  <rect x="370" y="131" width="34" height="26" rx="2" fill="#f08828" stroke="#a1a1aa" stroke-width="0.5"/>
-
-  <!-- Row 4 -->
-  <rect x="148" y="160" width="34" height="26" rx="2" fill="#140814" stroke="#27272a" stroke-width="0.3"/>
-  <rect x="185" y="160" width="34" height="26" rx="2" fill="#140814" stroke="#27272a" stroke-width="0.3"/>
-  <rect x="222" y="160" width="34" height="26" rx="2" fill="#280818" stroke="#3f3f46" stroke-width="0.3"/>
-  <rect x="259" y="160" width="34" height="26" rx="2" fill="#8c2030" stroke="#52525b" stroke-width="0.3"/>
-  <rect x="296" y="160" width="34" height="26" rx="2" fill="#e06820" stroke="#71717a" stroke-width="0.3"/>
-  <rect x="333" y="160" width="34" height="26" rx="2" fill="#f8b840" stroke="#a1a1aa" stroke-width="0.5"/>
-  <rect x="370" y="160" width="34" height="26" rx="2" fill="#f8c858" stroke="#a1a1aa" stroke-width="0.5"/>
-
-  <!-- Row 5 -->
-  <rect x="148" y="189" width="34" height="26" rx="2" fill="#140814" stroke="#27272a" stroke-width="0.3"/>
-  <rect x="185" y="189" width="34" height="26" rx="2" fill="#140814" stroke="#27272a" stroke-width="0.3"/>
-  <rect x="222" y="189" width="34" height="26" rx="2" fill="#140814" stroke="#27272a" stroke-width="0.3"/>
-  <rect x="259" y="189" width="34" height="26" rx="2" fill="#581420" stroke="#3f3f46" stroke-width="0.3"/>
-  <rect x="296" y="189" width="34" height="26" rx="2" fill="#c84020" stroke="#71717a" stroke-width="0.3"/>
-  <rect x="333" y="189" width="34" height="26" rx="2" fill="#f0a030" stroke="#a1a1aa" stroke-width="0.5"/>
-  <rect x="370" y="189" width="34" height="26" rx="2" fill="#fcd880" stroke="#d4d4d8" stroke-width="0.5"/>
-
-  <!-- Row 6 (slowest) -->
-  <rect x="148" y="218" width="34" height="26" rx="2" fill="#140814" stroke="#27272a" stroke-width="0.3"/>
-  <rect x="185" y="218" width="34" height="26" rx="2" fill="#140814" stroke="#27272a" stroke-width="0.3"/>
-  <rect x="222" y="218" width="34" height="26" rx="2" fill="#140814" stroke="#27272a" stroke-width="0.3"/>
-  <rect x="259" y="218" width="34" height="26" rx="2" fill="#140814" stroke="#27272a" stroke-width="0.3"/>
-  <rect x="296" y="218" width="34" height="26" rx="2" fill="#481018" stroke="#3f3f46" stroke-width="0.3"/>
-  <rect x="333" y="218" width="34" height="26" rx="2" fill="#a82828" stroke="#52525b" stroke-width="0.3"/>
-  <rect x="370" y="218" width="34" height="26" rx="2" fill="#e07820" stroke="#71717a" stroke-width="0.3"/>
-
-  <!-- Ellipsis row (more rows below) -->
-  <text class="tsa" x="165" y="262" text-anchor="middle">·</text>
-  <text class="tsa" x="202" y="262" text-anchor="middle">·</text>
-  <text class="tsa" x="239" y="262" text-anchor="middle">·</text>
-  <text class="tsa" x="276" y="262" text-anchor="middle">·</text>
-  <text class="tsa" x="313" y="262" text-anchor="middle">·</text>
-  <text class="tsa" x="350" y="262" text-anchor="middle">·</text>
-  <text class="tsa" x="387" y="262" text-anchor="middle">·</text>
-
-  <!-- Ellipsis col (more cols to right) -->
-  <text class="tsa" x="422" y="131" text-anchor="start">···</text>
+  <!-- CVT centroids: occupied (magma) and empty (dark) -->
+  <!-- fast + compact: q=0.82 -->
+  <circle cx="172" cy="58" r="7.5" fill="#d84820" stroke="#a1a1aa" stroke-width="0.4"/>
+  <!-- fast + medium: q=0.79 -->
+  <circle cx="262" cy="54" r="7.5" fill="#b02840" stroke="#71717a" stroke-width="0.4"/>
+  <!-- fast + spread: q=0.87 -->
+  <circle cx="352" cy="60" r="7.5" fill="#f07018" stroke="#a1a1aa" stroke-width="0.4"/>
+  <!-- fast + very spread: EMPTY -->
+  <circle cx="420" cy="68" r="5"   fill="#200828" stroke="#3f3f46" stroke-width="0.4"/>
+  <!-- medium-fast + compact: q=0.91 -->
+  <circle cx="160" cy="104" r="7.5" fill="#f08020" stroke="#a1a1aa" stroke-width="0.4"/>
+  <!-- medium-fast + medium: q=0.94 -->
+  <circle cx="240" cy="98" r="7.5"  fill="#f8a028" stroke="#a1a1aa" stroke-width="0.4"/>
+  <!-- medium-fast + spread: q=0.96 -->
+  <circle cx="322" cy="96" r="7.5"  fill="#f8b840" stroke="#a1a1aa" stroke-width="0.4"/>
+  <!-- medium-fast + very spread: q=0.93 -->
+  <circle cx="400" cy="114" r="7.5" fill="#f09020" stroke="#a1a1aa" stroke-width="0.4"/>
+  <!-- medium + compact: q=0.97 -->
+  <circle cx="192" cy="154" r="7.5" fill="#f8c030" stroke="#a1a1aa" stroke-width="0.4"/>
+  <!-- medium + medium: q=0.99 BEST -->
+  <circle cx="272" cy="150" r="9"   fill="#fcd880" stroke="#d4d4d8" stroke-width="0.5"/>
+  <!-- medium + spread: q=0.95 -->
+  <circle cx="350" cy="158" r="7.5" fill="#f8b040" stroke="#a1a1aa" stroke-width="0.4"/>
+  <!-- medium + very spread: q=0.88 -->
+  <circle cx="414" cy="172" r="7.5" fill="#f07820" stroke="#a1a1aa" stroke-width="0.4"/>
+  <!-- slow + compact: q=0.90 -->
+  <circle cx="174" cy="204" r="7.5" fill="#f08820" stroke="#a1a1aa" stroke-width="0.4"/>
+  <!-- slow + medium: q=0.88 -->
+  <circle cx="254" cy="202" r="7.5" fill="#f07020" stroke="#a1a1aa" stroke-width="0.4"/>
+  <!-- slow + spread: q=0.76 -->
+  <circle cx="334" cy="218" r="7.5" fill="#9c2040" stroke="#71717a" stroke-width="0.4"/>
+  <!-- slow + very spread: EMPTY -->
+  <circle cx="402" cy="224" r="5"   fill="#200828" stroke="#3f3f46" stroke-width="0.4"/>
+  <!-- very slow + compact: q=0.72 -->
+  <circle cx="208" cy="242" r="7"   fill="#781838" stroke="#52525b" stroke-width="0.4"/>
+  <!-- very slow + medium: EMPTY -->
+  <circle cx="298" cy="248" r="5"   fill="#140814" stroke="#27272a" stroke-width="0.4"/>
 
   <!-- Velocity axis (left) -->
-  <line class="axis-line" x1="138" y1="44" x2="138" y2="244" stroke-width="0.75" marker-end="url(#arrow)"/>
+  <line class="axis-line" x1="138" y1="44" x2="138" y2="268" stroke-width="0.75" marker-end="url(#arrow)"/>
   <text class="tsa" x="132" y="48"  text-anchor="end" dominant-baseline="central">fast</text>
-  <text class="tsa" x="132" y="244" text-anchor="end" dominant-baseline="central">slow</text>
-  <text class="tsh" x="54" y="144" text-anchor="middle" dominant-baseline="central" transform="rotate(-90 54 144)">velocity</text>
+  <text class="tsa" x="132" y="264" text-anchor="end" dominant-baseline="central">slow</text>
+  <text class="tsh" x="54" y="156" text-anchor="middle" dominant-baseline="central" transform="rotate(-90 54 156)">velocity</text>
 
   <!-- Gyradius axis (bottom) -->
-  <line class="axis-line" x1="148" y1="256" x2="404" y2="256" stroke-width="0.75" marker-end="url(#arrow)"/>
-  <text class="tsa" x="148" y="270" text-anchor="start">compact</text>
-  <text class="tsa" x="404" y="270" text-anchor="end">spread</text>
-  <text class="tsh" x="276" y="288" text-anchor="middle">gyradius</text>
+  <line class="axis-line" x1="148" y1="280" x2="438" y2="280" stroke-width="0.75" marker-end="url(#arrow)"/>
+  <text class="tsa" x="148" y="294" text-anchor="start">compact</text>
+  <text class="tsa" x="438" y="294" text-anchor="end">spread</text>
+  <text class="tsh" x="293" y="312" text-anchor="middle">gyradius</text>
 
-  <!-- Spectral entropy: right-side annotation with bracket -->
-  <line class="axis-line" x1="416" y1="44" x2="416" y2="244" stroke-width="0.75" stroke-dasharray="4 3"/>
-  <line class="axis-line" x1="416" y1="44" x2="422" y2="44"   stroke-width="0.75"/>
-  <line class="axis-line" x1="416" y1="244" x2="422" y2="244" stroke-width="0.75"/>
-  <text class="tsa" x="428" y="48"  text-anchor="start" dominant-baseline="central">high entropy (sharp)</text>
-  <text class="tsa" x="428" y="244" text-anchor="start" dominant-baseline="central">low entropy (smooth)</text>
-  <text class="tsh" x="620" y="144" text-anchor="middle" dominant-baseline="central" transform="rotate(90 620 144)">spectral entropy</text>
+  <!-- Spectral entropy: right-side bracket annotation -->
+  <line class="axis-line" x1="448" y1="44" x2="448" y2="264" stroke-width="0.75" stroke-dasharray="4 3"/>
+  <line class="axis-line" x1="448" y1="44"  x2="454" y2="44"  stroke-width="0.75"/>
+  <line class="axis-line" x1="448" y1="264" x2="454" y2="264" stroke-width="0.75"/>
+  <text class="tsa" x="460" y="48"  text-anchor="start" dominant-baseline="central">high entropy (sharp)</text>
+  <text class="tsa" x="460" y="264" text-anchor="start" dominant-baseline="central">low entropy (smooth)</text>
+  <text class="tsh" x="636" y="156" text-anchor="middle" dominant-baseline="central" transform="rotate(90 636 156)">spectral entropy</text>
 
-  <!-- Legend -->
-  <rect x="148" y="16" width="12" height="10" rx="2" fill="#fcd880" stroke="#d4d4d8" stroke-width="0.5"/>
-  <text class="tsax" x="164" y="24" dominant-baseline="central">occupied — best creature for this behavioral fingerprint</text>
-  <rect x="148" y="300" width="12" height="10" rx="2" fill="#140814" stroke="#52525b" stroke-width="0.5"/>
-  <text class="tsax" x="164" y="308" dominant-baseline="central">empty — search has not found a creature here yet</text>
+  <!-- Legend row -->
+  <circle cx="154" cy="21" r="5.5" fill="#fcd880" stroke="#d4d4d8" stroke-width="0.5"/>
+  <text class="tsax" x="164" y="24" dominant-baseline="central">occupied — best creature in this Voronoi cell</text>
+  <circle cx="154" cy="37" r="3.5" fill="#140814" stroke="#52525b" stroke-width="0.5"/>
+  <text class="tsax" x="164" y="40" dominant-baseline="central">empty — search has not reached this region yet</text>
+  <circle cx="410" cy="21" r="2.2" fill="#71717a" opacity="0.45"/>
+  <text class="tsax" x="420" y="24" dominant-baseline="central">calibration survivor</text>
 </svg>

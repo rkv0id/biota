@@ -513,6 +513,8 @@
 
             <div class="diagram-frame">{{ svg_search_loop | safe }}</div>
 
+            <div class="diagram-frame">{{ svg_cvt_map_elites | safe }}</div>
+
             <h2 id="sys-quality">Quality metric</h2>
             <p>Every rollout passes three hard filters before it can enter the archive. First, the conserved quantity (mass + signal for signal runs, mass alone otherwise) must stay within [0.5, 2.0] of its initial value — creatures that explode or die are rejected. Second, the mean bounding-box fraction over the trailing window must be below 0.6 — creatures that spread across the entire grid are rejected. Third, the three behavioral descriptors measured over adjacent 50-step windows must not drift by more than 20% of the observed descriptor range — creatures that are still changing shape or speed are rejected.</p>
             <p>Survivors are ranked by a quality score that creates genuine selection pressure within the viable population:</p>
@@ -547,6 +549,8 @@
 
             <div class="diagram-frame">{{ svg_ecosystem_dispatch | safe }}</div>
 
+            <div class="diagram-frame">{{ svg_ecosystem_outcomes | safe }}</div>
+
             <h2 id="sys-signal">Signal field</h2>
             <p>An optional chemical communication layer adds a shared <code>(H, W, 16)</code> signal field to the simulation. When <code>--signal-field</code> is passed to <code>biota search</code>, eight additional parameters become searchable per creature across 16 independent channels:</p>
             <div class="math-block">
@@ -563,6 +567,9 @@
             </div>
             <p>One simulation step: (1) convolve mass to get growth G(H,W); (2) convolve signal field with signal kernel; (3) compute reception: <code>dot(convolved_signal, receptor_profile)</code> — negative receptor weights are inhibitory; (4) apply <code>alpha_coupling</code>: <code>G &times; (1 + &alpha; &times; reception)</code> clamped to [0,&infin;) — positive &alpha; amplifies growth where signal is favorable, including inside other species’ territory (the cross-species predation pathway); negative &alpha; is chemorepulsion; (5) modulate emission rate via <code>beta_modulation</code>: <code>rate &times; (1 + &beta; &times; mean(reception))</code> — positive &beta; = quorum sensing, negative &beta; = feedback inhibition; (6) emit <code>G&sup+ &times; rate_eff &times; emission_vector</code>, draining mass into signal field; (7) reintegrate mass via Flow-Lenia advection; (8) decay signal per-channel at <code>decay_rates</code>. Total conserved: mass + signal.</p>
             <div class="diagram-frame">{{ svg_signal_field | safe }}</div>
+
+            <div class="diagram-frame">{{ svg_signal_coupling | safe }}</div>
+
             <p>Searches with <code>--signal-field</code> automatically use 800 steps (vs 500 for standard) so emission and reception dynamics have time to build meaningful gradients. The quality metric gains a signal activity term: <code>clip(final_signal_mass / initial_signal_mass, 0, 1)</code> weighted at 0.2, rewarding creatures that maintain or build up signal mass rather than letting the background field decay. A creature mass floor of 0.2 × initial_mass is enforced as a hard filter. In ecosystem runs, all species share one signal field: each species emits and decays by its own parameters, ownership-weighted. Signal archives and non-signal archives cannot be mixed in a single ecosystem run.</p>
             <p>The ecosystem viewer exposes signal-specific observables: total signal mass history, signal mass fraction per step (signal / (mass + signal)), receptor alignment per species per snapshot (dot(receptor_profile, mean signal received in territory)), and an emission-reception compatibility matrix (dot(emission_vector[i], receptor_profile[j])) showing which species pairs have chemically compatible signal profiles.</p>
 
